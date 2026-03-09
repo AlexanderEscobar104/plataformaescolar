@@ -1,0 +1,101 @@
+name: Build iOS .ipa
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Sync Capacitor
+        run: npx cap sync ios
+
+      - name: Setup provisioning profile
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo $PROVISIONING_PROFILE_BASE64 | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/${{ secrets.PROVISIONING_PROFILE_FILENAME }}
+
+      - name: Import signing certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          echo $CERTIFICATE_BASE64 | base64 --decode > $CERTIFICATE_PATH
+          security create-keychain -p "$CERTIFICATE_PASSWORD" $RUNNER_TEMP/build.keychain
+          security default-keychain -s $RUNNER_TEMP/build.keychain
+          security unlock-keychain -p "$CERTIFICATE_PASSWORD" $RUNNER_TEMP/build.keychain
+          security import $CERTIFICATE_PATH -k $RUNNER_TEMP/build.keychain -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -l /usr/bin/codesign $RUNNER_TEMP/build.keychain
+
+      - name: Build iOS app with Xcode
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
+          PROVISIONING_PROFILE_SPECIFIER: ${{ secrets.PROVISIONING_PROFILE_SPECIFIER }}
+        run: |
+          cd ios/App
+          xcodebuild archive \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/App.xcarchive \
+            -derivedDataPath $RUNNER_TEMP/build \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=$TEAM_ID \
+            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER"
+
+      - name: Export .ipa
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/App.xcarchive \
+            -exportOptionsPlist ios/App/ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/ipa
+
+      - name: Upload .ipa as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plataformaescolar.ipa
+          path: ${{ runner.temp }}/ipa/App.ipa
+          retention-days: 30
+
+      - name: Upload to TestFlight (optional)
+        if: github.ref == 'refs/heads/main'
+        env:
+          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_ID: ${{ secrets.APP_ID }}
+        run: |
+          xcrun altool --upload-app \
+            -f $RUNNER_TEMP/ipa/App.ipa \
+            -t ios \
+            --apiKey $APP_STORE_CONNECT_KEY_ID \
+            --apiIssuer $APP_STORE_CONNECT_ISSUER_ID
