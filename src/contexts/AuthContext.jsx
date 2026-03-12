@@ -4,6 +4,7 @@ import {
   useState,
 } from 'react'
 import {
+  getAuth,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -11,8 +12,9 @@ import {
   updateProfile,
   sendPasswordResetEmail,
 } from 'firebase/auth'
-import { addDoc, collection, doc, getDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
-import { auth, db } from '../firebase'
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore'
+import { deleteApp, initializeApp } from 'firebase/app'
+import { auth, db, firebaseConfig } from '../firebase'
 import { AuthContext } from './auth-context'
 import {
   DEFAULT_ROLE_PERMISSIONS,
@@ -23,6 +25,28 @@ import {
 
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000
 const WARNING_BEFORE_LOGOUT_MS = 30 * 1000
+const PLAN_ACTIVE_STATUS = 'activo'
+
+function resolvePlanTimestamp(plan) {
+  const createdAtMillis = plan?.createdAt?.toMillis?.()
+  if (typeof createdAtMillis === 'number') return createdAtMillis
+  const fallbackMillis = new Date(plan?.fechaAdquisicion || 0).getTime()
+  return Number.isNaN(fallbackMillis) ? 0 : fallbackMillis
+}
+
+async function getLatestPlanByNit(nitRut) {
+  const normalizedNit = String(nitRut || '').trim()
+  if (!normalizedNit) return null
+
+  const snapshot = await getDocs(
+    query(collection(db, 'planes'), where('nitEmpresa', '==', normalizedNit)),
+  )
+  if (snapshot.empty) return null
+
+  const plans = snapshot.docs.map((docSnapshot) => docSnapshot.data() || {})
+  plans.sort((a, b) => resolvePlanTimestamp(b) - resolvePlanTimestamp(a))
+  return plans[0] || null
+}
 
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -49,21 +73,6 @@ function AuthProvider({ children }) {
       try {
         const userSnapshot = await getDoc(doc(db, 'users', firebaseUser.uid))
         const userData = userSnapshot.data() || {}
-        const profile = userData.profile || {}
-        let resolvedNombres = ''
-        let resolvedApellidos = ''
-
-        if (userData.role === 'estudiante') {
-          resolvedNombres = `${profile.primerNombre || ''} ${profile.segundoNombre || ''}`.replace(/\s+/g, ' ').trim()
-          resolvedApellidos = `${profile.primerApellido || ''} ${profile.segundoApellido || ''}`.replace(/\s+/g, ' ').trim()
-        } else if (userData.role === 'profesor') {
-          resolvedNombres = profile.nombres || userData.name || ''
-          resolvedApellidos = profile.apellidos || ''
-        } else {
-          resolvedNombres = userData.name || ''
-        }
-        
-        const fullName = `${resolvedNombres} ${resolvedApellidos}`.trim().replace(/\s+/g, ' ') || firebaseUser.displayName || firebaseUser.email || ''
 
         setUserRole(userData.role || '')
         setUserNitRut(userData.nitRut || '')
@@ -88,10 +97,15 @@ function AuthProvider({ children }) {
   }, [])
 
   useEffect(() => {
+    const permissionsDocId = userNitRut ? `permisosRoles_${userNitRut}` : 'permisosRoles'
     const unsubscribe = onSnapshot(
-      doc(db, 'configuracion', 'permisosRoles'),
+      doc(db, 'configuracion', permissionsDocId),
       (snapshot) => {
         const data = snapshot.data() || {}
+        if (!snapshot.exists()) {
+          setRolePermissions(DEFAULT_ROLE_PERMISSIONS)
+          return
+        }
         setRolePermissions(normalizeRolePermissionsData(data.roles))
       },
       () => {
@@ -100,17 +114,29 @@ function AuthProvider({ children }) {
     )
 
     return unsubscribe
-  }, [])
+  }, [userNitRut])
 
   const registerAccessAudit = async (firebaseUser, event) => {
     if (!firebaseUser) return
 
     try {
+      let resolvedNitRut = ''
+      try {
+        const userSnapshot = await getDoc(doc(db, 'users', firebaseUser.uid))
+        if (userSnapshot.exists()) {
+          const userData = userSnapshot.data() || {}
+          resolvedNitRut = String(userData.nitRut || userData.profile?.nitRut || '').trim()
+        }
+      } catch {
+        // If lookup fails, keep audit without tenant instead of breaking auth flow.
+      }
+
       await addDoc(collection(db, 'auditoria_accesos'), {
         evento: event,
         uid: firebaseUser.uid,
         email: firebaseUser.email || '',
         nombre: firebaseUser.displayName || '',
+        nitRut: resolvedNitRut,
         fechaHora: serverTimestamp(),
         fechaHoraISO: new Date().toISOString(),
       })
@@ -119,8 +145,50 @@ function AuthProvider({ children }) {
     }
   }
 
+  const markChatPresenceDisconnected = async (firebaseUser) => {
+    if (!firebaseUser?.uid) return
+    try {
+      const { setDoc } = await import('firebase/firestore')
+      await setDoc(
+        doc(db, 'chat_presence', firebaseUser.uid),
+        {
+          status: 'desconectado',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      )
+    } catch {
+      // No bloquea el cierre de sesion.
+    }
+  }
+
   const login = async (email, password) => {
-    const credentials = await signInWithEmailAndPassword(auth, email, password)
+    const normalizedEmail = String(email || '').trim()
+    const appName = `login-verify-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const secondaryApp = initializeApp(firebaseConfig, appName)
+    const secondaryAuth = getAuth(secondaryApp)
+
+    try {
+      const preCredentials = await signInWithEmailAndPassword(secondaryAuth, normalizedEmail, password)
+      const userSnapshot = await getDoc(doc(db, 'users', preCredentials.user.uid))
+      const userData = userSnapshot.data() || {}
+      const userNit = String(userData.nitRut || userData.profile?.nitRut || '').trim()
+
+      if (userNit) {
+        const latestPlan = await getLatestPlanByNit(userNit)
+        const planStatus = String(latestPlan?.estado || '').trim().toLowerCase()
+        if (latestPlan && planStatus !== PLAN_ACTIVE_STATUS) {
+          const blockedError = new Error('El plan asociado al NIT no se encuentra activo.')
+          blockedError.code = 'plan/inactive'
+          throw blockedError
+        }
+      }
+    } finally {
+      await signOut(secondaryAuth).catch(() => {})
+      await deleteApp(secondaryApp).catch(() => {})
+    }
+
+    const credentials = await signInWithEmailAndPassword(auth, normalizedEmail, password)
     await registerAccessAudit(credentials.user, 'ingreso')
     return credentials
   }
@@ -138,13 +206,49 @@ function AuthProvider({ children }) {
   const logout = async () => {
     const firebaseUser = auth.currentUser
     await registerAccessAudit(firebaseUser, 'salida')
+    await markChatPresenceDisconnected(firebaseUser)
     window.__TENANT_ID__ = undefined
     window.__CURRENT_USER__ = undefined
     return signOut(auth)
   }
 
   const resetPassword = async (email) => {
-    return sendPasswordResetEmail(auth, email)
+    const normalizedEmail = String(email || '').trim().toLowerCase()
+    await sendPasswordResetEmail(auth, normalizedEmail)
+
+    const copiedTo = []
+
+    try {
+      const snapshot = await getDocs(
+        query(collection(db, 'users'), where('email', '==', normalizedEmail)),
+      )
+      if (snapshot.empty) return { copiedTo }
+
+      const userData = snapshot.docs[0]?.data() || {}
+      const profile = userData.profile || {}
+      const infoComplementaria = profile.informacionComplementaria || {}
+
+      const copyCandidates = [
+        String(profile.email || '').trim().toLowerCase(),
+        String(infoComplementaria.email || '').trim().toLowerCase(),
+      ]
+        .filter(Boolean)
+        .filter((candidate, index, list) => list.indexOf(candidate) === index)
+        .filter((candidate) => candidate !== normalizedEmail)
+
+      for (const copyEmail of copyCandidates) {
+        try {
+          await sendPasswordResetEmail(auth, copyEmail)
+          copiedTo.push(copyEmail)
+        } catch {
+          // If secondary email is not an auth account, ignore and keep primary success.
+        }
+      }
+    } catch {
+      // Keep primary reset flow successful even if copy lookup fails.
+    }
+
+    return { copiedTo }
   }
 
   const clearInactivityTimers = () => {
@@ -165,6 +269,7 @@ function AuthProvider({ children }) {
       try {
         const firebaseUser = auth.currentUser
         await registerAccessAudit(firebaseUser, 'salida_automatica_inactividad')
+        await markChatPresenceDisconnected(firebaseUser)
         window.__TENANT_ID__ = undefined
         await signOut(auth)
       } catch {
@@ -238,6 +343,7 @@ function AuthProvider({ children }) {
           try {
             const firebaseUser = auth.currentUser
             await registerAccessAudit(firebaseUser, 'salida_automatica_inactividad')
+            await markChatPresenceDisconnected(firebaseUser)
             window.__TENANT_ID__ = undefined
             await signOut(auth)
           } catch {

@@ -24,7 +24,7 @@ function StoragePage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [exportingAll, setExportingAll] = useState(false)
 
-  const { hasPermission } = useAuth()
+  const { hasPermission, userNitRut } = useAuth()
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
 
   const [loading, setLoading] = useState(true)
@@ -42,12 +42,21 @@ function StoragePage() {
     const initData = async () => {
       setLoading(true)
       try {
-        const plantelSnap = await getDoc(doc(db, 'configuracion', 'datosPlantel'))
-        if (!plantelSnap.exists() || !plantelSnap.data().nitRut) {
+        const tenantNit = String(userNitRut || '').trim()
+        let nit = tenantNit
+
+        if (!nit) {
+          const plantelSnap = await getDoc(doc(db, 'configuracion', 'datosPlantel'))
+          if (plantelSnap.exists()) {
+            nit = String(plantelSnap.data().nitRut || '').trim()
+          }
+        }
+
+        if (!nit) {
           setPlantelNit('')
           return
         }
-        const nit = plantelSnap.data().nitRut
+
         setPlantelNit(nit)
 
         const quotaSnap = await getDoc(doc(db, 'almacenamiento', nit))
@@ -64,7 +73,7 @@ function StoragePage() {
     }
 
     initData()
-  }, [])
+  }, [userNitRut])
 
   useEffect(() => {
     if (!plantelNit) return

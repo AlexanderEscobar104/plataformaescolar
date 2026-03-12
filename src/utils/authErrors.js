@@ -8,6 +8,7 @@ const authErrorMessages = {
   'auth/user-not-found': 'No existe una cuenta con ese correo.',
   'auth/wrong-password': 'La contrasena es incorrecta.',
   'auth/weak-password': 'La contrasena debe tener al menos 6 caracteres.',
+  'plan/inactive': 'No se puede ingresar a la plataforma porque el plan asociado a la empresa no se encuentra activo.',
 }
 
 function getAuthErrorMessage(code) {

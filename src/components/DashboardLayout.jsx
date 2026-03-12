@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { db } from '../firebase'
 import logoFallback from '../assets/logo-plataforma.svg'
 import { PERMISSION_KEYS } from '../utils/permissions'
+import FloatingChatWidget from './FloatingChatWidget'
 
 function BellIcon() {
   return (
@@ -200,6 +201,7 @@ function DashboardLayout() {
   const canViewInasistencias = hasPermission(PERMISSION_KEYS.INASISTENCIAS_VIEW)
   const canViewPermisos = hasPermission(PERMISSION_KEYS.PERMISOS_VIEW)
   const canManageStorage = hasPermission(PERMISSION_KEYS.STORAGE_MANAGE)
+  const showFloatingChat = location.pathname.startsWith('/dashboard')
 
   const academicItems = useMemo(() => {
     const items = []
@@ -216,6 +218,7 @@ function DashboardLayout() {
     }
     if (canViewInasistencias) {
       items.push({ label: 'Reportar inasistencias', to: '/dashboard/inasistencias', Icon: AbsencesIcon })
+      items.push({ label: 'Asistencia', to: '/dashboard/asistencia', Icon: AbsencesIcon })
     }
     
     items.push({ label: 'Reconocimientos', to: '/dashboard/reconocimientos', Icon: ReportsIcon })
@@ -253,6 +256,7 @@ function DashboardLayout() {
         { label: 'Eventos', to: '/dashboard/eventos', Icon: EvaluationsIcon },
         { label: 'Circulares', to: '/dashboard/circulares', Icon: ReportsIcon },
         { label: 'Crear asignaturas', to: '/dashboard/crear-asignaturas', Icon: ReportsIcon },
+        { label: 'Camaras de asistencia', to: '/dashboard/camaras-asistencia', Icon: MessageIcon },
       )
     }
 
@@ -269,6 +273,10 @@ function DashboardLayout() {
 
     if (canManagePermissions) {
       items.push({ label: 'Permisos', to: '/dashboard/permisos', Icon: UserIcon })
+      items.push({ label: 'Configuracion de chat', to: '/dashboard/configuracion-chat', Icon: MessageIcon })
+      items.push({ label: 'Configuracion de mensajes', to: '/dashboard/configuracion-mensajes', Icon: MessageIcon })
+      items.push({ label: 'Configuracion de notificaciones', to: '/dashboard/configuracion-notificaciones', Icon: BellIcon })
+      items.push({ label: 'Configuracion tipos de reporte', to: '/dashboard/configuracion-tipos-reporte', Icon: ReportsIcon })
     }
 
     if (canManageRoles) {
@@ -702,6 +710,7 @@ function DashboardLayout() {
           <span>{todayEventsToast}</span>
         </div>
       )}
+      {showFloatingChat && <FloatingChatWidget />}
       {showInactivityWarning && (
         <div className="modal-overlay" role="presentation">
           <div className="modal-card" role="dialog" aria-modal="true" aria-label="Sesion por inactividad">

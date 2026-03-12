@@ -68,16 +68,24 @@ function DashboardHomePage() {
       try {
         const queries = [
           getDocs(query(collection(db, 'eventos'), where('nitRut', '==', userNitRut))),
-          getDocs(collection(db, 'circulares')),
+          getDocs(query(collection(db, 'circulares'), where('nitRut', '==', userNitRut))),
           getDocs(query(collection(db, 'tareas'), where('nitRut', '==', userNitRut))),
           getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', userNitRut))),
         ]
         if (canRespondAttendance && user?.uid) {
-          queries.push(getDocs(query(collection(db, 'event_respuestas'), where('userUid', '==', user.uid, where('nitRut', '==', userNitRut)))))
+          queries.push(
+            getDocs(
+              query(
+                collection(db, 'event_respuestas'),
+                where('userUid', '==', user.uid),
+                where('nitRut', '==', userNitRut),
+              ),
+            ),
+          )
           queries.push(getDocs(query(collection(db, 'examen_intentos'), where('uid', '==', user.uid))))
           queries.push(
             getDocs(
-              query(collection(db, 'servicios_complementarios'), where('usuariosAsignados', 'array-contains', user.uid, where('nitRut', '==', userNitRut)),
+              query(collection(db, 'servicios_complementarios'), where('usuariosAsignados', 'array-contains', user.uid), where('nitRut', '==', userNitRut),
                 where('estado', '==', 'activo')
               )
             )
@@ -157,7 +165,7 @@ function DashboardHomePage() {
     }
 
     loadData()
-  }, [canRespondAttendance, user?.uid, today])
+  }, [canRespondAttendance, user?.uid, userNitRut, today])
 
   const eventsByDay = useMemo(() => {
     const map = new Map()

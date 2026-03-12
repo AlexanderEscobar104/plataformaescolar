@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, getDocs, onSnapshot, query, serverTimestamp, where, doc } from 'firebase/firestore'
+import { collection, getDoc, getDocs, onSnapshot, query, serverTimestamp, where, doc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
-import { PERMISSION_KEYS } from '../../utils/permissions'
+import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 
 const TARGET_OPTIONS = [
   { value: 'estudiante', label: 'Estudiantes' },
@@ -11,6 +11,7 @@ const TARGET_OPTIONS = [
   { value: 'aspirante', label: 'Aspirantes' },
   { value: 'directivo', label: 'Directivos' },
 ]
+const normalizeRole = (value) => String(value || '').trim().toLowerCase()
 
 function formatDateTime(dateValue) {
   if (!dateValue) return '-'
@@ -21,7 +22,7 @@ function formatDateTime(dateValue) {
 }
 
 function NotificationsPage() {
-  const { user, hasPermission, userNitRut } = useAuth()
+  const { user, userRole, hasPermission, userNitRut } = useAuth()
   const canCreateNotifications = hasPermission(PERMISSION_KEYS.NOTIFICATIONS_CREATE)
 
   const [loading, setLoading] = useState(true)
@@ -48,6 +49,8 @@ function NotificationsPage() {
   const [professorSearch, setProfessorSearch] = useState('')
   const [directivoSearch, setDirectivoSearch] = useState('')
   const [sendModalMessage, setSendModalMessage] = useState('')
+  const [roleMatrix, setRoleMatrix] = useState({})
+  const [roleMatrixReady, setRoleMatrixReady] = useState(false)
 
   useEffect(() => {
     if (!user?.uid) {
@@ -59,6 +62,7 @@ function NotificationsPage() {
     const notificationsQuery = query(
       collection(db, 'notifications'),
       where('recipientUid', '==', user.uid),
+      where('nitRut', '==', userNitRut || ''),
     )
 
     const unsubscribe = onSnapshot(
@@ -81,7 +85,7 @@ function NotificationsPage() {
     )
 
     return unsubscribe
-  }, [user?.uid])
+  }, [user?.uid, userNitRut])
 
   useEffect(() => {
     if (!user?.uid) return undefined
@@ -89,6 +93,7 @@ function NotificationsPage() {
     const sentNotificationsQuery = query(
       collection(db, 'notifications'),
       where('createdByUid', '==', user.uid),
+      where('nitRut', '==', userNitRut || ''),
     )
 
     const unsubscribe = onSnapshot(
@@ -109,7 +114,7 @@ function NotificationsPage() {
     )
 
     return unsubscribe
-  }, [user?.uid])
+  }, [user?.uid, userNitRut])
 
   useEffect(() => {
     if (!canCreateNotifications) return
@@ -150,7 +155,42 @@ function NotificationsPage() {
     }
 
     loadReceivers()
-  }, [canCreateNotifications, user?.uid])
+  }, [canCreateNotifications, user?.uid, userNitRut])
+
+  useEffect(() => {
+    const loadRoleMatrix = async () => {
+      setRoleMatrixReady(false)
+      if (!userNitRut) {
+        setRoleMatrix({})
+        setRoleMatrixReady(true)
+        return
+      }
+
+      try {
+        const [rolesSnapshot, settingsSnapshot] = await Promise.all([
+          getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut))),
+          getDoc(doc(db, 'configuracion', `notifications_roles_${userNitRut}`)),
+        ])
+        const loadedRoles = rolesSnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+        const allRoleValues = buildAllRoleOptions(loadedRoles).map((role) => normalizeRole(role.value))
+        const savedMatrix = settingsSnapshot.data()?.roleMatrix || {}
+        const nextMatrix = {}
+
+        allRoleValues.forEach((role) => {
+          const configuredTargets = Array.isArray(savedMatrix[role]) ? savedMatrix[role].map(normalizeRole) : allRoleValues
+          nextMatrix[role] = configuredTargets.filter((target) => allRoleValues.includes(target))
+        })
+
+        setRoleMatrix(nextMatrix)
+      } catch {
+        setRoleMatrix({})
+      } finally {
+        setRoleMatrixReady(true)
+      }
+    }
+
+    loadRoleMatrix()
+  }, [userNitRut])
 
   const unreadCount = useMemo(
     () => notifications.filter((item) => item.read !== true).length,
@@ -198,7 +238,30 @@ function NotificationsPage() {
     setSelectedDirectivoUids(usersByRole.directivo.map((item) => item.uid))
   }, [usersByRole.directivo])
 
+  const allowedTargetRoles = useMemo(() => {
+    if (!roleMatrixReady) return []
+    const sourceRole = normalizeRole(userRole)
+    const configuredTargets = roleMatrix[sourceRole]
+    if (!Array.isArray(configuredTargets)) {
+      return TARGET_OPTIONS.map((item) => item.value)
+    }
+    return TARGET_OPTIONS.map((item) => item.value).filter((role) => configuredTargets.includes(role))
+  }, [roleMatrix, roleMatrixReady, userRole])
+
+  const visibleTargetOptions = useMemo(
+    () => TARGET_OPTIONS.filter((item) => allowedTargetRoles.includes(item.value)),
+    [allowedTargetRoles],
+  )
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      targetRoles: prev.targetRoles.filter((role) => allowedTargetRoles.includes(role)),
+    }))
+  }, [allowedTargetRoles])
+
   const toggleRoleTarget = (roleValue) => {
+    if (!allowedTargetRoles.includes(roleValue)) return
     setForm((prev) => {
       const already = prev.targetRoles.includes(roleValue)
       return {
@@ -233,6 +296,7 @@ function NotificationsPage() {
     try {
       await updateDocTracked(doc(db, 'notifications', notificationId), {
         read: true,
+        nitRut: userNitRut,
         readAt: serverTimestamp(),
       })
     } catch {
@@ -294,7 +358,8 @@ function NotificationsPage() {
     }
 
     const recipients = Array.from(recipientsMap.values())
-    if (recipients.length === 0) {
+    const allowedRecipients = recipients.filter((item) => allowedTargetRoles.includes(normalizeRole(item.role)))
+    if (allowedRecipients.length === 0) {
       setSendModalMessage('No hay usuarios seleccionados para recibir la notificacion.')
       return
     }
@@ -303,11 +368,12 @@ function NotificationsPage() {
       setSending(true)
       const senderName = user?.displayName || user?.email || 'Usuario'
 
-      for (const recipient of recipients) {
+      for (const recipient of allowedRecipients) {
         await addDocTracked(collection(db, 'notifications'), {
           recipientUid: recipient.uid,
           recipientName: recipient.name,
           recipientRole: recipient.role || '',
+          nitRut: userNitRut,
           title,
           body,
           read: false,
@@ -319,7 +385,7 @@ function NotificationsPage() {
       }
 
       setForm({ title: '', body: '', targetRoles: [] })
-      setSendModalMessage(`Notificacion enviada a ${recipients.length} usuario${recipients.length === 1 ? '' : 's'}.`)
+      setSendModalMessage(`Notificacion enviada a ${allowedRecipients.length} usuario${allowedRecipients.length === 1 ? '' : 's'}.`)
     } catch {
       setSendModalMessage('No fue posible enviar la notificacion.')
     } finally {
@@ -423,7 +489,7 @@ function NotificationsPage() {
               <div>
                 <strong>Enviar a grupos</strong>
                 <div className="teacher-checkbox-list">
-                  {TARGET_OPTIONS.map((option) => (
+                  {visibleTargetOptions.map((option) => (
                     <label key={option.value} className="teacher-checkbox-item">
                       <input
                         type="checkbox"
@@ -435,6 +501,9 @@ function NotificationsPage() {
                       </span>
                     </label>
                   ))}
+                  {roleMatrixReady && visibleTargetOptions.length === 0 && (
+                    <p className="feedback">Tu rol no tiene destinatarios permitidos en la configuracion de notificaciones.</p>
+                  )}
                 </div>
               </div>
 

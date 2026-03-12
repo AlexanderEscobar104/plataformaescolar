@@ -95,7 +95,7 @@ function AspiranteEditPage() {
       }
     }
     loadEmpleados()
-  }, [])
+  }, [userNitRut])
 
   useEffect(() => {
     const loadData = async () => {
@@ -196,7 +196,9 @@ function AspiranteEditPage() {
       const fullName = `${primerNombre} ${segundoNombre} ${primerApellido} ${segundoApellido}`.replace(/\s+/g, ' ').trim()
       await updateDocTracked(doc(db, 'users', aspiranteId), {
         name: fullName,
+        nitRut: userNitRut,
         profile: {
+          nitRut: userNitRut,
           tipoDocumento,
           numeroDocumento: numeroDocumento.trim(),
           primerNombre: primerNombre.trim(),

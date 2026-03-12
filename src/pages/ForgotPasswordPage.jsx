@@ -25,8 +25,15 @@ function ForgotPasswordPage() {
 
     try {
       setLoading(true)
-      await resetPassword(email.trim())
-      setSuccess('Se ha enviado un correo con instrucciones para restablecer tu contrasena.')
+      const result = await resetPassword(email.trim())
+      const copiedTo = Array.isArray(result?.copiedTo) ? result.copiedTo : []
+      if (copiedTo.length > 0) {
+        setSuccess(
+          `Se ha enviado un correo con instrucciones para restablecer tu contrasena. Tambien se envio copia a: ${copiedTo.join(', ')}.`,
+        )
+      } else {
+        setSuccess('Se ha enviado un correo con instrucciones para restablecer tu contrasena.')
+      }
     } catch (firebaseError) {
       setError(getAuthErrorMessage(firebaseError.code))
     } finally {

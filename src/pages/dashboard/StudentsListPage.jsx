@@ -10,7 +10,7 @@ import { deleteDocTracked } from '../../services/firestoreProxy'
 
 function StudentsListPage() {
   const [currentPage, setCurrentPage] = useState(1)
-  const [exportingAll, setExportingAll] = useState(false)
+  const [_exportingAll, setExportingAll] = useState(false)
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -41,7 +41,9 @@ function StudentsListPage() {
           : []
       }
 
-      const snapshot = await getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante', where('nitRut', '==', userNitRut))))
+      const snapshot = await getDocs(
+        query(collection(db, 'users'), where('role', '==', 'estudiante'), where('nitRut', '==', userNitRut)),
+      )
       const mappedStudents = snapshot.docs
         .map((docSnapshot) => {
           const data = docSnapshot.data()
@@ -73,7 +75,7 @@ function StudentsListPage() {
     } finally {
       setLoading(false)
     }
-  }, [userRole, user?.uid])
+  }, [userRole, user?.uid, userNitRut])
 
   useEffect(() => {
     loadStudents()

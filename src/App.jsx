@@ -44,6 +44,13 @@ import TipoInasistenciasPage from './pages/dashboard/TipoInasistenciasPage'
 import InasistenciasPage from './pages/dashboard/InasistenciasPage'
 import TipoPermisosPage from './pages/dashboard/TipoPermisosPage'
 import PermisosPage from './pages/dashboard/PermisosPage'
+import ChatSettingsPage from './pages/dashboard/ChatSettingsPage'
+import MessageSettingsPage from './pages/dashboard/MessageSettingsPage'
+import NotificationSettingsPage from './pages/dashboard/NotificationSettingsPage'
+import ReportTypeSettingsPage from './pages/dashboard/ReportTypeSettingsPage'
+import PlanCreationPage from './pages/dashboard/PlanCreationPage'
+import CamarasAsistenciaPage from './pages/dashboard/CamarasAsistenciaPage'
+import AsistenciaPage from './pages/dashboard/AsistenciaPage'
 
 function App() {
   return (
@@ -200,6 +207,20 @@ function App() {
           />
           <Route path="tipo-inasistencias" element={<TipoInasistenciasPage />} />
           <Route path="tipo-permisos" element={<TipoPermisosPage />} />
+          <Route path="configuracion-chat" element={<ChatSettingsPage />} />
+          <Route path="configuracion-mensajes" element={<MessageSettingsPage />} />
+          <Route path="configuracion-notificaciones" element={<NotificationSettingsPage />} />
+          <Route path="configuracion-tipos-reporte" element={<ReportTypeSettingsPage />} />
+          <Route
+            path="creacion-planes"
+            element={(
+              <SecurityCollectionRoute collectionName="accesorestringido">
+                <PlanCreationPage />
+              </SecurityCollectionRoute>
+            )}
+          />
+          <Route path="camaras-asistencia" element={<CamarasAsistenciaPage />} />
+          <Route path="asistencia" element={<AsistenciaPage />} />
           <Route path="almacenamiento" element={<StoragePage />} />
           <Route path="empleados" element={<EmpleadosPage />} />
           <Route path="datos-cobro" element={<DatosCobroPage />} />

@@ -4,8 +4,6 @@ import {
   doc,
   getDocs,
   getDoc,
-  serverTimestamp,
-  setDoc,
 } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
@@ -20,7 +18,7 @@ import {
 } from '../../utils/permissions'
 
 function PermissionsPage() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, userNitRut } = useAuth()
   const canManagePermissions = hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -30,12 +28,13 @@ function PermissionsPage() {
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [customRoles, setCustomRoles] = useState([])
+  const permissionsDocId = userNitRut ? `permisosRoles_${userNitRut}` : 'permisosRoles'
 
   useEffect(() => {
     const loadPermissions = async () => {
       try {
         const [permSnap, rolesSnap] = await Promise.all([
-          getDoc(doc(db, 'configuracion', 'permisosRoles')),
+          getDoc(doc(db, 'configuracion', permissionsDocId)),
           getDocs(collection(db, 'roles')),
         ])
         const data = permSnap.data() || {}
@@ -58,7 +57,7 @@ function PermissionsPage() {
     }
 
     loadPermissions()
-  }, [])
+  }, [permissionsDocId])
 
   const allRoleOptions = useMemo(() => buildAllRoleOptions(customRoles), [customRoles])
   const orderedRoles = useMemo(
@@ -145,7 +144,7 @@ function PermissionsPage() {
     try {
       setSaving(true)
       await setDocTracked(
-        doc(db, 'configuracion', 'permisosRoles'),
+        doc(db, 'configuracion', permissionsDocId),
         {
           roles: rolesPermissions,
           updatedAt: new Date().toISOString(),

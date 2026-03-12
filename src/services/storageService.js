@@ -3,6 +3,36 @@ import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc, setDoc, in
 import { getAuth } from 'firebase/auth'
 import { db } from '../firebase'
 
+async function resolveNitRutFromAuth() {
+  const auth = getAuth()
+  const currentUser = auth.currentUser
+  if (!currentUser?.uid) return ''
+
+  try {
+    const userSnap = await getDoc(doc(db, 'users', currentUser.uid))
+    if (userSnap.exists()) {
+      const userData = userSnap.data() || {}
+      const profileNit = userData.profile?.nitRut || ''
+      const userNit = userData.nitRut || ''
+      const resolved = String(userNit || profileNit || '').trim()
+      if (resolved) return resolved
+    }
+  } catch {
+    // Continue with legacy fallback.
+  }
+
+  try {
+    const plantelSnap = await getDoc(doc(db, 'configuracion', 'datosPlantel'))
+    if (plantelSnap.exists()) {
+      return String(plantelSnap.data().nitRut || '').trim()
+    }
+  } catch {
+    // Ignore fallback failures.
+  }
+
+  return ''
+}
+
 /**
  * Wraps firebase/storage uploadBytes to additionally track the file globally in Firestore
  * under the Plantel's NIT (to calculate storage usage and quotas).
@@ -16,12 +46,8 @@ export async function uploadBytesTracked(storageRef, file, metadata) {
     //    so we catch tracking errors internally.
     const downloadURL = await getDownloadURL(snapshot.ref)
 
-    // 3. Fetch current NIT from Plantel Config
-    let plantelNit = ''
-    const plantelSnap = await getDoc(doc(db, 'configuracion', 'datosPlantel'))
-    if (plantelSnap.exists()) {
-      plantelNit = plantelSnap.data().nitRut || ''
-    }
+    // 3. Resolve NIT from authenticated user tenant.
+    const plantelNit = await resolveNitRutFromAuth()
 
     const auth = getAuth()
     const currentUser = auth.currentUser

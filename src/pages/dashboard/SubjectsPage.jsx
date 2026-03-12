@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { collection, doc, getDocs, serverTimestamp, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
@@ -10,7 +10,7 @@ import PaginationControls from '../../components/PaginationControls'
 
 function SubjectsPage() {
   const [currentPage, setCurrentPage] = useState(1)
-  const [exportingAll, setExportingAll] = useState(false)
+  const [_exportingAll, setExportingAll] = useState(false)
 
   const { user, hasPermission, userNitRut } = useAuth()
   const canManageSubjects = hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
@@ -34,7 +34,7 @@ function SubjectsPage() {
   const [subjectToDelete, setSubjectToDelete] = useState(null)
   const subjectNameInputRef = useRef(null)
 
-  const loadSubjects = async () => {
+  const loadSubjects = useCallback(async () => {
     setLoading(true)
     try {
       const snapshot = await getDocs(query(collection(db, 'asignaturas'), where('nitRut', '==', userNitRut)))
@@ -53,11 +53,11 @@ function SubjectsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [userNitRut])
 
   useEffect(() => {
     loadSubjects()
-  }, [])
+  }, [loadSubjects])
 
   const filteredSubjects = useMemo(() => {
     const normalized = search.trim().toLowerCase()
@@ -97,6 +97,7 @@ function SubjectsPage() {
         await updateDocTracked(doc(db, 'asignaturas', editingSubject.id), {
           name: trimmedName,
           status: form.status,
+          nitRut: userNitRut,
           updatedAt: serverTimestamp(),
           updatedByUid: user?.uid || '',
         })
@@ -105,6 +106,7 @@ function SubjectsPage() {
         await addDocTracked(collection(db, 'asignaturas'), {
           name: trimmedName,
           status: form.status,
+          nitRut: userNitRut,
           createdAt: serverTimestamp(),
           createdByUid: user?.uid || '',
         })

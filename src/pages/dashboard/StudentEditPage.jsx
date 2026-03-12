@@ -76,7 +76,7 @@ function StudentEditPage() {
       try {
         const [studentSnapshot, teacherSnapshot] = await Promise.all([
           getDoc(doc(db, 'users', studentId)),
-          getDocs(query(collection(db, 'users'), where('role', '==', 'profesor', where('nitRut', '==', userNitRut)))),
+          getDocs(query(collection(db, 'users'), where('role', '==', 'profesor'), where('nitRut', '==', userNitRut))),
         ])
 
         const teacherList = teacherSnapshot.docs
@@ -144,7 +144,7 @@ function StudentEditPage() {
     }
 
     loadData()
-  }, [studentId])
+  }, [studentId, userNitRut])
 
   const fotoEstudianteNuevaPreview = useMemo(
     () => (fotoEstudianteNueva ? URL.createObjectURL(fotoEstudianteNueva) : ''),
@@ -266,7 +266,9 @@ function StudentEditPage() {
       const { fotoPayload, documentosPayload } = await uploadStudentFiles(studentIdentifier)
       await updateDocTracked(doc(db, 'users', studentId), {
         name: fullName,
+        nitRut: userNitRut,
         profile: {
+          nitRut: userNitRut,
           tipoDocumento,
           numeroDocumento,
           primerNombre: primerNombre.trim(),

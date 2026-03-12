@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDocs, serverTimestamp, query, where } from 'firebase/firestore'
 import { getDownloadURL, ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
@@ -46,7 +46,7 @@ function CircularsPage() {
   const [loading, setLoading] = useState(true)
   const [circulars, setCirculars] = useState([])
 
-  const loadCirculars = async () => {
+  const loadCirculars = useCallback(async () => {
     setLoading(true)
     try {
       const snapshot = await getDocs(query(collection(db, 'circulares'), where('nitRut', '==', userNitRut)))
@@ -61,11 +61,11 @@ function CircularsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [userNitRut])
 
   useEffect(() => {
     loadCirculars()
-  }, [])
+  }, [loadCirculars])
 
   const handlePdfChange = (event) => {
     const file = event.target.files?.[0] || null
@@ -124,6 +124,7 @@ function CircularsPage() {
         await updateDocTracked(doc(db, 'circulares', editingCircular.id), {
           subject: subject.trim(),
           pdf: uploadedPdf || editingCircular.pdf || null,
+          nitRut: userNitRut,
           updatedAt: serverTimestamp(),
         })
         setSuccessMessage('Circular actualizada correctamente.')
@@ -131,6 +132,7 @@ function CircularsPage() {
         await addDocTracked(collection(db, 'circulares'), {
           subject: subject.trim(),
           pdf: uploadedPdf,
+          nitRut: userNitRut,
           createdByUid: user?.uid || '',
           createdByName: user?.displayName || user?.email || '',
           createdAt: serverTimestamp(),

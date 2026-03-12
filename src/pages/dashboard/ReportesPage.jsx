@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, where, orderBy } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
+import { PERMISSION_KEYS } from '../../utils/permissions'
 
 const OPERACION_OPTIONS = [
   { value: '', label: 'Todas las operaciones' },
@@ -11,6 +12,7 @@ const OPERACION_OPTIONS = [
   { value: 'actualizar', label: 'Actualizar' },
   { value: 'eliminar', label: 'Eliminar' },
 ]
+const normalizeRole = (value) => String(value || '').trim().toLowerCase()
 
 function formatTimestamp(ts) {
   if (!ts) return '-'
@@ -335,7 +337,7 @@ function ReportesPage() {
   const [exportingAll, setExportingAll] = useState(false)
   const [viewRecord, setViewRecord] = useState(null) // record shown in detail modal
 
-  const { hasPermission, userNitRut } = useAuth()
+  const { hasPermission, userNitRut, userRole } = useAuth()
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
 
   const [tipoReportesOptions, setTipoReportesOptions] = useState([])
@@ -345,9 +347,9 @@ function ReportesPage() {
 
   // Report types loaded from Firestore
   const [loadingTypes, setLoadingTypes] = useState(false)
+  const [hasReportTypeAccess, setHasReportTypeAccess] = useState(true)
 
   // Filters — default to today so only today's records load initially.
-  const todayISO = useMemo(() => new Date().toISOString().split('T')[0], [])
   const [searchText, setSearchText] = useState('')
   const [filterColeccion, setFilterColeccion] = useState('')
   const [filterOperacion, setFilterOperacion] = useState('')
@@ -361,14 +363,17 @@ function ReportesPage() {
     const loadTypes = async () => {
       setLoadingTypes(true)
       try {
-        const snap = await getDocs(
-          query(
-            collection(db, 'tipo_reportes'),
-            where('nitRut', '==', userNitRut),
-            where('estado', '==', 'activo'),
+        const [snap, settingsSnapshot] = await Promise.all([
+          getDocs(
+            query(
+              collection(db, 'tipo_reportes'),
+              where('nitRut', '==', userNitRut),
+              where('estado', '==', 'activo'),
+            ),
           ),
-        )
-        const mapped = snap.docs
+          getDoc(doc(db, 'configuracion', `report_types_roles_${userNitRut}`)),
+        ])
+        const allMapped = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .sort((a, b) => {
             // Integrated types first, then alphabetical.
@@ -377,15 +382,31 @@ function ReportesPage() {
             if (aP !== bP) return aP - bP
             return a.nombre.localeCompare(b.nombre)
           })
+        const roleMatrix = settingsSnapshot.data()?.roleMatrix || {}
+        const sourceRole = normalizeRole(userRole)
+        const configuredAllowedIds = roleMatrix[sourceRole]
+        const allowedIds = Array.isArray(configuredAllowedIds)
+          ? configuredAllowedIds
+          : allMapped.map((item) => item.id)
+        const mapped = allMapped.filter((item) => allowedIds.includes(item.id))
+        setHasReportTypeAccess(mapped.length > 0)
         setTipoReportesOptions(mapped)
       } catch (err) {
         console.error('Error loading tipo_reportes:', err)
+        setHasReportTypeAccess(false)
       } finally {
         setLoadingTypes(false)
       }
     }
     loadTypes()
-  }, [userNitRut])
+  }, [userNitRut, userRole])
+
+  useEffect(() => {
+    if (!selectedTipo) return
+    if (!tipoReportesOptions.some((item) => item.id === selectedTipo.id)) {
+      setSelectedTipo(null)
+    }
+  }, [selectedTipo, tipoReportesOptions])
 
   // ── Load historial when the selected type is the built-in historial ─────────
   const loadHistorial = useCallback(async () => {
@@ -517,6 +538,11 @@ function ReportesPage() {
             <span style={{ marginLeft: '10px', fontSize: '0.85em', color: 'var(--text-secondary)' }}>
               Cargando tipos...
             </span>
+          )}
+          {!loadingTypes && !hasReportTypeAccess && (
+            <p className="feedback" style={{ marginTop: '8px' }}>
+              Tu rol no tiene tipos de reporte asignados en la configuracion.
+            </p>
           )}
         </div>
       </div>
@@ -684,7 +710,7 @@ function ReportesPage() {
         </div>
       )}
 
-      {!reportType && (
+      {!selectedTipo && (
         <p style={{ color: 'var(--text-secondary)', marginTop: '24px' }}>
           Selecciona un tipo de reporte para comenzar.
         </p>

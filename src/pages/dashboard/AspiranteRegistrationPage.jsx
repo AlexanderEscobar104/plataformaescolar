@@ -96,7 +96,7 @@ function AspiranteRegistrationPage() {
       }
     }
     loadEmpleados()
-  }, [])
+  }, [userNitRut])
 
   useEffect(() => {
     return () => {
@@ -221,6 +221,7 @@ function AspiranteRegistrationPage() {
         email,
         password,
         role: 'aspirante',
+        nitRut: userNitRut,
         profileData: {
           tipoDocumento,
           numeroDocumento,
@@ -316,6 +317,10 @@ function AspiranteRegistrationPage() {
             </div>
           )}
 
+          <label htmlFor="numero-documento-aspirante">
+            Numero de documento
+            <input id="numero-documento-aspirante" type="text" value={numeroDocumento} onChange={(e) => setNumeroDocumento(e.target.value)} placeholder="Documento" />
+          </label>
           <label htmlFor="tipo-documento-aspirante">
             Tipo de documento
             <select id="tipo-documento-aspirante" value={tipoDocumento} onChange={(e) => setTipoDocumento(e.target.value)}>
@@ -326,10 +331,6 @@ function AspiranteRegistrationPage() {
               <option value="cedula de extranjeria">Cedula de extranjeria</option>
               <option value="pasaporte">Pasaporte</option>
             </select>
-          </label>
-          <label htmlFor="numero-documento-aspirante">
-            Numero de documento
-            <input id="numero-documento-aspirante" type="text" value={numeroDocumento} onChange={(e) => setNumeroDocumento(e.target.value)} placeholder="Documento" />
           </label>
           <div className="form-grid-2">
             <label htmlFor="primer-nombre-aspirante">

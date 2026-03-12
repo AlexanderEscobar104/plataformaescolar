@@ -15,7 +15,7 @@ const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 function DirectivoEditPage() {
   const navigate = useNavigate()
   const { directivoId } = useParams()
-  const { hasPermission } = useAuth()
+  const { hasPermission, userNitRut } = useAuth()
   const canEdit = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
 
   const [loading, setLoading] = useState(true)
@@ -142,7 +142,9 @@ function DirectivoEditPage() {
       const { fotoPayload, documentosPayload } = await uploadFiles(numeroDocumento.trim() || directivoId)
       await updateDocTracked(doc(db, 'users', directivoId), {
         name: `${nombres} ${apellidos}`.replace(/\s+/g, ' ').trim(),
+        nitRut: userNitRut,
         profile: {
+          nitRut: userNitRut,
           nombres: nombres.trim(),
           apellidos: apellidos.trim(),
           tipoDocumento,

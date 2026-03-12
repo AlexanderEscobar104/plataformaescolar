@@ -87,7 +87,7 @@ function ServiciosComplementariosPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [userNitRut])
 
   useEffect(() => {
     loadServicios()
@@ -228,6 +228,7 @@ function ServiciosComplementariosPage() {
         valor: parsedValor,
         estado: form.estado,
         fechaVencimiento: form.fechaVencimiento,
+        nitRut: userNitRut,
       }
 
       if (editingId) {

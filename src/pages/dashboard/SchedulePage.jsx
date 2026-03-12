@@ -119,15 +119,17 @@ function SchedulePage() {
   const persistSchedule = async (groupKey, nextColumns, nextGrid, nextRowHours, options = {}) => {
     const combo = gradeGroupOptions.find((item) => item.key === groupKey)
     if (!combo) return
+    const scheduleDocId = `${userNitRut || 'global'}_${groupKey}`
 
     try {
       if (!options.silent) {
         setSaving(true)
       }
-      await setDocTracked(doc(db, 'horarios', groupKey), {
+      await setDocTracked(doc(db, 'horarios', scheduleDocId), {
         groupKey,
         grade: combo.grade,
         group: combo.group,
+        nitRut: userNitRut,
         visibleDayKeys: nextColumns.map((day) => day.key),
         cells: serializeGridToCells(nextGrid),
         rowHours: normalizeRowHours(nextRowHours),
@@ -153,7 +155,7 @@ function SchedulePage() {
       setFeedback('')
       try {
         const [studentsSnapshot, subjectsSnapshot, schedulesSnapshot] = await Promise.all([
-          getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante', where('nitRut', '==', userNitRut)))),
+          getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante'), where('nitRut', '==', userNitRut))),
           getDocs(query(collection(db, 'asignaturas'), where('nitRut', '==', userNitRut))),
           getDocs(query(collection(db, 'horarios'), where('nitRut', '==', userNitRut))),
         ])
@@ -189,7 +191,10 @@ function SchedulePage() {
 
         const savedMap = new Map()
         schedulesSnapshot.docs.forEach((docSnapshot) => {
-          savedMap.set(docSnapshot.id, docSnapshot.data() || {})
+          const data = docSnapshot.data() || {}
+          const key = String(data.groupKey || '').trim()
+          if (!key) return
+          savedMap.set(key, data)
         })
 
         const nextColumnsMap = {}
@@ -217,7 +222,7 @@ function SchedulePage() {
     }
 
     loadData()
-  }, [])
+  }, [userNitRut])
 
   const selectedColumns = useMemo(() => columnsByGroupKey[selectedGroupKey] || DAYS, [columnsByGroupKey, selectedGroupKey])
   const selectedGrid = useMemo(() => gridByGroupKey[selectedGroupKey] || buildEmptyGrid(), [gridByGroupKey, selectedGroupKey])

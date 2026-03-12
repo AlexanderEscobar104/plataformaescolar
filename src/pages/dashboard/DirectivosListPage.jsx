@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { collection, doc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
@@ -10,13 +10,13 @@ import { deleteDocTracked } from '../../services/firestoreProxy'
 
 function DirectivosListPage() {
   const [currentPage, setCurrentPage] = useState(1)
-  const [exportingAll, setExportingAll] = useState(false)
+  const [_exportingAll, setExportingAll] = useState(false)
 
   const navigate = useNavigate()
   const location = useLocation()
   const { hasPermission, userNitRut } = useAuth()
-  const canDeleteUsers = hasPermission(PERMISSION_KEYS.USERS_DELETE)
-  const canAssignRole = hasPermission(PERMISSION_KEYS.USERS_ASSIGN_ROLE)
+  const _canDeleteUsers = hasPermission(PERMISSION_KEYS.USERS_DELETE)
+  const _canAssignRole = hasPermission(PERMISSION_KEYS.USERS_ASSIGN_ROLE)
   const canManageMembers = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const [directivos, setDirectivos] = useState([])
@@ -26,10 +26,12 @@ function DirectivosListPage() {
   const [directivoToDelete, setDirectivoToDelete] = useState(null)
   const [flashMessage, setFlashMessage] = useState('')
 
-  const loadDirectivos = async () => {
+  const loadDirectivos = useCallback(async () => {
     setLoading(true)
     try {
-      const snapshot = await getDocs(query(collection(db, 'users'), where('role', '==', 'directivo', where('nitRut', '==', userNitRut))))
+      const snapshot = await getDocs(
+        query(collection(db, 'users'), where('role', '==', 'directivo'), where('nitRut', '==', userNitRut)),
+      )
       const mapped = snapshot.docs
         .map((docSnapshot) => {
           const data = docSnapshot.data()
@@ -49,11 +51,11 @@ function DirectivosListPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [userNitRut])
 
   useEffect(() => {
     loadDirectivos()
-  }, [])
+  }, [loadDirectivos])
 
   useEffect(() => {
     const message = location.state?.flash?.text

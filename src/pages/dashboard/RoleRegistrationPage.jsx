@@ -67,10 +67,13 @@ function RoleRegistrationPage({ role, title }) {
   const [nombreAcudiente, setNombreAcudiente] = useState('')
   const [parentescoAcudiente, setParentescoAcudiente] = useState('Mama')
   const [telefonoAcudiente, setTelefonoAcudiente] = useState('')
+  const [documentoAcudiente, setDocumentoAcudiente] = useState('')
   const [nombrePadre, setNombrePadre] = useState('')
+  const [documentoPadre, setDocumentoPadre] = useState('')
   const [telefonoPadre, setTelefonoPadre] = useState('')
   const [ocupacionPadre, setOcupacionPadre] = useState('')
   const [nombreMadre, setNombreMadre] = useState('')
+  const [documentoMadre, setDocumentoMadre] = useState('')
   const [telefonoMadre, setTelefonoMadre] = useState('')
   const [ocupacionMadre, setOcupacionMadre] = useState('')
   const [nombresProfesor, setNombresProfesor] = useState('')
@@ -112,7 +115,9 @@ function RoleRegistrationPage({ role, title }) {
     const loadTeachers = async () => {
       setLoadingTeachers(true)
       try {
-        const snapshot = await getDocs(query(collection(db, 'users'), where('role', '==', 'profesor', where('nitRut', '==', userNitRut))))
+        const snapshot = await getDocs(
+          query(collection(db, 'users'), where('role', '==', 'profesor'), where('nitRut', '==', userNitRut)),
+        )
         const mappedTeachers = snapshot.docs
           .map((docSnapshot) => ({
             uid: docSnapshot.id,
@@ -127,7 +132,7 @@ function RoleRegistrationPage({ role, title }) {
     }
 
     loadTeachers()
-  }, [isStudentForm])
+  }, [isStudentForm, userNitRut])
 
   useEffect(() => {
     if (!isTeacherForm) return
@@ -154,7 +159,7 @@ function RoleRegistrationPage({ role, title }) {
     }
 
     loadSubjects()
-  }, [isTeacherForm])
+  }, [isTeacherForm, userNitRut])
 
   useEffect(() => {
     if (isTeacherForm || isDirectivoForm) {
@@ -200,10 +205,13 @@ function RoleRegistrationPage({ role, title }) {
     setNombreAcudiente('')
     setParentescoAcudiente('Mama')
     setTelefonoAcudiente('')
+    setDocumentoAcudiente('')
     setNombrePadre('')
+    setDocumentoPadre('')
     setTelefonoPadre('')
     setOcupacionPadre('')
     setNombreMadre('')
+    setDocumentoMadre('')
     setTelefonoMadre('')
     setOcupacionMadre('')
     setActiveTab('complementaria')
@@ -458,6 +466,7 @@ function RoleRegistrationPage({ role, title }) {
         email,
         password,
         role,
+        nitRut: userNitRut,
         profileData: (isTeacherForm || isDirectivoForm)
           ? {
               nombres: nombresProfesor.trim(),
@@ -513,15 +522,18 @@ function RoleRegistrationPage({ role, title }) {
                 },
                 informacionFamiliar: {
                   nombreAcudiente: nombreAcudiente.trim(),
+                  documentoAcudiente: documentoAcudiente.trim(),
                   parentescoAcudiente,
                   telefonoAcudiente: telefonoAcudiente.trim(),
                   padre: {
                     nombre: nombrePadre.trim(),
+                    documento: documentoPadre.trim(),
                     telefono: telefonoPadre.trim(),
                     ocupacion: ocupacionPadre.trim(),
                   },
                   madre: {
                     nombre: nombreMadre.trim(),
+                    documento: documentoMadre.trim(),
                     telefono: telefonoMadre.trim(),
                     ocupacion: ocupacionMadre.trim(),
                   },
@@ -711,6 +723,15 @@ function RoleRegistrationPage({ role, title }) {
                   </div>
                 )}
                 <div className="form-grid-2">
+                  <label htmlFor="numero-documento-profesor">
+                    Numero de documento
+                    <input
+                      id="numero-documento-profesor"
+                      type="text"
+                      value={numeroDocumentoProfesor}
+                      onChange={(event) => setNumeroDocumentoProfesor(event.target.value)}
+                    />
+                  </label>
                   <label htmlFor="tipo-documento-profesor">
                     Tipo de documento
                     <select
@@ -725,15 +746,6 @@ function RoleRegistrationPage({ role, title }) {
                       <option value="cedula de extranjeria">Cedula de extranjeria</option>
                       <option value="pasaporte">Pasaporte</option>
                     </select>
-                  </label>
-                  <label htmlFor="numero-documento-profesor">
-                    Numero de documento
-                    <input
-                      id="numero-documento-profesor"
-                      type="text"
-                      value={numeroDocumentoProfesor}
-                      onChange={(event) => setNumeroDocumentoProfesor(event.target.value)}
-                    />
                   </label>
                   <label htmlFor="nombres-profesor">
                     Nombres
@@ -925,6 +937,15 @@ function RoleRegistrationPage({ role, title }) {
                   </div>
                 )}
                 <div className="form-grid-2">
+                  <label htmlFor="numero-documento-directivo">
+                    Numero de documento
+                    <input
+                      id="numero-documento-directivo"
+                      type="text"
+                      value={numeroDocumentoProfesor}
+                      onChange={(event) => setNumeroDocumentoProfesor(event.target.value)}
+                    />
+                  </label>
                   <label htmlFor="tipo-documento-directivo">
                     Tipo de documento
                     <select
@@ -939,15 +960,6 @@ function RoleRegistrationPage({ role, title }) {
                       <option value="cedula de extranjeria">Cedula de extranjeria</option>
                       <option value="pasaporte">Pasaporte</option>
                     </select>
-                  </label>
-                  <label htmlFor="numero-documento-directivo">
-                    Numero de documento
-                    <input
-                      id="numero-documento-directivo"
-                      type="text"
-                      value={numeroDocumentoProfesor}
-                      onChange={(event) => setNumeroDocumentoProfesor(event.target.value)}
-                    />
                   </label>
                   <label htmlFor="nombres-directivo">
                     Nombres
@@ -1061,6 +1073,16 @@ function RoleRegistrationPage({ role, title }) {
                 />
               </div>
             )}
+            <label htmlFor="numero-documento-estudiante">
+              Numero de documento
+              <input
+                id="numero-documento-estudiante"
+                type="text"
+                value={numeroDocumento}
+                onChange={(event) => setNumeroDocumento(event.target.value)}
+                placeholder="Documento"
+              />
+            </label>
             <label htmlFor="tipo-documento-estudiante">
               Tipo de documento
               <select
@@ -1075,16 +1097,6 @@ function RoleRegistrationPage({ role, title }) {
                 <option value="cedula de extranjeria">Cedula de extranjeria</option>
                 <option value="pasaporte">Pasaporte</option>
               </select>
-            </label>
-            <label htmlFor="numero-documento-estudiante">
-              Numero de documento
-              <input
-                id="numero-documento-estudiante"
-                type="text"
-                value={numeroDocumento}
-                onChange={(event) => setNumeroDocumento(event.target.value)}
-                placeholder="Documento"
-              />
             </label>
             <div className="form-grid-2">
               <label htmlFor="primer-nombre-estudiante">
@@ -1360,6 +1372,15 @@ function RoleRegistrationPage({ role, title }) {
                       onChange={(event) => setTelefonoAcudiente(event.target.value)}
                     />
                   </label>
+                  <label htmlFor="documento-acudiente-estudiante">
+                    Numero documento acudiente
+                    <input
+                      id="documento-acudiente-estudiante"
+                      type="text"
+                      value={documentoAcudiente}
+                      onChange={(event) => setDocumentoAcudiente(event.target.value)}
+                    />
+                  </label>
                 </div>
                 <div className="family-row">
                   <label htmlFor="nombre-padre-estudiante">
@@ -1369,6 +1390,15 @@ function RoleRegistrationPage({ role, title }) {
                       type="text"
                       value={nombrePadre}
                       onChange={(event) => setNombrePadre(event.target.value)}
+                    />
+                  </label>
+                  <label htmlFor="documento-padre-estudiante">
+                    Numero documento padre
+                    <input
+                      id="documento-padre-estudiante"
+                      type="text"
+                      value={documentoPadre}
+                      onChange={(event) => setDocumentoPadre(event.target.value)}
                     />
                   </label>
                   <label htmlFor="telefono-padre-estudiante">
@@ -1398,6 +1428,15 @@ function RoleRegistrationPage({ role, title }) {
                       type="text"
                       value={nombreMadre}
                       onChange={(event) => setNombreMadre(event.target.value)}
+                    />
+                  </label>
+                  <label htmlFor="documento-madre-estudiante">
+                    Numero documento madre
+                    <input
+                      id="documento-madre-estudiante"
+                      type="text"
+                      value={documentoMadre}
+                      onChange={(event) => setDocumentoMadre(event.target.value)}
                     />
                   </label>
                   <label htmlFor="telefono-madre-estudiante">

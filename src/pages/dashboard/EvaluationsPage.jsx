@@ -389,12 +389,12 @@ function EvaluationsPage() {
 
     setLoading(true)
     try {
-    const [evaluationsSnapshot, professorsSnapshot, studentsSnapshot, empleadosSnapshot, aprendicesSnapshot] = await Promise.all([
+      const [evaluationsSnapshot, professorsSnapshot, studentsSnapshot, empleadosSnapshot, aprendicesSnapshot] = await Promise.all([
         getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', userNitRut))),
-        getDocs(query(collection(db, 'users'), where('role', '==', 'profesor', where('nitRut', '==', userNitRut)))),
-        getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante', where('nitRut', '==', userNitRut)))),
+        getDocs(query(collection(db, 'users'), where('role', '==', 'profesor'), where('nitRut', '==', userNitRut))),
+        getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'empleados'), where('nitRut', '==', userNitRut))),
-        getDocs(query(collection(db, 'users'), where('role', '==', 'aspirante', where('nitRut', '==', userNitRut)))),
+        getDocs(query(collection(db, 'users'), where('role', '==', 'aspirante'), where('nitRut', '==', userNitRut))),
       ])
 
       const mappedProfessors = professorsSnapshot.docs
@@ -487,7 +487,7 @@ function EvaluationsPage() {
     } finally {
       setLoading(false)
     }
-  }, [canViewEvaluations, isProfessor, user?.uid])
+  }, [canViewEvaluations, isProfessor, user?.uid, userNitRut])
 
   useEffect(() => {
     loadBaseData()
@@ -635,10 +635,6 @@ function EvaluationsPage() {
         }
       }
 
-      const professorName =
-        professorNameById.get(professorUid) ||
-        (isProfessor ? user?.displayName || user?.email || 'Profesor' : 'Profesor')
-
       const payload = {
         subject: trimmedSubject,
         evaluationType,
@@ -659,6 +655,7 @@ function EvaluationsPage() {
         empleadoEncargadoUid: form.esParaAprendiz ? form.empleadoEncargadoUid : '',
         empleadoEncargadoNombre: form.esParaAprendiz ? (empleados.find((e) => e.id === form.empleadoEncargadoUid)?.name || '') : '',
         aprendicesSeleccionados: form.esParaAprendiz ? form.aprendicesSeleccionados : [],
+        nitRut: userNitRut,
       }
 
       if (editingEvaluation?.id) {

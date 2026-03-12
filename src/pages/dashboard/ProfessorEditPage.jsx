@@ -59,7 +59,7 @@ function ProfessorEditPage() {
       try {
         const [professorSnapshot, directorsSnapshot, subjectsSnapshot] = await Promise.all([
           getDoc(doc(db, 'users', professorId)),
-          getDocs(query(collection(db, 'users'), where('role', '==', 'directivo', where('nitRut', '==', userNitRut)))),
+          getDocs(query(collection(db, 'users'), where('role', '==', 'directivo'), where('nitRut', '==', userNitRut))),
           getDocs(query(collection(db, 'asignaturas'), where('nitRut', '==', userNitRut))),
         ])
         const mappedSubjects = subjectsSnapshot.docs
@@ -120,7 +120,7 @@ function ProfessorEditPage() {
     }
 
     loadData()
-  }, [professorId])
+  }, [professorId, userNitRut])
 
   const fotoNuevaPreview = useMemo(() => (fotoNueva ? URL.createObjectURL(fotoNueva) : ''), [fotoNueva])
 
@@ -244,7 +244,9 @@ function ProfessorEditPage() {
       )
       await updateDocTracked(doc(db, 'users', professorId), {
         name: `${nombres} ${apellidos}`.replace(/\s+/g, ' ').trim(),
+        nitRut: userNitRut,
         profile: {
+          nitRut: userNitRut,
           nombres: nombres.trim(),
           apellidos: apellidos.trim(),
           tipoDocumento,

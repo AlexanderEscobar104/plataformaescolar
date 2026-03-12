@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
@@ -17,7 +17,7 @@ const PROTECTED_ROWS = [
 
 function RolesPage() {
   const [currentPage, setCurrentPage] = useState(1)
-  const [exportingAll, setExportingAll] = useState(false)
+  const [_exportingAll, setExportingAll] = useState(false)
 
   const { user, hasPermission, userNitRut } = useAuth()
   const canManageRoles = hasPermission(PERMISSION_KEYS.ROLES_MANAGE)
@@ -35,12 +35,13 @@ function RolesPage() {
 
   const [form, setForm] = useState({ name: '', status: 'activo' })
   const nameInputRef = useRef(null)
+  const permissionsDocId = userNitRut ? `permisosRoles_${userNitRut}` : 'permisosRoles'
 
   // ── Load custom roles ─────────────────────────────────────────────────────
-  const loadRoles = async () => {
+  const loadRoles = useCallback(async () => {
     setLoading(true)
     try {
-      const snapshot = await getDocs(collection(db, 'roles'))
+      const snapshot = await getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut)))
       const mapped = snapshot.docs
         .map((d) => ({ id: d.id, ...d.data(), isProtected: false }))
         .sort((a, b) => a.name.localeCompare(b.name))
@@ -48,11 +49,11 @@ function RolesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [userNitRut])
 
   useEffect(() => {
     loadRoles()
-  }, [])
+  }, [loadRoles])
 
   // ── All rows for the table ────────────────────────────────────────────────
   const allRows = useMemo(() => [...PROTECTED_ROWS, ...customRoles], [customRoles])
@@ -104,6 +105,7 @@ function RolesPage() {
         await updateDocTracked(doc(db, 'roles', editingRole.id), {
           name: trimmedName,
           status: form.status,
+          nitRut: userNitRut,
           updatedAt: serverTimestamp(),
           updatedByUid: user?.uid || '',
         })
@@ -112,6 +114,7 @@ function RolesPage() {
         await addDocTracked(collection(db, 'roles'), {
           name: trimmedName,
           status: form.status,
+          nitRut: userNitRut,
           isProtected: false,
           createdAt: serverTimestamp(),
           createdByUid: user?.uid || '',
@@ -140,7 +143,7 @@ function RolesPage() {
 
       // 2. Find all users with this role and clear their role field
       const usersSnap = await getDocs(
-        query(collection(db, 'users'), where('role', '==', roleValue, where('nitRut', '==', userNitRut))),
+        query(collection(db, 'users'), where('role', '==', roleValue), where('nitRut', '==', userNitRut)),
       )
       if (!usersSnap.empty) {
         const batch = writeBatch(db)
@@ -151,7 +154,7 @@ function RolesPage() {
       }
 
       // 3. Remove the role key from configuracion/permisosRoles
-      const permDoc = doc(db, 'configuracion', 'permisosRoles')
+      const permDoc = doc(db, 'configuracion', permissionsDocId)
       const permSnap = await getDoc(permDoc)
       if (permSnap.exists()) {
         const current = permSnap.data()?.roles || {}

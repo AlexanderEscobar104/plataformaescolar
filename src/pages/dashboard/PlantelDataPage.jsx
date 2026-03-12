@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { doc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { getDownloadURL, ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { setDocTracked } from '../../services/firestoreProxy'
@@ -12,10 +12,11 @@ import { PERMISSION_KEYS } from '../../utils/permissions'
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
 function PlantelDataPage() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, userNitRut } = useAuth()
   const canManagePlantel = hasPermission(PERMISSION_KEYS.PLANTEL_MANAGE)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [feedback, setFeedback] = useState('')
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorModalMessage, setErrorModalMessage] = useState('')
   const [modalType, setModalType] = useState('error') // 'error' or 'success'
@@ -35,20 +36,68 @@ function PlantelDataPage() {
   const [pais, setPais] = useState('')
   const [telefono, setTelefono] = useState('')
   const [correoCorporativo, setCorreoCorporativo] = useState('')
+  const [planNombre, setPlanNombre] = useState('')
+  const [planFechaVencimiento, setPlanFechaVencimiento] = useState('')
+  const [planEstado, setPlanEstado] = useState('')
+  const tenantNit = String(userNitRut || '').trim()
+  const plantelDocId = tenantNit ? `datosPlantel_${tenantNit}` : 'datosPlantel'
+
+  const loadAssociatedPlan = async (nit) => {
+    const normalizedNit = String(nit || '').trim()
+    if (!normalizedNit) {
+      setPlanNombre('')
+      setPlanFechaVencimiento('')
+      setPlanEstado('')
+      return
+    }
+
+    const plansSnapshot = await getDocs(
+      query(collection(db, 'planes'), where('nitEmpresa', '==', normalizedNit)),
+    )
+    if (plansSnapshot.empty) {
+      setPlanNombre('')
+      setPlanFechaVencimiento('')
+      setPlanEstado('')
+      return
+    }
+
+    const plans = plansSnapshot.docs.map((docSnapshot) => docSnapshot.data() || {})
+    plans.sort((a, b) => {
+      const aMillis = a.createdAt?.toMillis?.() || new Date(a.fechaAdquisicion || 0).getTime() || 0
+      const bMillis = b.createdAt?.toMillis?.() || new Date(b.fechaAdquisicion || 0).getTime() || 0
+      return bMillis - aMillis
+    })
+
+    const latestPlan = plans[0] || {}
+    setPlanNombre(String(latestPlan.nombrePlan || '').trim())
+    setPlanFechaVencimiento(String(latestPlan.fechaVencimiento || '').trim())
+    setPlanEstado(String(latestPlan.estado || '').trim())
+  }
 
   useEffect(() => {
     const loadPlantelData = async () => {
       setLoading(true)
       try {
-        const snapshot = await getDoc(doc(db, 'configuracion', 'datosPlantel'))
-        if (!snapshot.exists()) return
+        let snapshot = await getDoc(doc(db, 'configuracion', plantelDocId))
+        if (!snapshot.exists() && tenantNit) {
+          snapshot = await getDoc(doc(db, 'configuracion', 'datosPlantel'))
+        }
+        if (!snapshot.exists()) {
+          if (tenantNit) {
+            setNitRut(tenantNit)
+            setNitSaved(true)
+            await loadAssociatedPlan(tenantNit)
+          }
+          return
+        }
 
         const data = snapshot.data()
         setLogoActual(data.logo || null)
         setRazonSocial(data.razonSocial || '')
         setNombreComercial(data.nombreComercial || '')
-        setNitRut(data.nitRut || '')
-        setNitSaved(!!data.nitRut)
+        const resolvedNit = tenantNit || data.nitRut || ''
+        setNitRut(resolvedNit)
+        setNitSaved(!!resolvedNit)
         setFechaConstitucion(data.fechaConstitucion || '')
         setRepresentanteLegal(data.representanteLegal || '')
         setDocumentoRepresentanteLegal(data.documentoRepresentanteLegal || '')
@@ -57,13 +106,14 @@ function PlantelDataPage() {
         setPais(data.pais || '')
         setTelefono(data.telefono || '')
         setCorreoCorporativo(data.correoCorporativo || '')
+        await loadAssociatedPlan(resolvedNit)
       } finally {
         setLoading(false)
       }
     }
 
     loadPlantelData()
-  }, [])
+  }, [plantelDocId, tenantNit])
 
   const logoPreview = useMemo(
     () => (logoNuevo ? URL.createObjectURL(logoNuevo) : ''),
@@ -96,7 +146,7 @@ function PlantelDataPage() {
     if (!logoNuevo) return logoActual
 
     const timestamp = Date.now()
-    const filePath = `plantel/logo/${timestamp}-${logoNuevo.name}`
+    const filePath = `plantel/${tenantNit || nitRut.trim() || 'global'}/logo/${timestamp}-${logoNuevo.name}`
     const logoRef = ref(storage, filePath)
     await uploadBytesTracked(logoRef, logoNuevo)
 
@@ -133,7 +183,7 @@ function PlantelDataPage() {
       }
     }
 
-    if (!nitSaved && nitRut.trim() !== '') {
+    if (!tenantNit && !nitSaved && nitRut.trim() !== '') {
       setShowConfirmNit(true)
       return
     }
@@ -146,13 +196,14 @@ function PlantelDataPage() {
     try {
       setSaving(true)
       const logoPayload = await uploadLogoIfNeeded()
+      const resolvedNit = tenantNit || nitRut.trim()
       await setDocTracked(
-        doc(db, 'configuracion', 'datosPlantel'),
+        doc(db, 'configuracion', resolvedNit ? `datosPlantel_${resolvedNit}` : plantelDocId),
         {
           logo: logoPayload,
           razonSocial: razonSocial.trim(),
           nombreComercial: nombreComercial.trim(),
-          nitRut: nitRut.trim(),
+          nitRut: resolvedNit,
           fechaConstitucion,
           representanteLegal: representanteLegal.trim(),
           documentoRepresentanteLegal: documentoRepresentanteLegal.trim(),
@@ -168,7 +219,7 @@ function PlantelDataPage() {
 
       setLogoActual(logoPayload || null)
       setLogoNuevo(null)
-      if (nitRut.trim()) setNitSaved(true)
+      if (resolvedNit) setNitSaved(true)
       
       setModalType('success')
       setErrorModalMessage('Datos del plantel guardados correctamente.')
@@ -198,6 +249,7 @@ function PlantelDataPage() {
       {!canManagePlantel && (
         <p className="feedback">Vista solo lectura. Tu rol no puede editar esta informacion.</p>
       )}
+      {feedback && <p className="feedback">{feedback}</p>}
       <form className="form role-form" onSubmit={handleSubmit}>
         <fieldset className="form-fieldset" disabled={!canManagePlantel}>
           <div>
@@ -243,8 +295,8 @@ function PlantelDataPage() {
                 id="plantel-nit-rut"
                 type="text"
                 value={nitRut}
-                disabled={nitSaved}
-                style={nitSaved ? { backgroundColor: 'var(--bg-secondary)', cursor: 'not-allowed' } : undefined}
+                disabled={nitSaved || !!tenantNit}
+                style={nitSaved || tenantNit ? { backgroundColor: 'var(--bg-secondary)', cursor: 'not-allowed' } : undefined}
                 onChange={(event) => setNitRut(event.target.value)}
               />
             </label>
@@ -321,6 +373,18 @@ function PlantelDataPage() {
                 onChange={(event) => setCorreoCorporativo(event.target.value)}
               />
             </label>
+            <label htmlFor="plantel-plan-asociado">
+              Plan asociado
+              <input id="plantel-plan-asociado" type="text" value={planNombre || '-'} readOnly />
+            </label>
+            <label htmlFor="plantel-plan-vencimiento">
+              Fecha vencimiento plan
+              <input id="plantel-plan-vencimiento" type="text" value={planFechaVencimiento || '-'} readOnly />
+            </label>
+            <label htmlFor="plantel-plan-estado">
+              Estado del plan
+              <input id="plantel-plan-estado" type="text" value={planEstado || '-'} readOnly />
+            </label>
           </div>
           {canManagePlantel && (
             <button className="button" type="submit" disabled={saving}>
@@ -341,7 +405,7 @@ function PlantelDataPage() {
           <div className="modal-card" role="dialog" aria-modal="true" aria-label="Confirmacion NIT">
             <h3>Confirmar NIT / RUT</h3>
             <p>
-              ¿Esta seguro de guardar el NIT/RUT <strong>{nitRut}</strong>?<br/><br/>
+              Esta seguro de guardar el NIT/RUT <strong>{nitRut}</strong>?<br/><br/>
               Una vez guardado, <strong>no podra ser modificado</strong> y se aplicara permanentemente a los datos del plantel y usuarios creados.
             </p>
             <div className="modal-actions" style={{ marginTop: '24px' }}>
@@ -349,7 +413,7 @@ function PlantelDataPage() {
                 Cancelar
               </button>
               <button type="button" className="button" onClick={proceedSaving} disabled={saving}>
-                Sí, guardar definitivamente
+                Si, guardar definitivamente
               </button>
             </div>
           </div>

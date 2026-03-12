@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, doc, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore'
 import { getDownloadURL, ref } from 'firebase/storage'
 import { useAuth } from '../../hooks/useAuth'
 import { db, storage } from '../../firebase'
 import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
 import { uploadBytesTracked } from '../../services/storageService'
 import DragDropFileInput from '../../components/DragDropFileInput'
-import { PERMISSION_KEYS } from '../../utils/permissions'
+import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
+const normalizeRole = (value) => String(value || '').trim().toLowerCase()
 
 function AttachmentIcon() {
   return (
@@ -83,9 +84,15 @@ function MessagesPage() {
   const [sending, setSending] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [roleMatrix, setRoleMatrix] = useState({})
+  const [roleMatrixReady, setRoleMatrixReady] = useState(false)
 
   useEffect(() => {
     const loadUsers = async () => {
+      if (!userNitRut) {
+        setUsers([])
+        return
+      }
       const snapshot = await getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut)))
       const mappedUsers = snapshot.docs
         .map((docSnapshot) => ({
@@ -100,13 +107,57 @@ function MessagesPage() {
     }
 
     loadUsers()
-  }, [])
+  }, [userNitRut])
+
+  useEffect(() => {
+    const loadRoleMatrix = async () => {
+      setRoleMatrixReady(false)
+      if (!userNitRut) {
+        setRoleMatrix({})
+        setRoleMatrixReady(true)
+        return
+      }
+
+      try {
+        const [rolesSnapshot, settingsSnapshot] = await Promise.all([
+          getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut))),
+          getDoc(doc(db, 'configuracion', `messages_roles_${userNitRut}`)),
+        ])
+
+        const loadedRoles = rolesSnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+        const allRoleValues = buildAllRoleOptions(loadedRoles).map((role) => normalizeRole(role.value))
+        const savedMatrix = settingsSnapshot.data()?.roleMatrix || {}
+        const nextMatrix = {}
+
+        allRoleValues.forEach((role) => {
+          const configuredTargets = Array.isArray(savedMatrix[role]) ? savedMatrix[role].map(normalizeRole) : allRoleValues
+          nextMatrix[role] = configuredTargets.filter((target) => allRoleValues.includes(target))
+        })
+
+        setRoleMatrix(nextMatrix)
+      } catch {
+        setRoleMatrix({})
+      } finally {
+        setRoleMatrixReady(true)
+      }
+    }
+
+    loadRoleMatrix()
+  }, [userNitRut])
 
   useEffect(() => {
     if (!user?.uid) return undefined
 
-    const inboxQuery = query(collection(db, 'messages'), where('recipientUid', '==', user.uid))
-    const sentQuery = query(collection(db, 'messages'), where('senderUid', '==', user.uid))
+    const inboxQuery = query(
+      collection(db, 'messages'),
+      where('recipientUid', '==', user.uid),
+      where('nitRut', '==', userNitRut || ''),
+    )
+    const sentQuery = query(
+      collection(db, 'messages'),
+      where('senderUid', '==', user.uid),
+      where('nitRut', '==', userNitRut || ''),
+    )
 
     const unsubscribeInbox = onSnapshot(inboxQuery, (snapshot) => {
       const mapped = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))
@@ -123,12 +174,11 @@ function MessagesPage() {
       unsubscribeInbox()
       unsubscribeSent()
     }
-  }, [user])
+  }, [user, userNitRut])
 
   const recipientOptions = useMemo(() => {
-    const currentUserData = users.find((availableUser) => availableUser.uid === user?.uid)
-    const currentUserGrade = currentUserData?.profile?.grado || ''
-    const currentUserGroup = currentUserData?.profile?.grupo || ''
+    if (!roleMatrixReady) return []
+    const sourceRole = normalizeRole(userRole)
 
     const isUserActive = (availableUser) => {
       const estado =
@@ -142,36 +192,12 @@ function MessagesPage() {
     return users.filter((availableUser) => {
       if (availableUser.uid === user?.uid) return false
       if (!isUserActive(availableUser)) return false
-
-      if (userRole !== 'estudiante') {
-        return true
-      }
-
-      if (availableUser.role === 'directivo') {
-        return true
-      }
-
-      if (availableUser.role === 'profesor') {
-        const grades = Array.isArray(availableUser.profile?.informacionComplementaria?.gradosActivos)
-          ? availableUser.profile.informacionComplementaria.gradosActivos
-          : []
-        const groups = Array.isArray(availableUser.profile?.informacionComplementaria?.gruposActivos)
-          ? availableUser.profile.informacionComplementaria.gruposActivos
-          : []
-
-        return grades.includes(currentUserGrade) && groups.includes(currentUserGroup)
-      }
-
-      if (availableUser.role === 'estudiante') {
-        return (
-          availableUser.profile?.grado === currentUserGrade &&
-          availableUser.profile?.grupo === currentUserGroup
-        )
-      }
-
-      return false
+      const targetRole = normalizeRole(availableUser.role)
+      const allowedTargets = roleMatrix[sourceRole]
+      if (!Array.isArray(allowedTargets)) return true
+      return allowedTargets.includes(targetRole)
     })
-  }, [users, user, userRole])
+  }, [roleMatrix, roleMatrixReady, users, user, userRole])
   const filteredRecipientOptions = useMemo(() => {
     const normalized = recipientSearch.trim().toLowerCase()
     if (!normalized) return recipientOptions
@@ -212,6 +238,7 @@ function MessagesPage() {
     if (selectedTab === 'inbox' && !message.read) {
       await updateDocTracked(doc(db, 'messages', message.id), {
         read: true,
+        nitRut: userNitRut,
         readAt: serverTimestamp(),
       })
     }
@@ -315,6 +342,7 @@ function MessagesPage() {
           senderName: senderData?.name || user.displayName || user.email || 'Usuario',
           recipientUid,
           recipientName: recipientData?.name || '',
+          nitRut: userNitRut,
           subject: subject.trim(),
           body: body.trim(),
           read: false,
@@ -325,7 +353,7 @@ function MessagesPage() {
         })
 
         if (replyContext?.threadId == null) {
-          await updateDocTracked(doc(db, 'messages', docRef.id), { threadId: docRef.id })
+          await updateDocTracked(doc(db, 'messages', docRef.id), { threadId: docRef.id, nitRut: userNitRut })
         }
       }
 

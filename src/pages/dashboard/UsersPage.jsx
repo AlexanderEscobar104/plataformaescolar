@@ -50,7 +50,7 @@ function resolveUserNames(data) {
 
 function UsersPage() {
   const [currentPage, setCurrentPage] = useState(1)
-  const [exportingAll, setExportingAll] = useState(false)
+  const [_exportingAll, setExportingAll] = useState(false)
 
   const { hasPermission, userNitRut } = useAuth()
   const canViewUsers = hasPermission(PERMISSION_KEYS.USERS_VIEW)
@@ -80,7 +80,7 @@ function UsersPage() {
     try {
       const [usersSnapshot, accessSnapshot] = await Promise.all([
         getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut))),
-        getDocs(query(collection(db, 'auditoria_accesos'), where('evento', '==', 'ingreso'))),
+        getDocs(query(collection(db, 'auditoria_accesos'), where('evento', '==', 'ingreso'), where('nitRut', '==', userNitRut))),
       ])
 
       const latestAccessByUid = new Map()
@@ -130,17 +130,17 @@ function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }, [canViewUsers])
+  }, [canViewUsers, userNitRut])
 
   useEffect(() => {
     loadUsers()
   }, [loadUsers])
 
   useEffect(() => {
-    getDocs(collection(db, 'roles'))
+    getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut)))
       .then((snap) => setCustomRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
       .catch(() => {})
-  }, [])
+  }, [userNitRut])
 
   const allRoleOptions = useMemo(() => buildAllRoleOptions(customRoles), [customRoles])
 

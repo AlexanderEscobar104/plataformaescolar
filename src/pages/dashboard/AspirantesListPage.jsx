@@ -10,13 +10,13 @@ import PaginationControls from '../../components/PaginationControls'
 
 function AspirantesListPage() {
   const [currentPage, setCurrentPage] = useState(1)
-  const [exportingAll, setExportingAll] = useState(false)
+  const [_exportingAll, setExportingAll] = useState(false)
 
   const navigate = useNavigate()
   const location = useLocation()
   const { hasPermission, userNitRut } = useAuth()
-  const canDeleteUsers = hasPermission(PERMISSION_KEYS.USERS_DELETE)
-  const canAssignRole = hasPermission(PERMISSION_KEYS.USERS_ASSIGN_ROLE)
+  const _canDeleteUsers = hasPermission(PERMISSION_KEYS.USERS_DELETE)
+  const _canAssignRole = hasPermission(PERMISSION_KEYS.USERS_ASSIGN_ROLE)
   const canManageMembers = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const [aspirantes, setAspirantes] = useState([])
@@ -33,7 +33,9 @@ function AspirantesListPage() {
   const loadAspirantes = useCallback(async () => {
     setLoading(true)
     try {
-      const snapshot = await getDocs(query(collection(db, 'users'), where('role', '==', 'aspirante', where('nitRut', '==', userNitRut))))
+      const snapshot = await getDocs(
+        query(collection(db, 'users'), where('role', '==', 'aspirante'), where('nitRut', '==', userNitRut)),
+      )
       const mapped = snapshot.docs
         .map((docSnapshot) => {
           const data = docSnapshot.data()
@@ -57,7 +59,7 @@ function AspirantesListPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [userNitRut])
 
   useEffect(() => {
     loadAspirantes()

@@ -118,7 +118,7 @@ function EventsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [userNitRut])
 
   useEffect(() => {
     loadEvents()
@@ -260,6 +260,7 @@ function EventsPage() {
           description: description.trim(),
           eventDate,
           images: [...existingImages, ...uploadedImages],
+          nitRut: userNitRut,
           updatedAt: serverTimestamp(),
         })
         setFeedback('Evento actualizado correctamente.')
@@ -269,6 +270,7 @@ function EventsPage() {
           description: description.trim(),
           eventDate,
           images: uploadedImages,
+          nitRut: userNitRut,
           createdByUid: user?.uid || '',
           createdByName: user?.displayName || user?.email || '',
           createdAt: serverTimestamp(),
@@ -322,6 +324,7 @@ function EventsPage() {
               senderName: user?.displayName || user?.email || 'Sistema',
               recipientUid,
               recipientName: recipientData.name || recipientData.email || '',
+              nitRut: userNitRut,
               subject: 'Cancelacion de evento',
               body: `Se realiza la cancelacion del evento "${deletedEventTitle}" que se tenia programado para el dia ${deletedEventDate}.\n\n\n\nGracias por su atencion.`,
               read: false,

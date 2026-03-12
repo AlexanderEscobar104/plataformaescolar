@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { getAuthErrorMessage } from '../utils/authErrors'
 import logoFallback from '../assets/logo-plataforma.svg'
+import OperationStatusModal from '../components/OperationStatusModal'
 
 function LoginPage() {
   const navigate = useNavigate()
@@ -10,16 +11,18 @@ function LoginPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [logo, setLogo] = useState('/logo_plataforma_digital.png')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalMessage, setModalMessage] = useState('')
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    setError('')
 
     if (!email.trim() || !password.trim()) {
-      setError('Correo y contrasena son obligatorios.')
+      const message = 'Correo y contrasena son obligatorios.'
+      setModalMessage(message)
+      setModalOpen(true)
       return
     }
 
@@ -28,7 +31,9 @@ function LoginPage() {
       await login(email.trim(), password)
       navigate('/dashboard', { replace: true })
     } catch (firebaseError) {
-      setError(getAuthErrorMessage(firebaseError.code))
+      const message = getAuthErrorMessage(firebaseError.code)
+      setModalMessage(message)
+      setModalOpen(true)
     } finally {
       setLoading(false)
     }
@@ -73,8 +78,6 @@ function LoginPage() {
             />
           </label>
 
-          {error && <p className="feedback error">{error}</p>}
-
           <button className="button" type="submit">
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
@@ -83,6 +86,13 @@ function LoginPage() {
         <div className="links">
           <Link to="/recuperar-contrasena">Recuperar contrasena</Link>
         </div>
+
+        <OperationStatusModal
+          open={modalOpen}
+          title="Error de autenticacion"
+          message={modalMessage}
+          onClose={() => setModalOpen(false)}
+        />
       </section>
     </main>
   )
