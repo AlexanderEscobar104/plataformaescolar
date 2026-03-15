@@ -169,7 +169,7 @@ function AsistenciaPage() {
       })
       setMarkedUsers(next)
     } catch {
-      setMarkedUsers(new Set())
+      // Keep whatever we currently show; a query failure (index/permissions) should not blank the UI.
     }
   }, [dateIso, selectedGroup, selectedGrade, selectedRole, userNitRut])
 
@@ -312,6 +312,7 @@ function AsistenciaPage() {
             Promise.all(
               group.map((uid) =>
                 setDocTracked(doc(db, 'asistencias', buildAttendanceDocId(userNitRut, dateIso, uid)), {
+                  nitRut: userNitRut,
                   uid,
                   fecha: dateIso,
                   role: selectedRole,
@@ -341,6 +342,12 @@ function AsistenciaPage() {
       for (const task of tasks) {
         await task
       }
+
+      // Update the UI immediately; then try to re-sync from Firestore.
+      const nextMarked = new Set(markedUsers)
+      idsToMark.forEach((uid) => nextMarked.add(uid))
+      idsToUnmark.forEach((uid) => nextMarked.delete(uid))
+      setMarkedUsers(nextMarked)
 
       await loadMarkedUsers()
       setFeedback(allSelectedAreMarked ? 'Asistencia desmarcada.' : 'Asistencia marcada.')
