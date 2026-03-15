@@ -27,6 +27,25 @@ const INACTIVITY_LIMIT_MS = 30 * 60 * 1000
 const WARNING_BEFORE_LOGOUT_MS = 30 * 1000
 const PLAN_ACTIVE_STATUS = 'activo'
 
+function resolveCurrentUserName(userData, firebaseUser) {
+  const profile = userData?.profile || {}
+  const role = String(userData?.role || '').trim().toLowerCase()
+
+  if (role === 'estudiante') {
+    const nombres = `${profile.primerNombre || ''} ${profile.segundoNombre || ''}`.replace(/\s+/g, ' ').trim()
+    const apellidos = `${profile.primerApellido || ''} ${profile.segundoApellido || ''}`.replace(/\s+/g, ' ').trim()
+    const full = `${nombres} ${apellidos}`.replace(/\s+/g, ' ').trim()
+    if (full) return full
+  }
+
+  if (profile.nombres || profile.apellidos) {
+    const full = `${profile.nombres || ''} ${profile.apellidos || ''}`.replace(/\s+/g, ' ').trim()
+    if (full) return full
+  }
+
+  return userData?.name || firebaseUser?.displayName || firebaseUser?.email || ''
+}
+
 function resolvePlanTimestamp(plan) {
   const createdAtMillis = plan?.createdAt?.toMillis?.()
   if (typeof createdAtMillis === 'number') return createdAtMillis
@@ -76,6 +95,15 @@ function AuthProvider({ children }) {
 
         setUserRole(userData.role || '')
         setUserNitRut(userData.nitRut || '')
+
+        // Needed by firestoreProxy history logger (historial_modificaciones).
+        // Keep the payload minimal: tenant id and current user identity fields only.
+        window.__TENANT_ID__ = userData.nitRut || ''
+        window.__CURRENT_USER__ = {
+          uid: firebaseUser.uid,
+          nombre: resolveCurrentUserName(userData, firebaseUser),
+          numeroDocumento: userData.profile?.numeroDocumento || '',
+        }
         
         // ✅ CORRECCIÓN: NO contaminar window con datos sensibles
         // Los datos se pasan a través de React Context en su lugar

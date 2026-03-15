@@ -32,18 +32,14 @@ function TipoReportesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [exportingAll, setExportingAll] = useState(false)
 
-  const [form, setForm] = useState({ nombre: '', descripcion: '', estado: 'activo' })
+  const [form, setForm] = useState({ nombre: '', nitRut: userNitRut || '', descripcion: '', estado: 'activo' })
   const nameInputRef = useRef(null)
 
   const loadTipos = useCallback(async () => {
-    if (!userNitRut) {
-      setTipos([])
-      setLoading(false)
-      return
-    }
     setLoading(true)
     try {
-      const snap = await getDocs(query(collection(db, 'tipo_reportes'), where('nitRut', '==', userNitRut)))
+      // In TipoReportes we intentionally load all report types (no nitRut filter).
+      const snap = await getDocs(collection(db, 'tipo_reportes'))
       const mapped = snap.docs
         .map((item) => ({ id: item.id, ...item.data() }))
         .sort((a, b) => {
@@ -53,32 +49,45 @@ function TipoReportesPage() {
     } finally {
       setLoading(false)
     }
-  }, [userNitRut])
+  }, [])
 
   useEffect(() => {
     loadTipos()
   }, [loadTipos])
 
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, nitRut: prev.nitRut || userNitRut || '' }))
+  }, [userNitRut])
+
   const resetForm = () => {
-    setForm({ nombre: '', descripcion: '', estado: 'activo' })
+    setForm({ nombre: '', nitRut: userNitRut || '', descripcion: '', estado: 'activo' })
     setEditingTipo(null)
     setFeedback('')
   }
 
   const isDuplicate = (nombreToCheck, excludeId = null) => {
     const normalized = nombreToCheck.trim().toLowerCase()
-    return tipos.some((item) => item.nombre?.toLowerCase() === normalized && item.id !== excludeId)
+    const nit = String(form.nitRut || '').trim()
+    return tipos.some((item) =>
+      item.id !== excludeId &&
+      String(item.nombre || '').trim().toLowerCase() === normalized &&
+      String(item.nitRut || '').trim() === nit
+    )
   }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
 
     const trimmedNombre = form.nombre.trim()
+    const trimmedNitRut = String(form.nitRut || '').trim()
     if (!trimmedNombre) {
       setFeedback('Debes ingresar el nombre del tipo de reporte.')
       return
     }
-    if (!userNitRut) { setFeedback('No fue posible identificar el NIT/RUT del plantel.'); return }
+    if (!trimmedNitRut) {
+      setFeedback('Debes ingresar el NIT/RUT.')
+      return
+    }
 
     if (isDuplicate(trimmedNombre, editingTipo?.id)) {
       setErrorModal(`El nombre "${trimmedNombre}" ya existe. Elige otro nombre.`)
@@ -90,7 +99,7 @@ function TipoReportesPage() {
       if (editingTipo) {
         await updateDoc(doc(db, 'tipo_reportes', editingTipo.id), {
           nombre: trimmedNombre,
-          nitRut: userNitRut,
+          nitRut: trimmedNitRut,
           descripcion: form.descripcion.trim(),
           estado: form.estado,
           updatedAt: serverTimestamp(),
@@ -100,7 +109,7 @@ function TipoReportesPage() {
       } else {
         await addDoc(collection(db, 'tipo_reportes'), {
           nombre: trimmedNombre,
-          nitRut: userNitRut,
+          nitRut: trimmedNitRut,
           descripcion: form.descripcion.trim(),
           estado: form.estado,
           creadoEn: serverTimestamp(),
@@ -138,6 +147,7 @@ function TipoReportesPage() {
     return tipos.filter(
       (item) =>
         item.nombre?.toLowerCase().includes(q) ||
+        String(item.nitRut || '').toLowerCase().includes(q) ||
         (item.descripcion || '').toLowerCase().includes(q) ||
         (item.estado || '').toLowerCase().includes(q),
     )
@@ -152,6 +162,7 @@ function TipoReportesPage() {
     () =>
       filteredRows.map((item) => ({
         Nombre: item.nombre || '-',
+        NitRut: item.nitRut || '-',
         Descripcion: item.descripcion || '-',
         Estado: item.estado || '-',
       })),
@@ -190,6 +201,16 @@ function TipoReportesPage() {
                 value={form.nombre}
                 onChange={(event) => setForm((prev) => ({ ...prev, nombre: event.target.value }))}
                 placeholder="Ej: Reporte de asistencia"
+              />
+            </label>
+            <label htmlFor="tr-nit-rut" className="evaluation-field-full">
+              NIT/RUT
+              <input
+                id="tr-nit-rut"
+                type="text"
+                value={form.nitRut}
+                onChange={(event) => setForm((prev) => ({ ...prev, nitRut: event.target.value }))}
+                placeholder="Ej: 900123456-7"
               />
             </label>
             <label htmlFor="tr-descripcion" className="evaluation-field-full">
@@ -236,7 +257,7 @@ function TipoReportesPage() {
                 setSearch(event.target.value)
                 setCurrentPage(1)
               }}
-              placeholder="Buscar por nombre, descripcion o estado"
+              placeholder="Buscar por nombre, NIT/RUT, descripcion o estado"
             />
           </div>
 
@@ -248,6 +269,7 @@ function TipoReportesPage() {
                 <thead>
                   <tr>
                     <th>Nombre</th>
+                    <th>NIT/RUT</th>
                     <th>Descripcion</th>
                     <th>Estado</th>
                     <th>Acciones</th>
@@ -256,12 +278,13 @@ function TipoReportesPage() {
                 <tbody>
                   {filteredRows.length === 0 && (
                     <tr>
-                      <td colSpan="4">No hay tipos de reporte para mostrar.</td>
+                      <td colSpan="5">No hay tipos de reporte para mostrar.</td>
                     </tr>
                   )}
                   {displayedRows.map((item) => (
                     <tr key={item.id}>
                       <td data-label="Nombre">{item.nombre}</td>
+                      <td data-label="NIT/RUT">{item.nitRut || '-'}</td>
                       <td data-label="Descripcion">{item.descripcion || '-'}</td>
                       <td data-label="Estado">{item.estado}</td>
                       <td data-label="Acciones" className="student-actions">
@@ -272,6 +295,7 @@ function TipoReportesPage() {
                             setEditingTipo(item)
                             setForm({
                               nombre: item.nombre,
+                              nitRut: item.nitRut || userNitRut || '',
                               descripcion: item.descripcion || '',
                               estado: item.estado || 'activo',
                             })

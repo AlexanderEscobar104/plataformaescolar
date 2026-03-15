@@ -24,6 +24,7 @@ const PERMISSION_KEYS = {
   INASISTENCIAS_CREATE: 'inasistencias_create',
   INASISTENCIAS_EDIT: 'inasistencias_edit',
   INASISTENCIAS_DELETE: 'inasistencias_delete',
+  ASISTENCIA_DELETE: 'asistencia_delete',
   PERMISOS_VIEW: 'permisos_view',
   PERMISOS_CREATE: 'permisos_create',
   PERMISOS_EDIT: 'permisos_edit',
@@ -101,6 +102,12 @@ const PERMISSIONS_CATALOG = [
     key: PERMISSION_KEYS.NOTIFICATIONS_CREATE,
     label: 'Crear notificaciones',
     description: 'Permite crear y enviar notificaciones.',
+  },
+  {
+    group: 'Asistencia',
+    key: PERMISSION_KEYS.ASISTENCIA_DELETE,
+    label: 'Borrar asistencia',
+    description: 'Permite borrar (cambiar a No) una marcacion de asistencia desde el listado.',
   },
   {
     group: 'Mensajes',

@@ -89,6 +89,17 @@ async function logHistory({ coleccion, documentoId, operacion, datoAnterior, dat
   try {
     const nitRut = getTenantNit()
     const usuario = getCurrentUser()
+
+    // Never log chat collections to historial_modificaciones (privacy/noise).
+    const normalizedCollection = String(coleccion || '').trim().toLowerCase()
+    const CHAT_COLLECTIONS = new Set([
+      'chat_messages',
+      'chat_presence',
+      'chat_preferences',
+      'chat_typing',
+    ])
+    if (CHAT_COLLECTIONS.has(normalizedCollection)) return
+
     await addDoc(collection(db, 'historial_modificaciones'), {
       nitRut,
       coleccion,

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { collection, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { GRADE_OPTIONS, GROUP_OPTIONS } from '../../constants/academicOptions'
-import { deleteDocTracked, setDocTracked } from '../../services/firestoreProxy'
+import { setDocTracked } from '../../services/firestoreProxy'
 import { PERMISSION_KEYS, buildAllRoleOptions } from '../../utils/permissions'
 
 function safeKey(value) {
@@ -74,6 +74,24 @@ function resolveUserStatus(data) {
   return infoComplementaria.estado || profile.estado || 'activo'
 }
 
+function buildMarkerName(userData, firebaseUser) {
+  const profile = userData?.profile || {}
+  const role = userData?.role || ''
+  if (role === 'estudiante') {
+    const nombres = `${profile.primerNombre || ''} ${profile.segundoNombre || ''}`.replace(/\s+/g, ' ').trim()
+    const apellidos = `${profile.primerApellido || ''} ${profile.segundoApellido || ''}`.replace(/\s+/g, ' ').trim()
+    const full = `${nombres} ${apellidos}`.replace(/\s+/g, ' ').trim()
+    if (full) return full
+  }
+
+  if (profile.nombres || profile.apellidos) {
+    const full = `${profile.nombres || ''} ${profile.apellidos || ''}`.replace(/\s+/g, ' ').trim()
+    if (full) return full
+  }
+
+  return firebaseUser?.displayName || firebaseUser?.email || 'Usuario'
+}
+
 function chunk(array, size) {
   const result = []
   for (let i = 0; i < array.length; i += size) {
@@ -86,6 +104,9 @@ function AsistenciaPage() {
   const { user, userNitRut, hasPermission } = useAuth()
   const canUseAttendance =
     hasPermission(PERMISSION_KEYS.INASISTENCIAS_CREATE) ||
+    hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
+  const canDeleteAttendance =
+    hasPermission(PERMISSION_KEYS.ASISTENCIA_DELETE) ||
     hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
 
   const dateIso = useMemo(() => todayIsoDate(), [])
@@ -100,8 +121,11 @@ function AsistenciaPage() {
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [selectedUsers, setSelectedUsers] = useState({})
   const [markedUsers, setMarkedUsers] = useState(() => new Set())
+  const [attendanceByUid, setAttendanceByUid] = useState({})
+  const [markerInfo, setMarkerInfo] = useState({ uid: '', nombre: '', numeroDocumento: '' })
 
   const [saving, setSaving] = useState(false)
+  const [deletingUid, setDeletingUid] = useState('')
   const [feedback, setFeedback] = useState('')
   const selectAllRef = useRef(null)
 
@@ -141,33 +165,69 @@ function AsistenciaPage() {
     }
   }, [userNitRut])
 
+  useEffect(() => {
+    if (!user?.uid) {
+      setMarkerInfo({ uid: '', nombre: '', numeroDocumento: '' })
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid))
+        const data = snap.exists() ? snap.data() : {}
+        const profile = data.profile || {}
+        const markerName = buildMarkerName(data, user)
+        const markerDoc = profile.numeroDocumento || ''
+        if (!cancelled) {
+          setMarkerInfo({ uid: user.uid, nombre: markerName, numeroDocumento: markerDoc })
+        }
+      } catch {
+        if (!cancelled) {
+          setMarkerInfo({ uid: user.uid, nombre: user.displayName || user.email || 'Usuario', numeroDocumento: '' })
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
   const loadMarkedUsers = useCallback(async () => {
     if (!selectedRole) {
       setMarkedUsers(new Set())
+      setAttendanceByUid({})
       return
     }
     if (selectedRole === 'estudiante' && (!selectedGrade || !selectedGroup)) {
       setMarkedUsers(new Set())
+      setAttendanceByUid({})
       return
     }
 
     try {
-      const constraints = [
-        where('nitRut', '==', userNitRut),
-        where('fecha', '==', dateIso),
-        where('role', '==', selectedRole),
-      ]
-      if (selectedRole === 'estudiante') {
-        constraints.push(where('grado', '==', selectedGrade), where('grupo', '==', selectedGroup))
-      }
-
-      const snapshot = await getDocs(query(collection(db, 'asistencias'), ...constraints))
+      // Read by tenant only to avoid composite-index requirements; filter in-memory.
+      const snapshot = await getDocs(query(collection(db, 'asistencias'), where('nitRut', '==', userNitRut)))
       const next = new Set()
+      const nextByUid = {}
       snapshot.docs.forEach((docSnapshot) => {
         const data = docSnapshot.data()
-        if (data?.uid) next.add(String(data.uid))
+        const uid = String(data?.uid || '')
+        if (!uid) return
+        if (String(data.fecha || '') !== String(dateIso)) return
+        if (String(data.role || '') !== String(selectedRole)) return
+        if (selectedRole === 'estudiante') {
+          if (String(data.grado || '') !== String(selectedGrade)) return
+          if (String(data.grupo || '') !== String(selectedGroup)) return
+        }
+
+        const status = String(data.asistencia || '').trim().toLowerCase() === 'no' ? 'No' : 'Si'
+        nextByUid[uid] = status
+        if (status === 'Si') next.add(uid)
       })
       setMarkedUsers(next)
+      setAttendanceByUid(nextByUid)
     } catch {
       // Keep whatever we currently show; a query failure (index/permissions) should not blank the UI.
     }
@@ -229,6 +289,7 @@ function AsistenciaPage() {
       setUsers([])
       setSelectedUsers({})
       setMarkedUsers(new Set())
+      setAttendanceByUid({})
       setFeedback('No fue posible cargar los usuarios para el rol seleccionado.')
     } finally {
       setLoadingUsers(false)
@@ -245,6 +306,7 @@ function AsistenciaPage() {
     setUsers([])
     setSelectedUsers({})
     setMarkedUsers(new Set())
+    setAttendanceByUid({})
     if (selectedRole !== 'estudiante') {
       setSelectedGrade('')
       setSelectedGroup('')
@@ -299,54 +361,61 @@ function AsistenciaPage() {
     setSaving(true)
     setFeedback('')
     try {
-      const ids = selectedUserIds
-      const idsToUnmark = allSelectedAreMarked ? ids : []
-      const idsToMark = allSelectedAreMarked ? [] : ids.filter((uid) => !markedUsers.has(uid))
+      const batchSize = 12
+      const allUserIds = users.map((u) => u.id)
+      const selectedSet = new Set(selectedUserIds)
+
+      // If all selected are marked, the action becomes "desmarcar": force selected to No.
+      const desiredByUid = {}
+      allUserIds.forEach((uid) => {
+        if (allSelectedAreMarked) {
+          desiredByUid[uid] = selectedSet.has(uid) ? 'No' : 'No'
+          return
+        }
+        desiredByUid[uid] = selectedSet.has(uid) ? 'Si' : 'No'
+      })
+
+      const writes = allUserIds.map((uid) => ({
+        uid,
+        asistencia: desiredByUid[uid],
+      }))
 
       const tasks = []
-      const batchSize = 12
-
-      if (idsToMark.length > 0) {
-        chunk(idsToMark, batchSize).forEach((group) => {
-          tasks.push(
-            Promise.all(
-              group.map((uid) =>
-                setDocTracked(doc(db, 'asistencias', buildAttendanceDocId(userNitRut, dateIso, uid)), {
-                  nitRut: userNitRut,
-                  uid,
-                  fecha: dateIso,
-                  role: selectedRole,
-                  grado: selectedRole === 'estudiante' ? selectedGrade : '',
-                  grupo: selectedRole === 'estudiante' ? selectedGroup : '',
-                  creadoEn: serverTimestamp(),
-                  creadoPorUid: user?.uid || '',
-                }),
-              ),
+      chunk(writes, batchSize).forEach((group) => {
+        tasks.push(
+          Promise.all(
+            group.map((item) =>
+              setDocTracked(doc(db, 'asistencias', buildAttendanceDocId(userNitRut, dateIso, item.uid)), {
+                nitRut: userNitRut,
+                uid: item.uid,
+                fecha: dateIso,
+                role: selectedRole,
+                grado: selectedRole === 'estudiante' ? selectedGrade : '',
+                grupo: selectedRole === 'estudiante' ? selectedGroup : '',
+                asistencia: item.asistencia,
+                tipoMarcacion: 'manual',
+                marcadoPorUid: markerInfo.uid || user?.uid || '',
+                marcadoPorNombre: markerInfo.nombre || user?.displayName || user?.email || '',
+                marcadoPorNumeroDocumento: markerInfo.numeroDocumento || '',
+                marcadoEn: serverTimestamp(),
+              }),
             ),
-          )
-        })
-      }
-
-      if (idsToUnmark.length > 0) {
-        chunk(idsToUnmark, batchSize).forEach((group) => {
-          tasks.push(
-            Promise.all(
-              group.map((uid) =>
-                deleteDocTracked(doc(db, 'asistencias', buildAttendanceDocId(userNitRut, dateIso, uid))),
-              ),
-            ),
-          )
-        })
-      }
+          ),
+        )
+      })
 
       for (const task of tasks) {
         await task
       }
 
-      // Update the UI immediately; then try to re-sync from Firestore.
-      const nextMarked = new Set(markedUsers)
-      idsToMark.forEach((uid) => nextMarked.add(uid))
-      idsToUnmark.forEach((uid) => nextMarked.delete(uid))
+      const nextByUid = {}
+      const nextMarked = new Set()
+      allUserIds.forEach((uid) => {
+        const status = desiredByUid[uid]
+        nextByUid[uid] = status
+        if (status === 'Si') nextMarked.add(uid)
+      })
+      setAttendanceByUid(nextByUid)
       setMarkedUsers(nextMarked)
 
       await loadMarkedUsers()
@@ -355,6 +424,52 @@ function AsistenciaPage() {
       setFeedback('No fue posible actualizar la asistencia.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDeleteAttendanceForUid = async (uid) => {
+    if (!canDeleteAttendance) {
+      setFeedback('No tienes permisos para borrar asistencia.')
+      return
+    }
+    if (!selectedRole) {
+      setFeedback('Selecciona un rol.')
+      return
+    }
+    if (selectedRole === 'estudiante' && (!selectedGrade || !selectedGroup)) {
+      setFeedback('Para estudiantes debes seleccionar grado y grupo.')
+      return
+    }
+
+    setDeletingUid(uid)
+    setFeedback('')
+    try {
+      await setDocTracked(doc(db, 'asistencias', buildAttendanceDocId(userNitRut, dateIso, uid)), {
+        nitRut: userNitRut,
+        uid,
+        fecha: dateIso,
+        role: selectedRole,
+        grado: selectedRole === 'estudiante' ? selectedGrade : '',
+        grupo: selectedRole === 'estudiante' ? selectedGroup : '',
+        asistencia: 'No',
+        tipoMarcacion: 'manual',
+        marcadoPorUid: markerInfo.uid || user?.uid || '',
+        marcadoPorNombre: markerInfo.nombre || user?.displayName || user?.email || '',
+        marcadoPorNumeroDocumento: markerInfo.numeroDocumento || '',
+        marcadoEn: serverTimestamp(),
+      })
+
+      setAttendanceByUid((prev) => ({ ...prev, [uid]: 'No' }))
+      setMarkedUsers((prev) => {
+        const next = new Set(prev)
+        next.delete(uid)
+        return next
+      })
+      setFeedback('Asistencia borrada.')
+    } catch {
+      setFeedback('No fue posible borrar la asistencia.')
+    } finally {
+      setDeletingUid('')
     }
   }
 
@@ -483,12 +598,14 @@ function AsistenciaPage() {
                         <th>Nombres</th>
                         <th>Apellidos</th>
                         <th>Asistencia hoy</th>
+                        <th>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {users.map((item) => {
                         const checked = Boolean(selectedUsers[item.id])
-                        const isMarked = markedUsers.has(item.id)
+                        const todayStatus = attendanceByUid[item.id] || (markedUsers.has(item.id) ? 'Si' : '-')
+                        const isMarked = todayStatus === 'Si'
                         const initials = `${String(item.nombres || '').trim()[0] || ''}${String(item.apellidos || '').trim()[0] || ''}`
                           .toUpperCase()
                           .slice(0, 2) || 'US'
@@ -522,7 +639,21 @@ function AsistenciaPage() {
                             <td>{item.numeroDocumento}</td>
                             <td>{item.nombres}</td>
                             <td>{item.apellidos}</td>
-                            <td>{isMarked ? 'Marcado' : '-'}</td>
+                            <td>{todayStatus}</td>
+                            <td>
+                              {todayStatus === 'Si' ? (
+                                <button
+                                  type="button"
+                                  className="button small danger"
+                                  onClick={() => handleDeleteAttendanceForUid(item.id)}
+                                  disabled={!canDeleteAttendance || saving || deletingUid === item.id}
+                                >
+                                  {deletingUid === item.id ? 'Borrando...' : 'Borrar'}
+                                </button>
+                              ) : (
+                                <span className="roles-no-actions">-</span>
+                              )}
+                            </td>
                           </tr>
                         )
                       })}

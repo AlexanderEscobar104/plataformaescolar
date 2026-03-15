@@ -401,6 +401,8 @@ function ReportesPage() {
 
   const [customRoles, setCustomRoles] = useState([])
   const [asistenciaRoleFilter, setAsistenciaRoleFilter] = useState('')
+  const [asistenciaTipoMarcacionFilter, setAsistenciaTipoMarcacionFilter] = useState('')
+  const [asistenciaEstadoFilter, setAsistenciaEstadoFilter] = useState('Si')
   const [asistenciaGradeFilter, setAsistenciaGradeFilter] = useState('')
   const [asistenciaGroupFilter, setAsistenciaGroupFilter] = useState('')
   const [asistenciaSearch, setAsistenciaSearch] = useState('')
@@ -478,22 +480,61 @@ function ReportesPage() {
     if (!userNitRut) return
     setLoading(true)
     try {
-      const q = query(
-        collection(db, 'historial_modificaciones'),
-        where('nitRut', '==', userNitRut),
-        orderBy('fechaModificacion', 'desc'),
-      )
-      const snap = await getDocs(q)
-      const mapped = snap.docs
+      const from = filterFechaDesde ? new Date(`${filterFechaDesde}T00:00:00`) : null
+      const to = filterFechaHasta ? new Date(`${filterFechaHasta}T23:59:59`) : null
+
+      let snap = null
+      try {
+        const constraints = [where('nitRut', '==', userNitRut)]
+        if (from) constraints.push(where('fechaModificacion', '>=', from))
+        if (to) constraints.push(where('fechaModificacion', '<=', to))
+        constraints.push(orderBy('fechaModificacion', 'desc'))
+        snap = await getDocs(query(collection(db, 'historial_modificaciones'), ...constraints))
+      } catch {
+        snap = null
+      }
+
+      if (!snap || snap.empty) {
+        // Fallback: load by date range and include legacy records without nitRut.
+        const constraints = []
+        if (from) constraints.push(where('fechaModificacion', '>=', from))
+        if (to) constraints.push(where('fechaModificacion', '<=', to))
+        constraints.push(orderBy('fechaModificacion', 'desc'))
+        snap = await getDocs(query(collection(db, 'historial_modificaciones'), ...constraints))
+      }
+
+      const baseMapped = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((r) => r.coleccion !== 'tipo_reportes')
+        .filter((r) => !r.nitRut || String(r.nitRut) === String(userNitRut))
+
+      // Resolve missing user names by looking up the user doc.
+      const uids = [...new Set(baseMapped.map((r) => String(r.usuarioUid || '')).filter(Boolean))]
+      const usersById = new Map()
+      const chunkSize = 10
+      for (let i = 0; i < uids.length; i += chunkSize) {
+        const batch = uids.slice(i, i + chunkSize)
+        const usersSnap = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', batch)))
+        usersSnap.docs.forEach((ud) => usersById.set(ud.id, ud.data()))
+      }
+
+      const mapped = baseMapped.map((r) => {
+        const uid = String(r.usuarioUid || '')
+        const userData = usersById.get(uid) || null
+        if (r.usuarioNombre) return r
+        if (!userData) return r
+        const { nombres, apellidos } = resolveUserNames(userData)
+        const full = `${nombres} ${apellidos}`.replace(/\s+/g, ' ').trim()
+        return { ...r, usuarioNombre: full || userData.name || userData.email || r.usuarioUid || '' }
+      })
+
       setRecords(mapped)
     } catch (err) {
       console.error('Error loading historial:', err)
     } finally {
       setLoading(false)
     }
-  }, [userNitRut])
+  }, [filterFechaDesde, filterFechaHasta, userNitRut])
 
   useEffect(() => {
     if (reportKind === 'historial_modificaciones') {
@@ -550,11 +591,13 @@ function ReportesPage() {
 
       raw = raw.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')))
       const uids = [...new Set(raw.map((r) => String(r.uid || '')).filter(Boolean))]
+      const markerUids = [...new Set(raw.map((r) => String(r.marcadoPorUid || '')).filter(Boolean))]
+      const allUids = [...new Set([...uids, ...markerUids])]
 
       const usersById = new Map()
       const chunkSize = 10
-      for (let i = 0; i < uids.length; i += chunkSize) {
-        const batch = uids.slice(i, i + chunkSize)
+      for (let i = 0; i < allUids.length; i += chunkSize) {
+        const batch = allUids.slice(i, i + chunkSize)
         const usersSnap = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', batch)))
         usersSnap.docs.forEach((ud) => usersById.set(ud.id, ud.data()))
       }
@@ -564,6 +607,17 @@ function ReportesPage() {
         const userData = usersById.get(uid) || {}
         const profile = userData.profile || {}
         const { nombres, apellidos } = resolveUserNames(userData)
+        const asistenciaVal = String(r.asistencia || '').trim().toLowerCase() === 'no' ? 'No' : 'Si'
+        const markerUid = String(r.marcadoPorUid || r.creadoPorUid || '')
+        const markerData = markerUid ? (usersById.get(markerUid) || null) : null
+        const resolvedMarkerName = (() => {
+          const explicit = String(r.marcadoPorNombre || '').trim()
+          if (explicit) return explicit
+          if (!markerData) return ''
+          const { nombres: mn, apellidos: ma } = resolveUserNames(markerData)
+          const full = `${mn} ${ma}`.replace(/\s+/g, ' ').trim()
+          return full || markerData.name || markerData.email || ''
+        })()
         return {
           id: r.id,
           uid,
@@ -575,6 +629,11 @@ function ReportesPage() {
           nombres,
           apellidos,
           creadoEn: r.creadoEn || null,
+          asistencia: asistenciaVal,
+          tipoMarcacion: String(r.tipoMarcacion || 'manual').trim().toLowerCase() || 'manual',
+          marcadoPorNombre: resolvedMarkerName,
+          marcadoPorNumeroDocumento: r.marcadoPorNumeroDocumento || '',
+          marcadoPorUid: markerUid,
         }
       })
 
@@ -871,6 +930,24 @@ function ReportesPage() {
                 <option key={role.value} value={role.value}>{role.label}</option>
               ))}
             </select>
+            <select
+              className="role-select-box"
+              value={asistenciaTipoMarcacionFilter}
+              onChange={(e) => { setAsistenciaTipoMarcacionFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todas las marcaciones</option>
+              <option value="manual">Manual</option>
+              <option value="automatica">Automatica</option>
+            </select>
+            <select
+              className="role-select-box"
+              value={asistenciaEstadoFilter}
+              onChange={(e) => { setAsistenciaEstadoFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Si y No</option>
+              <option value="Si">Si</option>
+              <option value="No">No</option>
+            </select>
             {asistenciaRoleFilter === 'estudiante' && (
               <>
                 <input
@@ -918,6 +995,8 @@ function ReportesPage() {
               const normalizedSearch = asistenciaSearch.trim().toLowerCase()
               const filtered = asistencias.filter((a) => {
                 if (asistenciaRoleFilter && a.role !== asistenciaRoleFilter) return false
+                if (asistenciaTipoMarcacionFilter && String(a.tipoMarcacion || '').toLowerCase() !== asistenciaTipoMarcacionFilter) return false
+                if (asistenciaEstadoFilter && String(a.asistencia || '') !== asistenciaEstadoFilter) return false
                 if (asistenciaRoleFilter === 'estudiante') {
                   if (asistenciaGradeFilter && String(a.grado || '') !== String(asistenciaGradeFilter)) return false
                   if (asistenciaGroupFilter && String(a.grupo || '') !== String(asistenciaGroupFilter)) return false
@@ -932,12 +1011,15 @@ function ReportesPage() {
               const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
               const exportRows = filtered.map((a) => ({
                 Fecha: a.fecha || '-',
-                Rol: a.role || '-',
-                Grado: a.grado || '-',
-                Grupo: a.grupo || '-',
                 Documento: a.numeroDocumento || '-',
                 Nombres: a.nombres || '-',
                 Apellidos: a.apellidos || '-',
+                Grado: a.grado || '-',
+                Grupo: a.grupo || '-',
+                'Usuario marco': a.marcadoPorNombre || '-',
+                Rol: a.role || '-',
+                'Tipo marcacion': a.tipoMarcacion || '-',
+                Asistio: a.asistencia || '-',
               }))
 
               return (
@@ -947,29 +1029,35 @@ function ReportesPage() {
                       <thead>
                         <tr>
                           <th>Fecha</th>
-                          <th>Rol</th>
-                          <th>Grado</th>
-                          <th>Grupo</th>
                           <th>Documento</th>
                           <th>Nombres</th>
                           <th>Apellidos</th>
+                          <th>Grado</th>
+                          <th>Grupo</th>
+                          <th>Usuario marco</th>
+                          <th>Rol</th>
+                          <th>Tipo marcacion</th>
+                          <th>Asistio</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filtered.length === 0 && (
                           <tr>
-                            <td colSpan="7">No hay asistencias para los filtros seleccionados.</td>
+                            <td colSpan="11">No hay asistencias para los filtros seleccionados.</td>
                           </tr>
                         )}
                         {displayed.map((a) => (
                           <tr key={a.id}>
                             <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{a.fecha || '-'}</td>
-                            <td data-label="Rol">{a.role || '-'}</td>
-                            <td data-label="Grado">{a.grado || '-'}</td>
-                            <td data-label="Grupo">{a.grupo || '-'}</td>
                             <td data-label="Documento">{a.numeroDocumento || '-'}</td>
                             <td data-label="Nombres">{a.nombres || '-'}</td>
                             <td data-label="Apellidos">{a.apellidos || '-'}</td>
+                            <td data-label="Grado">{a.grado || '-'}</td>
+                            <td data-label="Grupo">{a.grupo || '-'}</td>
+                            <td data-label="Usuario marco">{a.marcadoPorNombre || '-'}</td>
+                            <td data-label="Rol">{a.role || '-'}</td>
+                            <td data-label="Tipo marcacion">{a.tipoMarcacion || '-'}</td>
+                            <td data-label="Asistio">{a.asistencia || '-'}</td>
                           </tr>
                         ))}
                       </tbody>
