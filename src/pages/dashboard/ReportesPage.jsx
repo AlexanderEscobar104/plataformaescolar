@@ -549,12 +549,12 @@ function ReportesPage() {
   }, [filterFechaDesde, filterFechaHasta, userNitRut])
 
   useEffect(() => {
-    if (selectedTipo?.clave === 'asistencias') {
+    if (reportKind === 'asistencias') {
       loadAsistencias()
     } else {
       setAsistencias([])
     }
-  }, [loadAsistencias, selectedTipo])
+  }, [loadAsistencias, reportKind])
 
   const handleReportTypeChange = (e) => {
     const val = e.target.value
@@ -622,9 +622,9 @@ function ReportesPage() {
     [filteredRecords]
   )
 
-  const isHistorial = selectedTipo?.clave === 'historial_modificaciones'
-  const isAsistencias = selectedTipo?.clave === 'asistencias'
-  const isCustomType = selectedTipo && !selectedTipo.esIntegrado
+  const isHistorial = reportKind === 'historial_modificaciones'
+  const isAsistencias = reportKind === 'asistencias'
+  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isAsistencias
 
   return (
     <section>
@@ -950,7 +950,7 @@ function ReportesPage() {
         </>
       )}
 
-      {isCustomType && (
+      {isPlaceholderType && (
         <div style={{
           marginTop: '24px',
           padding: '32px',
