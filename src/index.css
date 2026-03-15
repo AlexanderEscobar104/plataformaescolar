@@ -1173,6 +1173,108 @@ body {
   height: 16px;
 }
 
+.attendance-panel {
+  overflow: hidden;
+}
+
+.attendance-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.attendance-grade-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.attendance-grade-group label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: #244b6f;
+}
+
+.attendance-grade-group select {
+  border: 1px solid #d4dfec;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  background: #ffffff;
+  color: #17496f;
+}
+
+.attendance-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.attendance-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.attendance-count {
+  font-size: 13px;
+  color: #436685;
+  font-weight: 700;
+}
+
+.attendance-avatar,
+.attendance-avatar-fallback {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+
+.attendance-avatar {
+  object-fit: cover;
+  border: 1px solid #cfe0ef;
+  background: #f5faff;
+}
+
+.attendance-avatar-fallback {
+  display: grid;
+  place-items: center;
+  border: 1px solid #d6e6f6;
+  background: #ffffff;
+  color: #1a4f7c;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.attendance-row-marked td {
+  background: #f2fbf5;
+}
+
+.attendance-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+@media (max-width: 920px) {
+  .attendance-grid {
+    grid-template-columns: 1fr;
+  }
+  .attendance-footer {
+    justify-content: stretch;
+  }
+  .attendance-footer .button {
+    width: 100%;
+  }
+}
+
 .home-grid {
   display: grid;
   grid-template-columns: 1fr minmax(320px, 420px);
