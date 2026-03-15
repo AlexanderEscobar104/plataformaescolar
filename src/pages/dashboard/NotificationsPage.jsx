@@ -1,16 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, getDoc, getDocs, onSnapshot, query, serverTimestamp, where, doc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
 import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 
-const TARGET_OPTIONS = [
-  { value: 'estudiante', label: 'Estudiantes' },
-  { value: 'profesor', label: 'Profesores' },
-  { value: 'aspirante', label: 'Aspirantes' },
-  { value: 'directivo', label: 'Directivos' },
-]
 const normalizeRole = (value) => String(value || '').trim().toLowerCase()
 
 function formatDateTime(dateValue) {
@@ -19,6 +13,14 @@ function formatDateTime(dateValue) {
   const parsed = new Date(dateValue)
   if (Number.isNaN(parsed.getTime())) return '-'
   return parsed.toLocaleString('es-CO')
+}
+
+function EyeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+      <path d="M12 5c-6 0-10 7-10 7s4 7 10 7 10-7 10-7-4-7-10-7Zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z" />
+    </svg>
+  )
 }
 
 function NotificationsPage() {
@@ -30,6 +32,8 @@ function NotificationsPage() {
   const [feedback, setFeedback] = useState('')
   const [notifications, setNotifications] = useState([])
   const [sentNotifications, setSentNotifications] = useState([])
+  const [allRoleValues, setAllRoleValues] = useState([])
+  const [targetRoleOptions, setTargetRoleOptions] = useState([])
   const [usersByRole, setUsersByRole] = useState({
     estudiante: [],
     profesor: [],
@@ -49,6 +53,7 @@ function NotificationsPage() {
   const [professorSearch, setProfessorSearch] = useState('')
   const [directivoSearch, setDirectivoSearch] = useState('')
   const [sendModalMessage, setSendModalMessage] = useState('')
+  const [readReceiptsModal, setReadReceiptsModal] = useState(null)
   const [roleMatrix, setRoleMatrix] = useState({})
   const [roleMatrixReady, setRoleMatrixReady] = useState(false)
 
@@ -122,12 +127,9 @@ function NotificationsPage() {
     const loadReceivers = async () => {
       try {
         const snapshot = await getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut)))
-        const grouped = {
-          estudiante: [],
-          profesor: [],
-          aspirante: [],
-          directivo: [],
-        }
+        const roleValues = allRoleValues.length > 0 ? allRoleValues : ['estudiante', 'profesor', 'aspirante', 'directivo']
+        const grouped = {}
+        roleValues.forEach((rv) => { grouped[rv] = [] })
 
         snapshot.docs.forEach((docSnapshot) => {
           const data = docSnapshot.data() || {}
@@ -155,7 +157,7 @@ function NotificationsPage() {
     }
 
     loadReceivers()
-  }, [canCreateNotifications, user?.uid, userNitRut])
+  }, [allRoleValues, canCreateNotifications, user?.uid, userNitRut])
 
   useEffect(() => {
     const loadRoleMatrix = async () => {
@@ -172,18 +174,26 @@ function NotificationsPage() {
           getDoc(doc(db, 'configuracion', `notifications_roles_${userNitRut}`)),
         ])
         const loadedRoles = rolesSnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
-        const allRoleValues = buildAllRoleOptions(loadedRoles).map((role) => normalizeRole(role.value))
+        const roleOptions = buildAllRoleOptions(loadedRoles).map((role) => ({
+          value: normalizeRole(role.value),
+          label: role.label,
+        }))
+        const nextAllRoleValues = roleOptions.map((r) => r.value)
         const savedMatrix = settingsSnapshot.data()?.roleMatrix || {}
         const nextMatrix = {}
 
-        allRoleValues.forEach((role) => {
-          const configuredTargets = Array.isArray(savedMatrix[role]) ? savedMatrix[role].map(normalizeRole) : allRoleValues
-          nextMatrix[role] = configuredTargets.filter((target) => allRoleValues.includes(target))
+        nextAllRoleValues.forEach((role) => {
+          const configuredTargets = Array.isArray(savedMatrix[role]) ? savedMatrix[role].map(normalizeRole) : nextAllRoleValues
+          nextMatrix[role] = configuredTargets.filter((target) => nextAllRoleValues.includes(target))
         })
 
+        setTargetRoleOptions(roleOptions)
+        setAllRoleValues(nextAllRoleValues)
         setRoleMatrix(nextMatrix)
       } catch {
         setRoleMatrix({})
+        setTargetRoleOptions([])
+        setAllRoleValues([])
       } finally {
         setRoleMatrixReady(true)
       }
@@ -197,9 +207,42 @@ function NotificationsPage() {
     [notifications],
   )
 
+  const buildSendKeyForNotification = useCallback((n) => {
+    const titleKey = String(n?.title || '').trim()
+    const bodyKey = String(n?.body || '').trim()
+    const senderKey = String(n?.createdByUid || '').trim()
+    const createdSec = n?.createdAt?.toMillis ? Math.floor(n.createdAt.toMillis() / 1000) : 0
+    return `${senderKey}||${createdSec}||${titleKey}||${bodyKey}`
+  }, [])
+
+  const openReadReceipts = (item) => {
+    const key = buildSendKeyForNotification(item)
+    const group = sentNotifications.filter((n) => buildSendKeyForNotification(n) === key)
+
+    const recipients = group
+      .map((n) => ({
+        uid: n.recipientUid,
+        name: n.recipientName || 'Usuario',
+        role: n.recipientRole || '',
+        estado: n.read === true ? 'Leido' : 'No leido',
+        readAt: n.readAt || null,
+      }))
+      .sort((a, b) => {
+        if (a.estado !== b.estado) return a.estado === 'Leido' ? -1 : 1
+        return String(a.name).localeCompare(String(b.name))
+      })
+
+    setReadReceiptsModal({
+      key,
+      title: item.title || 'Notificacion',
+      total: group.length,
+      recipients,
+    })
+  }
+
   const studentGroups = useMemo(() => {
     const map = new Map()
-    usersByRole.estudiante.forEach((item) => {
+    ;(usersByRole.estudiante || []).forEach((item) => {
       const grade = item.grade || '-'
       const group = item.group || '-'
       const key = `${grade}-${group}`
@@ -211,19 +254,21 @@ function NotificationsPage() {
       if (a.grade !== b.grade) return a.grade.localeCompare(b.grade, undefined, { numeric: true })
       return a.group.localeCompare(b.group)
     })
-  }, [usersByRole.estudiante])
+  }, [usersByRole])
 
   const filteredProfessors = useMemo(() => {
     const normalized = professorSearch.trim().toLowerCase()
-    if (!normalized) return usersByRole.profesor
-    return usersByRole.profesor.filter((item) => item.name.toLowerCase().includes(normalized))
-  }, [professorSearch, usersByRole.profesor])
+    const list = usersByRole.profesor || []
+    if (!normalized) return list
+    return list.filter((item) => item.name.toLowerCase().includes(normalized))
+  }, [professorSearch, usersByRole])
 
   const filteredDirectivos = useMemo(() => {
     const normalized = directivoSearch.trim().toLowerCase()
-    if (!normalized) return usersByRole.directivo
-    return usersByRole.directivo.filter((item) => item.name.toLowerCase().includes(normalized))
-  }, [directivoSearch, usersByRole.directivo])
+    const list = usersByRole.directivo || []
+    if (!normalized) return list
+    return list.filter((item) => item.name.toLowerCase().includes(normalized))
+  }, [directivoSearch, usersByRole])
 
   useEffect(() => {
     const allStudentGroupKeys = studentGroups.map((item) => item.key)
@@ -231,26 +276,27 @@ function NotificationsPage() {
   }, [studentGroups])
 
   useEffect(() => {
-    setSelectedProfessorUids(usersByRole.profesor.map((item) => item.uid))
-  }, [usersByRole.profesor])
+    setSelectedProfessorUids((usersByRole.profesor || []).map((item) => item.uid))
+  }, [usersByRole])
 
   useEffect(() => {
-    setSelectedDirectivoUids(usersByRole.directivo.map((item) => item.uid))
-  }, [usersByRole.directivo])
+    setSelectedDirectivoUids((usersByRole.directivo || []).map((item) => item.uid))
+  }, [usersByRole])
 
   const allowedTargetRoles = useMemo(() => {
     if (!roleMatrixReady) return []
     const sourceRole = normalizeRole(userRole)
     const configuredTargets = roleMatrix[sourceRole]
     if (!Array.isArray(configuredTargets)) {
-      return TARGET_OPTIONS.map((item) => item.value)
+      return allRoleValues.length > 0 ? allRoleValues : Object.keys(usersByRole || {})
     }
-    return TARGET_OPTIONS.map((item) => item.value).filter((role) => configuredTargets.includes(role))
-  }, [roleMatrix, roleMatrixReady, userRole])
+    const base = allRoleValues.length > 0 ? allRoleValues : Object.keys(usersByRole || {})
+    return base.filter((role) => configuredTargets.includes(role))
+  }, [allRoleValues, roleMatrix, roleMatrixReady, userRole, usersByRole])
 
   const visibleTargetOptions = useMemo(
-    () => TARGET_OPTIONS.filter((item) => allowedTargetRoles.includes(item.value)),
-    [allowedTargetRoles],
+    () => (targetRoleOptions.length > 0 ? targetRoleOptions : []).filter((item) => allowedTargetRoles.includes(item.value)),
+    [allowedTargetRoles, targetRoleOptions],
   )
 
   useEffect(() => {
@@ -357,6 +403,13 @@ function NotificationsPage() {
         .forEach((item) => recipientsMap.set(item.uid, { ...item, role: 'directivo' }))
     }
 
+    // Any other custom roles: send to all users in that role
+    form.targetRoles
+      .filter((r) => !['estudiante', 'profesor', 'aspirante', 'directivo'].includes(r))
+      .forEach((roleValue) => {
+        ;(usersByRole[roleValue] || []).forEach((item) => recipientsMap.set(item.uid, { ...item, role: roleValue }))
+      })
+
     const recipients = Array.from(recipientsMap.values())
     const allowedRecipients = recipients.filter((item) => allowedTargetRoles.includes(normalizeRole(item.role)))
     if (allowedRecipients.length === 0) {
@@ -447,6 +500,15 @@ function NotificationsPage() {
                   Para: {item.recipientName || '-'} ({item.recipientRole || '-'}) | {formatDateTime(item.createdAt)}
                 </small>
               </div>
+              <button
+                type="button"
+                className="button small secondary icon-action-button"
+                onClick={() => openReadReceipts(item)}
+                title="Ver destinatarios leidos"
+                aria-label="Ver destinatarios leidos"
+              >
+                <EyeIcon />
+              </button>
               <button
                 type="button"
                 className="button small danger icon-action-button"
@@ -656,6 +718,54 @@ function NotificationsPage() {
             <p>{sendModalMessage}</p>
             <div className="modal-actions">
               <button type="button" className="button" onClick={() => setSendModalMessage('')}>
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {readReceiptsModal && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Leidos de notificacion">
+            <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={() => setReadReceiptsModal(null)}>
+              x
+            </button>
+            <h3>Destinatarios (leidos / no leidos)</h3>
+            <p style={{ marginTop: '6px' }}>
+              <strong>Asunto:</strong> {readReceiptsModal.title} | <strong>Total enviados:</strong> {readReceiptsModal.total}
+            </p>
+            <div className="students-table-wrap" style={{ marginTop: '12px' }}>
+              <table className="students-table">
+                <thead>
+                  <tr>
+                    <th>Destinatario</th>
+                    <th>Rol</th>
+                    <th>Estado</th>
+                    <th>Fecha y hora de leido</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(readReceiptsModal.recipients || []).length === 0 && (
+                    <tr>
+                      <td colSpan="4">No hay destinatarios para mostrar.</td>
+                    </tr>
+                  )}
+                  {(readReceiptsModal.recipients || []).map((r) => (
+                    <tr key={r.uid || `${r.name}-${r.estado}`}>
+                      <td data-label="Destinatario">{r.name || '-'}</td>
+                      <td data-label="Rol">{r.role || '-'}</td>
+                      <td data-label="Estado">{r.estado || '-'}</td>
+                      <td data-label="Fecha y hora de leido" style={{ whiteSpace: 'nowrap' }}>
+                        {r.estado === 'Leido' ? formatDateTime(r.readAt) : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="button" onClick={() => setReadReceiptsModal(null)}>
                 Aceptar
               </button>
             </div>

@@ -34,6 +34,8 @@ function resolveReportKind(tipo) {
   if (key === 'asistencia' || key === 'asistencias') return 'asistencias'
   if (key === 'inasistencias' || key === 'reporte_inasistencias') return 'inasistencias'
   if (key === 'permisos_solicitados' || key === 'permisos_solicitado' || key === 'permisos') return 'permisos'
+  if (key === 'evaluaciones' || key === 'reporte_evaluaciones') return 'evaluaciones'
+  if (key === 'tareas' || key === 'reporte_tareas') return 'tareas'
   if (key === 'historial_modificaciones' || key === 'historial_de_modificaciones' || key === 'historial') {
     return 'historial_modificaciones'
   }
@@ -450,6 +452,22 @@ function ReportesPage() {
   const [permisosSearch, setPermisosSearch] = useState('')
   const [permisosTipoFilter, setPermisosTipoFilter] = useState('')
 
+  const [evaluacionesReport, setEvaluacionesReport] = useState([])
+  const [loadingEvaluaciones, setLoadingEvaluaciones] = useState(false)
+  const [evaluacionesFeedback, setEvaluacionesFeedback] = useState('')
+  const [evaluacionesSearch, setEvaluacionesSearch] = useState('')
+  const [evaluacionesGradeFilter, setEvaluacionesGradeFilter] = useState('')
+  const [evaluacionesGroupFilter, setEvaluacionesGroupFilter] = useState('')
+  const [evaluacionesTypeFilter, setEvaluacionesTypeFilter] = useState('')
+
+  const [tareasReport, setTareasReport] = useState([])
+  const [loadingTareas, setLoadingTareas] = useState(false)
+  const [tareasFeedback, setTareasFeedback] = useState('')
+  const [tareasSearch, setTareasSearch] = useState('')
+  const [tareasGradeFilter, setTareasGradeFilter] = useState('')
+  const [tareasGroupFilter, setTareasGroupFilter] = useState('')
+  const [tareasStatusFilter, setTareasStatusFilter] = useState('')
+
   const [customRoles, setCustomRoles] = useState([])
   const [asistenciaRoleFilter, setAsistenciaRoleFilter] = useState('')
   const [asistenciaTipoMarcacionFilter, setAsistenciaTipoMarcacionFilter] = useState('')
@@ -489,6 +507,54 @@ function ReportesPage() {
     )
     return [...set].sort()
   }, [permisos])
+  const evaluacionesGradeOptions = useMemo(() => {
+    const set = new Set(
+      evaluacionesReport
+        .map((r) => String(r.grade || '').trim())
+        .filter((v) => v && v !== '-')
+    )
+    return [...set].sort()
+  }, [evaluacionesReport])
+  const evaluacionesGroupOptions = useMemo(() => {
+    const set = new Set(
+      evaluacionesReport
+        .map((r) => String(r.group || '').trim())
+        .filter((v) => v && v !== '-')
+    )
+    return [...set].sort()
+  }, [evaluacionesReport])
+  const evaluacionesTypeOptions = useMemo(() => {
+    const set = new Set(
+      evaluacionesReport
+        .map((r) => String(r.evaluationType || '').trim())
+        .filter((v) => v && v !== '-')
+    )
+    return [...set].sort()
+  }, [evaluacionesReport])
+  const tareasGradeOptions = useMemo(() => {
+    const set = new Set(
+      tareasReport
+        .map((r) => String(r.grade || '').trim())
+        .filter((v) => v && v !== '-')
+    )
+    return [...set].sort()
+  }, [tareasReport])
+  const tareasGroupOptions = useMemo(() => {
+    const set = new Set(
+      tareasReport
+        .map((r) => String(r.group || '').trim())
+        .filter((v) => v && v !== '-')
+    )
+    return [...set].sort()
+  }, [tareasReport])
+  const tareasStatusOptions = useMemo(() => {
+    const set = new Set(
+      tareasReport
+        .map((r) => String(r.status || '').trim())
+        .filter((v) => v && v !== '-')
+    )
+    return [...set].sort()
+  }, [tareasReport])
 
   useEffect(() => {
     if (!userNitRut) return
@@ -894,6 +960,120 @@ function ReportesPage() {
     }
   }, [loadPermisos, reportKind])
 
+  const loadEvaluaciones = useCallback(async () => {
+    if (!userNitRut) return
+    setLoadingEvaluaciones(true)
+    setEvaluacionesFeedback('')
+    try {
+      const snap = await getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', userNitRut)))
+      const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
+      const mapped = raw
+        .map((r) => {
+          const createdAtIso = r.createdAt?.toDate?.()
+            ? r.createdAt.toDate().toISOString().split('T')[0]
+            : ''
+          const fechaRef = String(r.dueDate || r.examDate || createdAtIso || '').trim()
+          return {
+            id: r.id,
+            subject: r.subject || '-',
+            grade: r.grade || '-',
+            group: r.group || '-',
+            examDate: r.examDate || '-',
+            dueDate: r.dueDate || '-',
+            evaluationType: r.evaluationType || '-',
+            fechaRef,
+            createdAt: r.createdAt || null,
+          }
+        })
+        .filter((r) => {
+          if (!filterFechaDesde && !filterFechaHasta) return true
+          if (!r.fechaRef) return false
+          if (filterFechaDesde && r.fechaRef < filterFechaDesde) return false
+          if (filterFechaHasta && r.fechaRef > filterFechaHasta) return false
+          return true
+        })
+        .sort((a, b) => {
+          const av = String(a.fechaRef || '')
+          const bv = String(b.fechaRef || '')
+          return bv.localeCompare(av)
+        })
+
+      setEvaluacionesReport(mapped)
+    } catch (err) {
+      console.error('Error loading evaluaciones:', err)
+      setEvaluacionesReport([])
+      setEvaluacionesFeedback('No fue posible cargar las evaluaciones.')
+    } finally {
+      setLoadingEvaluaciones(false)
+    }
+  }, [filterFechaDesde, filterFechaHasta, userNitRut])
+
+  useEffect(() => {
+    if (reportKind === 'evaluaciones') {
+      loadEvaluaciones()
+    } else {
+      setEvaluacionesReport([])
+    }
+  }, [loadEvaluaciones, reportKind])
+
+  const loadTareas = useCallback(async () => {
+    if (!userNitRut) return
+    setLoadingTareas(true)
+    setTareasFeedback('')
+    try {
+      const snap = await getDocs(query(collection(db, 'tareas'), where('nitRut', '==', userNitRut)))
+      const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
+      const mapped = raw
+        .map((r) => {
+          const createdAtIso = r.createdAt?.toDate?.()
+            ? r.createdAt.toDate().toISOString().split('T')[0]
+            : ''
+          const fechaRef = String(r.dueDate || createdAtIso || '').trim()
+          return {
+            id: r.id,
+            subject: r.subject || '-',
+            grade: r.grade || '-',
+            group: r.group || '-',
+            dueDate: r.dueDate || '-',
+            status: r.status || 'pendiente',
+            attachmentsCount: Array.isArray(r.attachments) ? r.attachments.length : 0,
+            fechaRef,
+            createdAt: r.createdAt || null,
+          }
+        })
+        .filter((r) => {
+          if (!filterFechaDesde && !filterFechaHasta) return true
+          if (!r.fechaRef) return false
+          if (filterFechaDesde && r.fechaRef < filterFechaDesde) return false
+          if (filterFechaHasta && r.fechaRef > filterFechaHasta) return false
+          return true
+        })
+        .sort((a, b) => {
+          const av = String(a.fechaRef || '')
+          const bv = String(b.fechaRef || '')
+          return bv.localeCompare(av)
+        })
+
+      setTareasReport(mapped)
+    } catch (err) {
+      console.error('Error loading tareas:', err)
+      setTareasReport([])
+      setTareasFeedback('No fue posible cargar las tareas.')
+    } finally {
+      setLoadingTareas(false)
+    }
+  }, [filterFechaDesde, filterFechaHasta, userNitRut])
+
+  useEffect(() => {
+    if (reportKind === 'tareas') {
+      loadTareas()
+    } else {
+      setTareasReport([])
+    }
+  }, [loadTareas, reportKind])
+
   const handleReportTypeChange = (e) => {
     const val = e.target.value
     setCurrentPage(1)
@@ -964,7 +1144,9 @@ function ReportesPage() {
   const isAsistencias = reportKind === 'asistencias'
   const isInasistencias = reportKind === 'inasistencias'
   const isPermisos = reportKind === 'permisos'
-  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isAsistencias && !isInasistencias && !isPermisos
+  const isEvaluaciones = reportKind === 'evaluaciones'
+  const isTareas = reportKind === 'tareas'
+  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isAsistencias && !isInasistencias && !isPermisos && !isEvaluaciones && !isTareas
 
   return (
     <section>
@@ -1598,6 +1780,280 @@ function ReportesPage() {
                       <ExportExcelButton
                         data={exportRows}
                         filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'PermisosSolicitados'}
+                        onExportStart={() => setExportingAll(true)}
+                        onExportEnd={() => setExportingAll(false)}
+                      />
+                    </div>
+                  )}
+                </>
+              )
+            })()
+          )}
+        </>
+      )}
+
+      {/* Evaluaciones */}
+      {isEvaluaciones && (
+        <>
+          <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <input
+              type="text"
+              placeholder="Buscar por asunto, grado, grupo o tipo..."
+              value={evaluacionesSearch}
+              onChange={(e) => { setEvaluacionesSearch(e.target.value); setCurrentPage(1) }}
+              style={{ flex: '1 1 240px' }}
+            />
+            <select
+              className="role-select-box"
+              value={evaluacionesGradeFilter}
+              onChange={(e) => { setEvaluacionesGradeFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los grados</option>
+              {evaluacionesGradeOptions.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+            <select
+              className="role-select-box"
+              value={evaluacionesGroupFilter}
+              onChange={(e) => { setEvaluacionesGroupFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los grupos</option>
+              {evaluacionesGroupOptions.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+            <select
+              className="role-select-box"
+              value={evaluacionesTypeFilter}
+              onChange={(e) => { setEvaluacionesTypeFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los tipos</option>
+              {evaluacionesTypeOptions.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.88em' }}>
+                Desde
+                <input type="date" value={filterFechaDesde} onChange={(e) => { setFilterFechaDesde(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+              <label style={{ fontSize: '0.88em' }}>
+                Hasta
+                <input type="date" value={filterFechaHasta} onChange={(e) => { setFilterFechaHasta(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+            </div>
+            <button type="button" className="button secondary small" onClick={loadEvaluaciones} disabled={loadingEvaluaciones}>
+              Refrescar
+            </button>
+          </div>
+
+          {evaluacionesFeedback && <p className="feedback error">{evaluacionesFeedback}</p>}
+
+          {loadingEvaluaciones ? (
+            <p>Cargando evaluaciones...</p>
+          ) : (
+            (() => {
+              const q = evaluacionesSearch.trim().toLowerCase()
+              const filtered = evaluacionesReport.filter((r) => {
+                if (evaluacionesGradeFilter && String(r.grade || '').trim() !== evaluacionesGradeFilter) return false
+                if (evaluacionesGroupFilter && String(r.group || '').trim() !== evaluacionesGroupFilter) return false
+                if (evaluacionesTypeFilter && String(r.evaluationType || '').trim() !== evaluacionesTypeFilter) return false
+                if (!q) return true
+                const hay = `${r.subject} ${r.grade} ${r.group} ${r.evaluationType} ${r.examDate} ${r.dueDate}`.toLowerCase()
+                return hay.includes(q)
+              })
+              const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
+              const exportRows = filtered.map((r) => ({
+                Asunto: r.subject || '-',
+                Grado: r.grade || '-',
+                Grupo: r.group || '-',
+                'Fecha examen': r.examDate || '-',
+                'Fecha vencimiento': r.dueDate || '-',
+                Tipo: r.evaluationType || '-',
+              }))
+
+              return (
+                <>
+                  <div className="students-table-wrap">
+                    <table className="students-table">
+                      <thead>
+                        <tr>
+                          <th>Asunto</th>
+                          <th>Grado</th>
+                          <th>Grupo</th>
+                          <th>Fecha examen</th>
+                          <th>Fecha vencimiento</th>
+                          <th>Tipo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length === 0 && (
+                          <tr>
+                            <td colSpan="6">No hay evaluaciones para los filtros seleccionados.</td>
+                          </tr>
+                        )}
+                        {displayed.map((r) => (
+                          <tr key={r.id}>
+                            <td data-label="Asunto">{r.subject || '-'}</td>
+                            <td data-label="Grado">{r.grade || '-'}</td>
+                            <td data-label="Grupo">{r.group || '-'}</td>
+                            <td data-label="Fecha examen" style={{ whiteSpace: 'nowrap' }}>{r.examDate || '-'}</td>
+                            <td data-label="Fecha vencimiento" style={{ whiteSpace: 'nowrap' }}>{r.dueDate || '-'}</td>
+                            <td data-label="Tipo">{r.evaluationType || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtered.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                  {canExportExcel && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                      <ExportExcelButton
+                        data={exportRows}
+                        filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'Evaluaciones'}
+                        onExportStart={() => setExportingAll(true)}
+                        onExportEnd={() => setExportingAll(false)}
+                      />
+                    </div>
+                  )}
+                </>
+              )
+            })()
+          )}
+        </>
+      )}
+
+      {/* Tareas */}
+      {isTareas && (
+        <>
+          <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <input
+              type="text"
+              placeholder="Buscar por asunto, grado, grupo o estado..."
+              value={tareasSearch}
+              onChange={(e) => { setTareasSearch(e.target.value); setCurrentPage(1) }}
+              style={{ flex: '1 1 240px' }}
+            />
+            <select
+              className="role-select-box"
+              value={tareasGradeFilter}
+              onChange={(e) => { setTareasGradeFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los grados</option>
+              {tareasGradeOptions.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+            <select
+              className="role-select-box"
+              value={tareasGroupFilter}
+              onChange={(e) => { setTareasGroupFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los grupos</option>
+              {tareasGroupOptions.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+            <select
+              className="role-select-box"
+              value={tareasStatusFilter}
+              onChange={(e) => { setTareasStatusFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los estados</option>
+              {tareasStatusOptions.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.88em' }}>
+                Desde
+                <input type="date" value={filterFechaDesde} onChange={(e) => { setFilterFechaDesde(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+              <label style={{ fontSize: '0.88em' }}>
+                Hasta
+                <input type="date" value={filterFechaHasta} onChange={(e) => { setFilterFechaHasta(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+            </div>
+            <button type="button" className="button secondary small" onClick={loadTareas} disabled={loadingTareas}>
+              Refrescar
+            </button>
+          </div>
+
+          {tareasFeedback && <p className="feedback error">{tareasFeedback}</p>}
+
+          {loadingTareas ? (
+            <p>Cargando tareas...</p>
+          ) : (
+            (() => {
+              const q = tareasSearch.trim().toLowerCase()
+              const filtered = tareasReport.filter((r) => {
+                if (tareasGradeFilter && String(r.grade || '').trim() !== tareasGradeFilter) return false
+                if (tareasGroupFilter && String(r.group || '').trim() !== tareasGroupFilter) return false
+                if (tareasStatusFilter && String(r.status || '').trim() !== tareasStatusFilter) return false
+                if (!q) return true
+                const hay = `${r.subject} ${r.grade} ${r.group} ${r.status} ${r.dueDate}`.toLowerCase()
+                return hay.includes(q)
+              })
+              const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
+              const exportRows = filtered.map((r) => ({
+                Asunto: r.subject || '-',
+                Grado: r.grade || '-',
+                Grupo: r.group || '-',
+                'Fecha vencimiento': r.dueDate || '-',
+                Estado: r.status || '-',
+                Adjuntos: String(r.attachmentsCount || 0),
+              }))
+
+              return (
+                <>
+                  <div className="students-table-wrap">
+                    <table className="students-table">
+                      <thead>
+                        <tr>
+                          <th>Asunto</th>
+                          <th>Grado</th>
+                          <th>Grupo</th>
+                          <th>Fecha vencimiento</th>
+                          <th>Estado</th>
+                          <th>Adjuntos</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length === 0 && (
+                          <tr>
+                            <td colSpan="6">No hay tareas para los filtros seleccionados.</td>
+                          </tr>
+                        )}
+                        {displayed.map((r) => (
+                          <tr key={r.id}>
+                            <td data-label="Asunto">{r.subject || '-'}</td>
+                            <td data-label="Grado">{r.grade || '-'}</td>
+                            <td data-label="Grupo">{r.group || '-'}</td>
+                            <td data-label="Fecha vencimiento" style={{ whiteSpace: 'nowrap' }}>{r.dueDate || '-'}</td>
+                            <td data-label="Estado">{r.status || '-'}</td>
+                            <td data-label="Adjuntos">{String(r.attachmentsCount || 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtered.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                  {canExportExcel && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                      <ExportExcelButton
+                        data={exportRows}
+                        filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'Tareas'}
                         onExportStart={() => setExportingAll(true)}
                         onExportEnd={() => setExportingAll(false)}
                       />

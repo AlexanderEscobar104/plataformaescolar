@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore'
 import { getDownloadURL, ref } from 'firebase/storage'
 import { useAuth } from '../../hooks/useAuth'
@@ -24,6 +24,13 @@ function formatDate(dateValue) {
   return dateValue.toDate().toLocaleString()
 }
 
+function formatDateTimeSafe(dateValue) {
+  if (!dateValue) return '-'
+  if (dateValue?.toDate) return dateValue.toDate().toLocaleString('es-CO')
+  const parsed = new Date(dateValue)
+  return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleString('es-CO')
+}
+
 function messageTimestampValue(message) {
   if (!message?.createdAt?.toMillis) return 0
   return message.createdAt.toMillis()
@@ -41,6 +48,14 @@ function TrashIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
       <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12 1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z" />
+    </svg>
+  )
+}
+
+function EyeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+      <path d="M12 5c-6 0-10 7-10 7s4 7 10 7 10-7 10-7-4-7-10-7Zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z" />
     </svg>
   )
 }
@@ -70,22 +85,33 @@ function MessagesPage() {
   const [users, setUsers] = useState([])
   const [inbox, setInbox] = useState([])
   const [sent, setSent] = useState([])
+  const [allRoleValues, setAllRoleValues] = useState([])
+  const [targetRoleOptions, setTargetRoleOptions] = useState([])
   const [selectedTab, setSelectedTab] = useState('inbox')
   const [readFilter, setReadFilter] = useState('todos')
   const [selectedMessage, setSelectedMessage] = useState(null)
   const [messageSearch, setMessageSearch] = useState('')
   const [recipientUids, setRecipientUids] = useState([])
-  const [recipientSearch, setRecipientSearch] = useState('')
-  const [showAllRecipients, setShowAllRecipients] = useState(false)
+  const [targetRoles, setTargetRoles] = useState([])
+  const [usersByRole, setUsersByRole] = useState({ estudiante: [], profesor: [], aspirante: [], directivo: [] })
+  const [selectedStudentGroupKeys, setSelectedStudentGroupKeys] = useState([])
+  const [selectedStudentUids, setSelectedStudentUids] = useState([])
+  const [studentSearch, setStudentSearch] = useState('')
+  const [selectedProfessorUids, setSelectedProfessorUids] = useState([])
+  const [selectedDirectivoUids, setSelectedDirectivoUids] = useState([])
+  const [professorSearch, setProfessorSearch] = useState('')
+  const [directivoSearch, setDirectivoSearch] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [attachments, setAttachments] = useState([])
   const [replyContext, setReplyContext] = useState(null)
   const [sending, setSending] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [sendModalMessage, setSendModalMessage] = useState('')
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [roleMatrix, setRoleMatrix] = useState({})
   const [roleMatrixReady, setRoleMatrixReady] = useState(false)
+  const [readReceiptsModal, setReadReceiptsModal] = useState(null)
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -125,18 +151,26 @@ function MessagesPage() {
         ])
 
         const loadedRoles = rolesSnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
-        const allRoleValues = buildAllRoleOptions(loadedRoles).map((role) => normalizeRole(role.value))
+        const roleOptions = buildAllRoleOptions(loadedRoles).map((role) => ({
+          value: normalizeRole(role.value),
+          label: role.label,
+        }))
+        const nextAllRoleValues = roleOptions.map((r) => r.value)
         const savedMatrix = settingsSnapshot.data()?.roleMatrix || {}
         const nextMatrix = {}
 
-        allRoleValues.forEach((role) => {
-          const configuredTargets = Array.isArray(savedMatrix[role]) ? savedMatrix[role].map(normalizeRole) : allRoleValues
-          nextMatrix[role] = configuredTargets.filter((target) => allRoleValues.includes(target))
+        nextAllRoleValues.forEach((role) => {
+          const configuredTargets = Array.isArray(savedMatrix[role]) ? savedMatrix[role].map(normalizeRole) : nextAllRoleValues
+          nextMatrix[role] = configuredTargets.filter((target) => nextAllRoleValues.includes(target))
         })
 
+        setTargetRoleOptions(roleOptions)
+        setAllRoleValues(nextAllRoleValues)
         setRoleMatrix(nextMatrix)
       } catch {
         setRoleMatrix({})
+        setTargetRoleOptions([])
+        setAllRoleValues([])
       } finally {
         setRoleMatrixReady(true)
       }
@@ -176,41 +210,121 @@ function MessagesPage() {
     }
   }, [user, userNitRut])
 
-  const recipientOptions = useMemo(() => {
+  const isUserActive = useCallback((availableUser) => {
+    const estado =
+      availableUser?.profile?.informacionComplementaria?.estado ||
+      availableUser?.profile?.estado ||
+      'activo'
+
+    return String(estado).toLowerCase() !== 'inactivo'
+  }, [])
+
+  const allowedTargetRoles = useMemo(() => {
     if (!roleMatrixReady) return []
     const sourceRole = normalizeRole(userRole)
-
-    const isUserActive = (availableUser) => {
-      const estado =
-        availableUser?.profile?.informacionComplementaria?.estado ||
-        availableUser?.profile?.estado ||
-        'activo'
-
-      return String(estado).toLowerCase() !== 'inactivo'
+    const configuredTargets = roleMatrix[sourceRole]
+    if (!Array.isArray(configuredTargets)) {
+      return allRoleValues.length > 0 ? allRoleValues : Object.keys(usersByRole || {})
     }
+    const base = allRoleValues.length > 0 ? allRoleValues : Object.keys(usersByRole || {})
+    return base.filter((role) => configuredTargets.includes(role))
+  }, [allRoleValues, roleMatrix, roleMatrixReady, userRole, usersByRole])
 
-    return users.filter((availableUser) => {
-      if (availableUser.uid === user?.uid) return false
-      if (!isUserActive(availableUser)) return false
-      const targetRole = normalizeRole(availableUser.role)
-      const allowedTargets = roleMatrix[sourceRole]
-      if (!Array.isArray(allowedTargets)) return true
-      return allowedTargets.includes(targetRole)
-    })
-  }, [roleMatrix, roleMatrixReady, users, user, userRole])
-  const filteredRecipientOptions = useMemo(() => {
-    const normalized = recipientSearch.trim().toLowerCase()
-    if (!normalized) return recipientOptions
-
-    return recipientOptions.filter((recipient) => {
-      const haystack = `${recipient.name} ${recipient.email} ${recipient.role}`.toLowerCase()
-      return haystack.includes(normalized)
-    })
-  }, [recipientOptions, recipientSearch])
-  const visibleRecipientOptions = useMemo(
-    () => (showAllRecipients ? filteredRecipientOptions : filteredRecipientOptions.slice(0, 5)),
-    [filteredRecipientOptions, showAllRecipients],
+  const visibleTargetOptions = useMemo(
+    () => (targetRoleOptions.length > 0 ? targetRoleOptions : []).filter((item) => allowedTargetRoles.includes(item.value)),
+    [allowedTargetRoles, targetRoleOptions],
   )
+
+  useEffect(() => {
+    setTargetRoles((prev) => prev.filter((role) => allowedTargetRoles.includes(role)))
+  }, [allowedTargetRoles])
+
+  useEffect(() => {
+    const roleValues = allRoleValues.length > 0 ? allRoleValues : ['estudiante', 'profesor', 'aspirante', 'directivo']
+    const grouped = {}
+    roleValues.forEach((rv) => { grouped[rv] = [] })
+    users.forEach((u) => {
+      if (u.uid === user?.uid) return
+      if (!isUserActive(u)) return
+      const role = normalizeRole(u.role)
+      if (!grouped[role]) return
+
+      grouped[role].push({
+        uid: u.uid,
+        name: u.name || u.email || 'Usuario',
+        grade: String(u.profile?.grado || '').trim(),
+        group: String(u.profile?.grupo || '').trim(),
+      })
+    })
+    Object.keys(grouped).forEach((key) => grouped[key].sort((a, b) => a.name.localeCompare(b.name)))
+    setUsersByRole(grouped)
+  }, [allRoleValues, isUserActive, user?.uid, users])
+
+  const studentGroups = useMemo(() => {
+    const map = new Map()
+    ;(usersByRole.estudiante || []).forEach((item) => {
+      const grade = item.grade || '-'
+      const group = item.group || '-'
+      const key = `${grade}-${group}`
+      const existing = map.get(key) || { key, grade, group, uids: [], label: `Grado ${grade} - Grupo ${group}` }
+      existing.uids.push(item.uid)
+      map.set(key, existing)
+    })
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.grade !== b.grade) return a.grade.localeCompare(b.grade, undefined, { numeric: true })
+      return a.group.localeCompare(b.group)
+    })
+  }, [usersByRole])
+
+  const selectedStudentGroupUids = useMemo(() => {
+    const set = new Set()
+    studentGroups
+      .filter((g) => selectedStudentGroupKeys.includes(g.key))
+      .forEach((g) => g.uids.forEach((uid) => set.add(uid)))
+    return set
+  }, [selectedStudentGroupKeys, studentGroups])
+
+  useEffect(() => {
+    const allKeys = studentGroups.map((item) => item.key)
+    setSelectedStudentGroupKeys(allKeys)
+  }, [studentGroups])
+
+  useEffect(() => {
+    // Default: when subgroups change, select all students in the selected subgroups.
+    const all = Array.from(selectedStudentGroupUids)
+    setSelectedStudentUids((prev) => {
+      // Preserve previous selections where possible, but always include all by default when nothing is selected yet.
+      const next = prev.filter((uid) => selectedStudentGroupUids.has(uid))
+      return next.length > 0 ? next : all
+    })
+  }, [selectedStudentGroupUids])
+
+  const filteredGroupStudents = useMemo(() => {
+    const normalized = studentSearch.trim().toLowerCase()
+    const inGroups = (usersByRole.estudiante || []).filter((s) => selectedStudentGroupUids.has(s.uid))
+    if (!normalized) return inGroups
+    return inGroups.filter((s) => String(s.name || '').toLowerCase().includes(normalized))
+  }, [selectedStudentGroupUids, studentSearch, usersByRole])
+
+  useEffect(() => {
+    setSelectedProfessorUids(usersByRole.profesor.map((item) => item.uid))
+  }, [usersByRole.profesor])
+
+  useEffect(() => {
+    setSelectedDirectivoUids(usersByRole.directivo.map((item) => item.uid))
+  }, [usersByRole.directivo])
+
+  const filteredProfessors = useMemo(() => {
+    const normalized = professorSearch.trim().toLowerCase()
+    if (!normalized) return usersByRole.profesor
+    return usersByRole.profesor.filter((item) => item.name.toLowerCase().includes(normalized))
+  }, [professorSearch, usersByRole.profesor])
+
+  const filteredDirectivos = useMemo(() => {
+    const normalized = directivoSearch.trim().toLowerCase()
+    if (!normalized) return usersByRole.directivo
+    return usersByRole.directivo.filter((item) => item.name.toLowerCase().includes(normalized))
+  }, [directivoSearch, usersByRole.directivo])
 
   const activeMessages = selectedTab === 'inbox' ? inbox : sent
   const filteredActiveMessages = useMemo(() => {
@@ -250,8 +364,10 @@ function MessagesPage() {
     setRecipientUids([])
     setReplyContext(null)
     setAttachments([])
-    setRecipientSearch('')
-    setShowAllRecipients(false)
+    setTargetRoles([])
+    setProfessorSearch('')
+    setDirectivoSearch('')
+    setStudentSearch('')
   }
 
   const handleReply = () => {
@@ -270,6 +386,7 @@ function MessagesPage() {
     })
     setSelectedTab('inbox')
     setFeedback('')
+    setSendModalMessage('')
   }
 
   const handleAttachmentsChange = (event) => {
@@ -321,12 +438,125 @@ function MessagesPage() {
     return uploadedAttachments
   }
 
+  const toggleRoleTarget = (roleValue) => {
+    if (!allowedTargetRoles.includes(roleValue)) return
+    setTargetRoles((prev) => (prev.includes(roleValue) ? prev.filter((r) => r !== roleValue) : [...prev, roleValue]))
+  }
+
+  const toggleStudentGroup = (groupKey) => {
+    setSelectedStudentGroupKeys((prev) =>
+      prev.includes(groupKey) ? prev.filter((item) => item !== groupKey) : [...prev, groupKey],
+    )
+  }
+
+  const toggleStudent = (uid) => {
+    setSelectedStudentUids((prev) =>
+      prev.includes(uid) ? prev.filter((item) => item !== uid) : [...prev, uid],
+    )
+  }
+
+  const toggleProfessor = (uid) => {
+    setSelectedProfessorUids((prev) =>
+      prev.includes(uid) ? prev.filter((item) => item !== uid) : [...prev, uid],
+    )
+  }
+
+  const toggleDirectivo = (uid) => {
+    setSelectedDirectivoUids((prev) =>
+      prev.includes(uid) ? prev.filter((item) => item !== uid) : [...prev, uid],
+    )
+  }
+
+  const buildGroupRecipientUids = () => {
+    const recipientsMap = new Map()
+
+    if (targetRoles.includes('estudiante')) {
+      selectedStudentUids
+        .filter((uid) => selectedStudentGroupUids.has(uid))
+        .forEach((uid) => recipientsMap.set(uid, true))
+    }
+
+    if (targetRoles.includes('profesor')) {
+      ;(usersByRole.profesor || [])
+        .filter((item) => selectedProfessorUids.includes(item.uid))
+        .forEach((item) => recipientsMap.set(item.uid, true))
+    }
+
+    if (targetRoles.includes('aspirante')) {
+      ;(usersByRole.aspirante || []).forEach((item) => recipientsMap.set(item.uid, true))
+    }
+
+    if (targetRoles.includes('directivo')) {
+      ;(usersByRole.directivo || [])
+        .filter((item) => selectedDirectivoUids.includes(item.uid))
+        .forEach((item) => recipientsMap.set(item.uid, true))
+    }
+
+    targetRoles
+      .filter((r) => !['estudiante', 'profesor', 'aspirante', 'directivo'].includes(r))
+      .forEach((roleValue) => {
+        ;(usersByRole[roleValue] || []).forEach((item) => recipientsMap.set(item.uid, true))
+      })
+
+    return Array.from(recipientsMap.keys())
+  }
+
+  const buildSendKeyForMessage = (message) => {
+    const subjectKey = String(message?.subject || '').trim()
+    const bodyKey = String(message?.body || '').trim()
+    const senderKey = String(message?.senderUid || '').trim()
+    const createdSec = message?.createdAt?.toMillis ? Math.floor(message.createdAt.toMillis() / 1000) : 0
+    const attachCount = Array.isArray(message?.attachments) ? message.attachments.length : 0
+    return `${senderKey}||${createdSec}||${attachCount}||${subjectKey}||${bodyKey}`
+  }
+
+  const openReadReceipts = () => {
+    if (!selectedMessage) return
+    if (selectedTab !== 'sent') return
+
+    const key = buildSendKeyForMessage(selectedMessage)
+    const group = sent.filter((m) => buildSendKeyForMessage(m) === key)
+
+    const recipients = group
+      .map((m) => ({
+        uid: m.recipientUid,
+        name: m.recipientName || 'Usuario',
+        estado: m.read === true ? 'Leido' : 'No leido',
+        readAt: m.readAt || null,
+      }))
+      .sort((a, b) => {
+        if (a.estado !== b.estado) return a.estado === 'Leido' ? -1 : 1
+        return String(a.name).localeCompare(String(b.name))
+      })
+
+    setReadReceiptsModal({
+      key,
+      subject: selectedMessage.subject || 'Sin asunto',
+      total: group.length,
+      recipients,
+    })
+  }
+
   const sendMessage = async (event) => {
     event.preventDefault()
     setFeedback('')
 
-    if (recipientUids.length === 0 || !subject.trim() || !body.trim()) {
-      setFeedback('Debes completar destinatario, asunto y mensaje.')
+    const trimmedSubject = subject.trim()
+    const trimmedBody = body.trim()
+    const recipientUidsToSend = replyContext ? recipientUids : buildGroupRecipientUids()
+
+    if (!trimmedSubject || !trimmedBody) {
+      setFeedback('Debes completar asunto y mensaje.')
+      return
+    }
+
+    if (!replyContext && targetRoles.length === 0) {
+      setFeedback('Debes seleccionar al menos un grupo de destinatarios.')
+      return
+    }
+
+    if (recipientUidsToSend.length === 0) {
+      setFeedback('No hay destinatarios con los filtros seleccionados.')
       return
     }
 
@@ -335,7 +565,7 @@ function MessagesPage() {
     try {
       setSending(true)
       const uploadedAttachments = await uploadAttachmentFiles()
-      for (const recipientUid of recipientUids) {
+      for (const recipientUid of recipientUidsToSend) {
         const recipientData = users.find((item) => item.uid === recipientUid)
         const docRef = await addDocTracked(collection(db, 'messages'), {
           senderUid: user.uid,
@@ -343,8 +573,8 @@ function MessagesPage() {
           recipientUid,
           recipientName: recipientData?.name || '',
           nitRut: userNitRut,
-          subject: subject.trim(),
-          body: body.trim(),
+          subject: trimmedSubject,
+          body: trimmedBody,
           read: false,
           attachments: uploadedAttachments,
           threadId: replyContext?.threadId || null,
@@ -358,9 +588,9 @@ function MessagesPage() {
       }
 
       clearCompose()
-      setFeedback(
-        `Mensaje enviado correctamente a ${recipientUids.length} destinatario${
-          recipientUids.length === 1 ? '' : 's'
+      setSendModalMessage(
+        `Mensaje enviado correctamente a ${recipientUidsToSend.length} destinatario${
+          recipientUidsToSend.length === 1 ? '' : 's'
         }.`,
       )
     } catch {
@@ -368,12 +598,6 @@ function MessagesPage() {
     } finally {
       setSending(false)
     }
-  }
-
-  const toggleRecipient = (uid) => {
-    setRecipientUids((prev) =>
-      prev.includes(uid) ? prev.filter((item) => item !== uid) : [...prev, uid],
-    )
   }
 
   return (
@@ -394,41 +618,214 @@ function MessagesPage() {
           {replyContext && (
             <p className="feedback">Respondiendo en hilo: {replyContext.subject}</p>
           )}
-          <label htmlFor="recipient-search">
-            Buscar destinatarios
-            <input
-              id="recipient-search"
-              type="text"
-              value={recipientSearch}
-              onChange={(event) => setRecipientSearch(event.target.value)}
-              placeholder="Buscar por nombre, correo o rol"
-            />
-          </label>
-          <div className="recipient-pick-list">
-            {visibleRecipientOptions.map((recipient) => (
-              <label key={recipient.uid} className="recipient-pick-item">
-                <input
-                  type="checkbox"
-                  checked={recipientUids.includes(recipient.uid)}
-                  onChange={() => toggleRecipient(recipient.uid)}
-                />
-                <span>
-                  {recipient.name} {recipient.role ? `(${recipient.role})` : ''}
-                </span>
-              </label>
-            ))}
-            {filteredRecipientOptions.length === 0 && (
-              <p>No hay usuarios que coincidan con la busqueda.</p>
-            )}
-          </div>
-          {filteredRecipientOptions.length > 5 && (
-            <button
-              type="button"
-              className="button small secondary"
-              onClick={() => setShowAllRecipients((value) => !value)}
-            >
-              {showAllRecipients ? 'Ver menos' : 'Ver mas'}
-            </button>
+
+          {replyContext ? (
+            <p className="feedback">
+              Destinatario: {users.find((u) => u.uid === recipientUids[0])?.name || recipientUids[0] || '-'}
+            </p>
+          ) : (
+            <>
+              <div>
+                <strong>Enviar a grupos</strong>
+                <div className="teacher-checkbox-list">
+                  {visibleTargetOptions.map((option) => (
+                    <label key={option.value} className="teacher-checkbox-item">
+                      <input
+                        type="checkbox"
+                        checked={targetRoles.includes(option.value)}
+                        onChange={() => toggleRoleTarget(option.value)}
+                      />
+                      <span>
+                        {option.label} ({usersByRole[option.value]?.length || 0})
+                      </span>
+                    </label>
+                  ))}
+                  {roleMatrixReady && visibleTargetOptions.length === 0 && (
+                    <p className="feedback">Tu rol no tiene destinatarios permitidos en la configuracion de mensajes.</p>
+                  )}
+                </div>
+              </div>
+
+              {targetRoles.includes('estudiante') && (
+                <div>
+                  <div className="students-header">
+                    <strong>Subgrupos de estudiantes (grado/grupo)</strong>
+                    <div className="student-actions">
+                      <button
+                        type="button"
+                        className="button small secondary"
+                        onClick={() => setSelectedStudentGroupKeys(studentGroups.map((item) => item.key))}
+                      >
+                        Marcar todos
+                      </button>
+                      <button
+                        type="button"
+                        className="button small secondary"
+                        onClick={() => setSelectedStudentGroupKeys([])}
+                      >
+                        Desmarcar todos
+                      </button>
+                    </div>
+                  </div>
+                  <div className="teacher-checkbox-list">
+                    {studentGroups.length === 0 && <p className="feedback">No hay subgrupos de estudiantes.</p>}
+                    {studentGroups.map((groupItem) => (
+                      <label key={groupItem.key} className="teacher-checkbox-item">
+                        <input
+                          type="checkbox"
+                          checked={selectedStudentGroupKeys.includes(groupItem.key)}
+                          onChange={() => toggleStudentGroup(groupItem.key)}
+                        />
+                        <span>
+                          {groupItem.label} ({groupItem.uids.length})
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {selectedStudentGroupKeys.length > 0 && (
+                    <div style={{ marginTop: '14px' }}>
+                      <div className="students-header">
+                        <strong>Estudiantes del subgrupo seleccionado</strong>
+                        <div className="student-actions">
+                          <button
+                            type="button"
+                            className="button small secondary"
+                            onClick={() => setSelectedStudentUids(Array.from(selectedStudentGroupUids))}
+                          >
+                            Marcar todos
+                          </button>
+                          <button
+                            type="button"
+                            className="button small secondary"
+                            onClick={() => setSelectedStudentUids([])}
+                          >
+                            Desmarcar todos
+                          </button>
+                        </div>
+                      </div>
+                      <label htmlFor="message-student-search">
+                        Buscar estudiante
+                        <input
+                          id="message-student-search"
+                          type="text"
+                          value={studentSearch}
+                          onChange={(event) => setStudentSearch(event.target.value)}
+                          placeholder="Buscar por nombre"
+                        />
+                      </label>
+                      <div className="teacher-checkbox-list">
+                        {filteredGroupStudents.length === 0 && <p className="feedback">No hay estudiantes para mostrar.</p>}
+                        {filteredGroupStudents.map((item) => (
+                          <label key={item.uid} className="teacher-checkbox-item">
+                            <input
+                              type="checkbox"
+                              checked={selectedStudentUids.includes(item.uid)}
+                              onChange={() => toggleStudent(item.uid)}
+                            />
+                            <span>{item.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {targetRoles.includes('profesor') && (
+                <div>
+                  <div className="students-header">
+                    <strong>Subgrupo de profesores</strong>
+                    <div className="student-actions">
+                      <button
+                        type="button"
+                        className="button small secondary"
+                        onClick={() => setSelectedProfessorUids(usersByRole.profesor.map((item) => item.uid))}
+                      >
+                        Marcar todos
+                      </button>
+                      <button
+                        type="button"
+                        className="button small secondary"
+                        onClick={() => setSelectedProfessorUids([])}
+                      >
+                        Desmarcar todos
+                      </button>
+                    </div>
+                  </div>
+                  <label htmlFor="message-professor-search">
+                    Buscar profesor
+                    <input
+                      id="message-professor-search"
+                      type="text"
+                      value={professorSearch}
+                      onChange={(event) => setProfessorSearch(event.target.value)}
+                      placeholder="Buscar por nombre"
+                    />
+                  </label>
+                  <div className="teacher-checkbox-list">
+                    {filteredProfessors.length === 0 && <p className="feedback">No hay profesores para mostrar.</p>}
+                    {filteredProfessors.map((item) => (
+                      <label key={item.uid} className="teacher-checkbox-item">
+                        <input
+                          type="checkbox"
+                          checked={selectedProfessorUids.includes(item.uid)}
+                          onChange={() => toggleProfessor(item.uid)}
+                        />
+                        <span>{item.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {targetRoles.includes('directivo') && (
+                <div>
+                  <div className="students-header">
+                    <strong>Subgrupo de directivos</strong>
+                    <div className="student-actions">
+                      <button
+                        type="button"
+                        className="button small secondary"
+                        onClick={() => setSelectedDirectivoUids(usersByRole.directivo.map((item) => item.uid))}
+                      >
+                        Marcar todos
+                      </button>
+                      <button
+                        type="button"
+                        className="button small secondary"
+                        onClick={() => setSelectedDirectivoUids([])}
+                      >
+                        Desmarcar todos
+                      </button>
+                    </div>
+                  </div>
+                  <label htmlFor="message-directivo-search">
+                    Buscar directivo
+                    <input
+                      id="message-directivo-search"
+                      type="text"
+                      value={directivoSearch}
+                      onChange={(event) => setDirectivoSearch(event.target.value)}
+                      placeholder="Buscar por nombre"
+                    />
+                  </label>
+                  <div className="teacher-checkbox-list">
+                    {filteredDirectivos.length === 0 && <p className="feedback">No hay directivos para mostrar.</p>}
+                    {filteredDirectivos.map((item) => (
+                      <label key={item.uid} className="teacher-checkbox-item">
+                        <input
+                          type="checkbox"
+                          checked={selectedDirectivoUids.includes(item.uid)}
+                          onChange={() => toggleDirectivo(item.uid)}
+                        />
+                        <span>{item.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
           <label htmlFor="message-subject">
             Asunto
@@ -544,6 +941,17 @@ function MessagesPage() {
                 <div className="message-detail-header">
                   <h4>{selectedMessage.subject || 'Sin asunto'}</h4>
                   <div className="message-detail-actions">
+                    {selectedTab === 'sent' && (
+                      <button
+                        type="button"
+                        className="icon-action-btn"
+                        onClick={openReadReceipts}
+                        title="Ver leidos"
+                        aria-label="Ver leidos"
+                      >
+                        <EyeIcon />
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="icon-action-btn"
@@ -599,6 +1007,69 @@ function MessagesPage() {
           onConfirm={confirmDelete}
           onCancel={() => setDeleteModalOpen(false)}
         />
+      )}
+
+      {sendModalMessage && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Envio de mensaje">
+            <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={() => setSendModalMessage('')}>
+              x
+            </button>
+            <h3>Mensajes</h3>
+            <p>{sendModalMessage}</p>
+            <div className="modal-actions">
+              <button type="button" className="button" onClick={() => setSendModalMessage('')}>
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {readReceiptsModal && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Leidos del mensaje">
+            <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={() => setReadReceiptsModal(null)}>
+              x
+            </button>
+            <h3>Destinatarios (leidos / no leidos)</h3>
+            <p style={{ marginTop: '6px' }}>
+              <strong>Asunto:</strong> {readReceiptsModal.subject} | <strong>Total enviados:</strong> {readReceiptsModal.total}
+            </p>
+            <div className="students-table-wrap" style={{ marginTop: '12px' }}>
+              <table className="students-table">
+                <thead>
+                  <tr>
+                    <th>Destinatario</th>
+                    <th>Estado</th>
+                    <th>Fecha y hora de leido</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(readReceiptsModal.recipients || []).length === 0 && (
+                    <tr>
+                      <td colSpan="3">No hay destinatarios para mostrar.</td>
+                    </tr>
+                  )}
+                  {(readReceiptsModal.recipients || []).map((r) => (
+                    <tr key={r.uid || `${r.name}-${r.estado}`}>
+                      <td data-label="Destinatario">{r.name || '-'}</td>
+                      <td data-label="Estado">{r.estado || '-'}</td>
+                      <td data-label="Fecha y hora de leido" style={{ whiteSpace: 'nowrap' }}>
+                        {r.estado === 'Leido' ? formatDateTimeSafe(r.readAt) : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="button" onClick={() => setReadReceiptsModal(null)}>
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   )

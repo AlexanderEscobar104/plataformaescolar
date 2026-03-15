@@ -5,10 +5,8 @@ import {
   deleteDoc,
   doc,
   getDocs,
-  query,
   serverTimestamp,
   updateDoc,
-  where,
 } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
@@ -32,7 +30,7 @@ function TipoReportesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [exportingAll, setExportingAll] = useState(false)
 
-  const [form, setForm] = useState({ nombre: '', nitRut: userNitRut || '', descripcion: '', estado: 'activo' })
+  const [form, setForm] = useState({ nombre: '', clave: '', nitRut: userNitRut || '', descripcion: '', estado: 'activo' })
   const nameInputRef = useRef(null)
 
   const loadTipos = useCallback(async () => {
@@ -60,7 +58,7 @@ function TipoReportesPage() {
   }, [userNitRut])
 
   const resetForm = () => {
-    setForm({ nombre: '', nitRut: userNitRut || '', descripcion: '', estado: 'activo' })
+    setForm({ nombre: '', clave: '', nitRut: userNitRut || '', descripcion: '', estado: 'activo' })
     setEditingTipo(null)
     setFeedback('')
   }
@@ -75,13 +73,57 @@ function TipoReportesPage() {
     )
   }
 
+  const createSuggestedType = async ({ nombre, clave }) => {
+    const trimmedName = String(nombre || '').trim()
+    const trimmedClave = String(clave || '').trim().toLowerCase()
+    const nit = String(form.nitRut || userNitRut || '').trim()
+
+    if (!nit) {
+      setFeedback('Debes ingresar el NIT/RUT para crear el tipo de reporte.')
+      return
+    }
+    if (!trimmedName) {
+      setFeedback('Nombre invalido.')
+      return
+    }
+    if (isDuplicate(trimmedName, null)) {
+      setFeedback(`El tipo "${trimmedName}" ya existe para el NIT/RUT ${nit}.`)
+      return
+    }
+
+    try {
+      setSaving(true)
+      await addDoc(collection(db, 'tipo_reportes'), {
+        nombre: trimmedName,
+        clave: trimmedClave,
+        descripcion: '',
+        estado: 'activo',
+        nitRut: nit,
+        createdAt: serverTimestamp(),
+        createdByUid: user?.uid || '',
+      })
+      setFeedback(`Tipo "${trimmedName}" creado correctamente.`)
+      await loadTipos()
+    } catch {
+      setFeedback('No fue posible crear el tipo sugerido.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
 
     const trimmedNombre = form.nombre.trim()
+    const trimmedClaveRaw = String(form.clave || '').trim()
+    const trimmedClave = trimmedClaveRaw.toLowerCase().replace(/\s+/g, '_')
     const trimmedNitRut = String(form.nitRut || '').trim()
     if (!trimmedNombre) {
       setFeedback('Debes ingresar el nombre del tipo de reporte.')
+      return
+    }
+    if (!trimmedClave) {
+      setFeedback('Debes ingresar la clave del reporte (ej: asistencias, inasistencias, permisos_solicitados).')
       return
     }
     if (!trimmedNitRut) {
@@ -99,6 +141,7 @@ function TipoReportesPage() {
       if (editingTipo) {
         await updateDoc(doc(db, 'tipo_reportes', editingTipo.id), {
           nombre: trimmedNombre,
+          clave: trimmedClave,
           nitRut: trimmedNitRut,
           descripcion: form.descripcion.trim(),
           estado: form.estado,
@@ -109,6 +152,7 @@ function TipoReportesPage() {
       } else {
         await addDoc(collection(db, 'tipo_reportes'), {
           nombre: trimmedNombre,
+          clave: trimmedClave,
           nitRut: trimmedNitRut,
           descripcion: form.descripcion.trim(),
           estado: form.estado,
@@ -147,6 +191,7 @@ function TipoReportesPage() {
     return tipos.filter(
       (item) =>
         item.nombre?.toLowerCase().includes(q) ||
+        String(item.clave || '').toLowerCase().includes(q) ||
         String(item.nitRut || '').toLowerCase().includes(q) ||
         (item.descripcion || '').toLowerCase().includes(q) ||
         (item.estado || '').toLowerCase().includes(q),
@@ -162,6 +207,7 @@ function TipoReportesPage() {
     () =>
       filteredRows.map((item) => ({
         Nombre: item.nombre || '-',
+        Clave: item.clave || '-',
         NitRut: item.nitRut || '-',
         Descripcion: item.descripcion || '-',
         Estado: item.estado || '-',
@@ -188,6 +234,58 @@ function TipoReportesPage() {
 
       {feedback && <p className="feedback">{feedback}</p>}
 
+      <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+        <strong style={{ fontSize: '0.95em' }}>Plantillas rapidas:</strong>
+        <button
+          type="button"
+          className="button secondary small"
+          disabled={saving}
+          onClick={() => createSuggestedType({ nombre: 'Asistencias', clave: 'asistencias' })}
+        >
+          Crear tipo Asistencias
+        </button>
+        <button
+          type="button"
+          className="button secondary small"
+          disabled={saving}
+          onClick={() => createSuggestedType({ nombre: 'Inasistencias', clave: 'inasistencias' })}
+        >
+          Crear tipo Inasistencias
+        </button>
+        <button
+          type="button"
+          className="button secondary small"
+          disabled={saving}
+          onClick={() => createSuggestedType({ nombre: 'Permisos solicitados', clave: 'permisos_solicitados' })}
+        >
+          Crear tipo Permisos solicitados
+        </button>
+        <button
+          type="button"
+          className="button secondary small"
+          disabled={saving}
+          onClick={() => createSuggestedType({ nombre: 'Historial de modificaciones', clave: 'historial_modificaciones' })}
+        >
+          Crear tipo Historial
+        </button>
+        <button
+          type="button"
+          className="button secondary small"
+          disabled={saving}
+          onClick={() => createSuggestedType({ nombre: 'Evaluaciones', clave: 'evaluaciones' })}
+        >
+          Crear tipo Evaluaciones
+        </button>
+        <button
+          type="button"
+          className="button secondary small"
+          disabled={saving}
+          onClick={() => createSuggestedType({ nombre: 'Tareas', clave: 'tareas' })}
+        >
+          Crear tipo Tareas
+        </button>
+      </div>
+
       <div className="home-left-card evaluations-card">
         <h3>{editingTipo ? 'Editar tipo de reporte' : 'Nuevo tipo de reporte'}</h3>
         <form id="tipo-reportes-form" className="form evaluation-create-form" onSubmit={handleSubmit}>
@@ -201,6 +299,16 @@ function TipoReportesPage() {
                 value={form.nombre}
                 onChange={(event) => setForm((prev) => ({ ...prev, nombre: event.target.value }))}
                 placeholder="Ej: Reporte de asistencia"
+              />
+            </label>
+            <label htmlFor="tr-clave" className="evaluation-field-full">
+              Clave
+              <input
+                id="tr-clave"
+                type="text"
+                value={form.clave}
+                onChange={(event) => setForm((prev) => ({ ...prev, clave: event.target.value }))}
+                placeholder="Ej: asistencias, inasistencias, permisos_solicitados, evaluaciones, tareas"
               />
             </label>
             <label htmlFor="tr-nit-rut" className="evaluation-field-full">
@@ -269,6 +377,7 @@ function TipoReportesPage() {
                 <thead>
                   <tr>
                     <th>Nombre</th>
+                    <th>Clave</th>
                     <th>NIT/RUT</th>
                     <th>Descripcion</th>
                     <th>Estado</th>
@@ -278,12 +387,13 @@ function TipoReportesPage() {
                 <tbody>
                   {filteredRows.length === 0 && (
                     <tr>
-                      <td colSpan="5">No hay tipos de reporte para mostrar.</td>
+                      <td colSpan="6">No hay tipos de reporte para mostrar.</td>
                     </tr>
                   )}
                   {displayedRows.map((item) => (
                     <tr key={item.id}>
                       <td data-label="Nombre">{item.nombre}</td>
+                      <td data-label="Clave">{item.clave || '-'}</td>
                       <td data-label="NIT/RUT">{item.nitRut || '-'}</td>
                       <td data-label="Descripcion">{item.descripcion || '-'}</td>
                       <td data-label="Estado">{item.estado}</td>
@@ -295,6 +405,7 @@ function TipoReportesPage() {
                             setEditingTipo(item)
                             setForm({
                               nombre: item.nombre,
+                              clave: item.clave || '',
                               nitRut: item.nitRut || userNitRut || '',
                               descripcion: item.descripcion || '',
                               estado: item.estado || 'activo',
@@ -331,14 +442,16 @@ function TipoReportesPage() {
                 itemsPerPage={10}
                 onPageChange={setCurrentPage}
               />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-                <ExportExcelButton
-                  data={exportData}
-                  filename="TipoReportes"
-                  onExportStart={() => setExportingAll(true)}
-                  onExportEnd={() => setExportingAll(false)}
-                />
-              </div>
+              {canExportExcel && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                  <ExportExcelButton
+                    data={exportData}
+                    filename="TipoReportes"
+                    onExportStart={() => setExportingAll(true)}
+                    onExportEnd={() => setExportingAll(false)}
+                  />
+                </div>
+              )}
             </div>
           )}
         </section>
