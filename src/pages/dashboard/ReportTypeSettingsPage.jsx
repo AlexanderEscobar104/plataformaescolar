@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
@@ -26,8 +26,8 @@ function ReportTypeSettingsPage() {
       setLoading(true)
       try {
         const [rolesSnapshot, reportTypesSnapshot, settingsSnapshot] = await Promise.all([
-          getDocs(collection(db, 'roles')),
-          getDocs(collection(db, 'tipo_reportes')),
+          getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut))),
+          getDocs(query(collection(db, 'tipo_reportes'), where('nitRut', '==', userNitRut), where('estado', '==', 'activo'))),
           userNitRut ? getDoc(doc(db, 'configuracion', `report_types_roles_${userNitRut}`)) : Promise.resolve(null),
         ])
 
@@ -37,7 +37,6 @@ function ReportTypeSettingsPage() {
         const loadedReportTypes = reportTypesSnapshot.docs
           .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
           .filter((item) => item.estado === 'activo')
-          .filter((item) => item.nitRut === userNitRut || item.esIntegrado === true)
           .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')))
         setReportTypes(loadedReportTypes)
 

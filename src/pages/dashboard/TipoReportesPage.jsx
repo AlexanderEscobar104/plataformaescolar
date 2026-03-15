@@ -138,7 +138,6 @@ function TipoReportesPage() {
     return tipos.filter(
       (item) =>
         item.nombre?.toLowerCase().includes(q) ||
-        String(item.nitRut || '').toLowerCase().includes(q) ||
         (item.descripcion || '').toLowerCase().includes(q) ||
         (item.estado || '').toLowerCase().includes(q),
     )
@@ -237,7 +236,7 @@ function TipoReportesPage() {
                 setSearch(event.target.value)
                 setCurrentPage(1)
               }}
-              placeholder="Buscar por nombre, NIT/RUT, descripcion o estado"
+              placeholder="Buscar por nombre, descripcion o estado"
             />
           </div>
 
