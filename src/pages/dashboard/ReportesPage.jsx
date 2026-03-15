@@ -402,7 +402,40 @@ function ReportesPage() {
     const loadTypes = async () => {
       setLoadingTypes(true)
       try {
-        const [snap, settingsSnapshot] = await Promise.all([
+        // Ensure built-in (integrated) report types exist, even if the admin never opened TipoReportesPage.
+        try {
+          const builtinDefs = [
+            {
+              clave: 'historial_modificaciones',
+              nombre: 'Historial de modificaciones',
+              descripcion: 'Registro de todos los cambios realizados en el sistema.',
+            },
+            {
+              clave: 'asistencias',
+              nombre: 'Asistencia',
+              descripcion: 'Consulta de asistencias registradas por fecha, rol y grupo.',
+            },
+          ]
+          const existingSnap = await getDocs(
+            query(collection(db, 'tipo_reportes'), where('clave', 'in', builtinDefs.map((d) => d.clave))),
+          )
+          const existingClaves = new Set(existingSnap.docs.map((d) => String(d.data()?.clave || '')))
+          for (const def of builtinDefs) {
+            if (existingClaves.has(def.clave)) continue
+            await addDoc(collection(db, 'tipo_reportes'), {
+              clave: def.clave,
+              nombre: def.nombre,
+              descripcion: def.descripcion,
+              estado: 'activo',
+              esIntegrado: true,
+              creadoEn: serverTimestamp(),
+            })
+          }
+        } catch {
+          // Ignore seeding errors.
+        }
+
+        const [tenantSnap, integratedSnap, settingsSnapshot] = await Promise.all([
           getDocs(
             query(
               collection(db, 'tipo_reportes'),
@@ -410,17 +443,25 @@ function ReportesPage() {
               where('estado', '==', 'activo'),
             ),
           ),
+          getDocs(
+            query(
+              collection(db, 'tipo_reportes'),
+              where('esIntegrado', '==', true),
+              where('estado', '==', 'activo'),
+            ),
+          ),
           getDoc(doc(db, 'configuracion', `report_types_roles_${userNitRut}`)),
         ])
-        const allMapped = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => {
-            // Integrated types first, then alphabetical.
-            const aP = a.esIntegrado ? 0 : 1
-            const bP = b.esIntegrado ? 0 : 1
-            if (aP !== bP) return aP - bP
-            return a.nombre.localeCompare(b.nombre)
-          })
+
+        const mergedById = new Map()
+        integratedSnap.docs.forEach((d) => mergedById.set(d.id, { id: d.id, ...d.data() }))
+        tenantSnap.docs.forEach((d) => mergedById.set(d.id, { id: d.id, ...d.data() }))
+        const allMapped = [...mergedById.values()].sort((a, b) => {
+          const aP = a.esIntegrado ? 0 : 1
+          const bP = b.esIntegrado ? 0 : 1
+          if (aP !== bP) return aP - bP
+          return String(a.nombre || '').localeCompare(String(b.nombre || ''))
+        })
         const roleMatrix = settingsSnapshot.data()?.roleMatrix || {}
         const sourceRole = normalizeRole(userRole)
         const configuredAllowedIds = roleMatrix[sourceRole]
@@ -478,6 +519,70 @@ function ReportesPage() {
   }, [selectedTipo, loadHistorial])
 
   // ── Handle combobox change ─────────────────────────────────────────────────
+  const loadAsistencias = useCallback(async () => {
+    if (!userNitRut) return
+    setLoadingAsistencias(true)
+    try {
+      const desde = filterFechaDesde || new Date().toISOString().split('T')[0]
+      const hasta = filterFechaHasta || new Date().toISOString().split('T')[0]
+
+      const snap = await getDocs(
+        query(
+          collection(db, 'asistencias'),
+          where('nitRut', '==', userNitRut),
+          where('fecha', '>=', desde),
+          where('fecha', '<=', hasta),
+          orderBy('fecha', 'desc'),
+        ),
+      )
+
+      const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      const uids = [...new Set(raw.map((r) => String(r.uid || '')).filter(Boolean))]
+
+      const usersById = new Map()
+      const chunkSize = 10
+      for (let i = 0; i < uids.length; i += chunkSize) {
+        const batch = uids.slice(i, i + chunkSize)
+        const usersSnap = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', batch)))
+        usersSnap.docs.forEach((ud) => usersById.set(ud.id, ud.data()))
+      }
+
+      const mapped = raw.map((r) => {
+        const uid = String(r.uid || '')
+        const userData = usersById.get(uid) || {}
+        const profile = userData.profile || {}
+        const { nombres, apellidos } = resolveUserNames(userData)
+        return {
+          id: r.id,
+          uid,
+          fecha: r.fecha || '-',
+          role: r.role || '-',
+          grado: r.grado || '',
+          grupo: r.grupo || '',
+          numeroDocumento: profile.numeroDocumento || '-',
+          nombres,
+          apellidos,
+          creadoEn: r.creadoEn || null,
+        }
+      })
+
+      setAsistencias(mapped)
+    } catch (err) {
+      console.error('Error loading asistencias:', err)
+      setAsistencias([])
+    } finally {
+      setLoadingAsistencias(false)
+    }
+  }, [filterFechaDesde, filterFechaHasta, userNitRut])
+
+  useEffect(() => {
+    if (selectedTipo?.clave === 'asistencias') {
+      loadAsistencias()
+    } else {
+      setAsistencias([])
+    }
+  }, [loadAsistencias, selectedTipo])
+
   const handleReportTypeChange = (e) => {
     const val = e.target.value
     setCurrentPage(1)
@@ -545,6 +650,7 @@ function ReportesPage() {
   )
 
   const isHistorial = selectedTipo?.clave === 'historial_modificaciones'
+  const isAsistencias = selectedTipo?.clave === 'asistencias'
   const isCustomType = selectedTipo && !selectedTipo.esIntegrado
 
   return (
