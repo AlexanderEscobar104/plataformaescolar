@@ -21,6 +21,23 @@ function formatTimestamp(ts) {
   return Number.isNaN(d.getTime()) ? '-' : d.toLocaleString('es-CO')
 }
 
+function normalizeReportTypeKey(tipo) {
+  const clave = String(tipo?.clave || '').trim().toLowerCase()
+  if (clave) return clave
+  const nombre = String(tipo?.nombre || '').trim().toLowerCase()
+  if (!nombre) return ''
+  return nombre.replace(/\s+/g, '_')
+}
+
+function resolveReportKind(tipo) {
+  const key = normalizeReportTypeKey(tipo)
+  if (key === 'asistencia' || key === 'asistencias') return 'asistencias'
+  if (key === 'historial_modificaciones' || key === 'historial_de_modificaciones' || key === 'historial') {
+    return 'historial_modificaciones'
+  }
+  return ''
+}
+
 function splitName(fullName) {
   const clean = String(fullName || '').replace(/\s+/g, ' ').trim()
   if (!clean) return { nombres: '-', apellidos: '-' }
@@ -397,45 +414,14 @@ function ReportesPage() {
   const [filterFechaHasta, setFilterFechaHasta] = useState(() => new Date().toISOString().split('T')[0])
 
   // ── Load all active report types from Firestore ────────────────────────────
+  const reportKind = useMemo(() => resolveReportKind(selectedTipo), [selectedTipo])
+
   useEffect(() => {
     if (!userNitRut) return
     const loadTypes = async () => {
       setLoadingTypes(true)
       try {
-        // Ensure built-in (integrated) report types exist, even if the admin never opened TipoReportesPage.
-        try {
-          const builtinDefs = [
-            {
-              clave: 'historial_modificaciones',
-              nombre: 'Historial de modificaciones',
-              descripcion: 'Registro de todos los cambios realizados en el sistema.',
-            },
-            {
-              clave: 'asistencias',
-              nombre: 'Asistencia',
-              descripcion: 'Consulta de asistencias registradas por fecha, rol y grupo.',
-            },
-          ]
-          const existingSnap = await getDocs(
-            query(collection(db, 'tipo_reportes'), where('clave', 'in', builtinDefs.map((d) => d.clave))),
-          )
-          const existingClaves = new Set(existingSnap.docs.map((d) => String(d.data()?.clave || '')))
-          for (const def of builtinDefs) {
-            if (existingClaves.has(def.clave)) continue
-            await addDoc(collection(db, 'tipo_reportes'), {
-              clave: def.clave,
-              nombre: def.nombre,
-              descripcion: def.descripcion,
-              estado: 'activo',
-              esIntegrado: true,
-              creadoEn: serverTimestamp(),
-            })
-          }
-        } catch {
-          // Ignore seeding errors.
-        }
-
-        const [tenantSnap, integratedSnap, settingsSnapshot] = await Promise.all([
+        const [tenantSnap, settingsSnapshot] = await Promise.all([
           getDocs(
             query(
               collection(db, 'tipo_reportes'),
@@ -443,25 +429,12 @@ function ReportesPage() {
               where('estado', '==', 'activo'),
             ),
           ),
-          getDocs(
-            query(
-              collection(db, 'tipo_reportes'),
-              where('esIntegrado', '==', true),
-              where('estado', '==', 'activo'),
-            ),
-          ),
           getDoc(doc(db, 'configuracion', `report_types_roles_${userNitRut}`)),
         ])
 
-        const mergedById = new Map()
-        integratedSnap.docs.forEach((d) => mergedById.set(d.id, { id: d.id, ...d.data() }))
-        tenantSnap.docs.forEach((d) => mergedById.set(d.id, { id: d.id, ...d.data() }))
-        const allMapped = [...mergedById.values()].sort((a, b) => {
-          const aP = a.esIntegrado ? 0 : 1
-          const bP = b.esIntegrado ? 0 : 1
-          if (aP !== bP) return aP - bP
-          return String(a.nombre || '').localeCompare(String(b.nombre || ''))
-        })
+        const allMapped = tenantSnap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')))
         const roleMatrix = settingsSnapshot.data()?.roleMatrix || {}
         const sourceRole = normalizeRole(userRole)
         const configuredAllowedIds = roleMatrix[sourceRole]
@@ -511,12 +484,12 @@ function ReportesPage() {
   }, [userNitRut])
 
   useEffect(() => {
-    if (selectedTipo?.clave === 'historial_modificaciones') {
+    if (reportKind === 'historial_modificaciones') {
       loadHistorial()
     } else {
       setRecords([])
     }
-  }, [selectedTipo, loadHistorial])
+  }, [reportKind, loadHistorial])
 
   // ── Handle combobox change ─────────────────────────────────────────────────
   const loadAsistencias = useCallback(async () => {
