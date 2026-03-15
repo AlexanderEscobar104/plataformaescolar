@@ -18,7 +18,7 @@ import PaginationControls from '../../components/PaginationControls'
 
 // Built-in (protected) report types that are seeded automatically in Firestore.
 // These cannot be deleted or edited by the user.
-const PROTECTED_CLAVES = ['historial_modificaciones']
+const PROTECTED_CLAVES = ['historial_modificaciones', 'asistencias']
 
 function TipoReportesPage() {
   const { user, hasPermission, userNitRut } = useAuth() // Added hasPermission, userNitRut
@@ -42,19 +42,32 @@ function TipoReportesPage() {
   // Seed built-in types if they don't exist.
   const seedBuiltins = useCallback(async () => {
     try {
-      const snap = await getDocs(
-        query(
-          collection(db, 'tipo_reportes'),
-          where('clave', '==', 'historial_modificaciones'),
-        ),
-      )
-      if (snap.empty) {
-        // Use addDoc directly (not tracked) to avoid polluting the history log
-        // with an auto-seeded internal document.
-        await addDoc(collection(db, 'tipo_reportes'), {
+      const builtinDefs = [
+        {
           clave: 'historial_modificaciones',
           nombre: 'Historial de modificaciones',
           descripcion: 'Registro de todos los cambios realizados en el sistema.',
+        },
+        {
+          clave: 'asistencias',
+          nombre: 'Asistencia',
+          descripcion: 'Consulta de asistencias registradas por fecha, rol y grupo.',
+        },
+      ]
+
+      const existingSnap = await getDocs(
+        query(collection(db, 'tipo_reportes'), where('clave', 'in', builtinDefs.map((d) => d.clave))),
+      )
+      const existingClaves = new Set(existingSnap.docs.map((d) => String(d.data()?.clave || '')))
+
+      for (const def of builtinDefs) {
+        if (existingClaves.has(def.clave)) continue
+        // Use addDoc directly (not tracked) to avoid polluting the history log
+        // with an auto-seeded internal document.
+        await addDoc(collection(db, 'tipo_reportes'), {
+          clave: def.clave,
+          nombre: def.nombre,
+          descripcion: def.descripcion,
           estado: 'activo',
           esIntegrado: true,
           creadoEn: serverTimestamp(),
