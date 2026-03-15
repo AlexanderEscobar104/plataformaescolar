@@ -21,6 +21,38 @@ function formatTimestamp(ts) {
   return Number.isNaN(d.getTime()) ? '-' : d.toLocaleString('es-CO')
 }
 
+function splitName(fullName) {
+  const clean = String(fullName || '').replace(/\\s+/g, ' ').trim()
+  if (!clean) return { nombres: '-', apellidos: '-' }
+
+  const parts = clean.split(' ')
+  if (parts.length === 1) {
+    return { nombres: parts[0], apellidos: '-' }
+  }
+
+  return { nombres: parts.slice(0, -1).join(' '), apellidos: parts.slice(-1).join(' ') }
+}
+
+function resolveUserNames(data) {
+  const profile = data?.profile || {}
+  const role = data?.role || ''
+
+  if (role === 'estudiante') {
+    const nombres = `${profile.primerNombre || ''} ${profile.segundoNombre || ''}`.replace(/\\s+/g, ' ').trim()
+    const apellidos = `${profile.primerApellido || ''} ${profile.segundoApellido || ''}`.replace(/\\s+/g, ' ').trim()
+    return { nombres: nombres || '-', apellidos: apellidos || '-' }
+  }
+
+  if (role === 'profesor') {
+    return {
+      nombres: profile.nombres || splitName(data?.name).nombres,
+      apellidos: profile.apellidos || splitName(data?.name).apellidos,
+    }
+  }
+
+  return splitName(data?.name)
+}
+
 function serializeValue(val) {
   if (val === null || val === undefined) return '-'
   if (typeof val === 'boolean') return val ? 'Sí' : 'No'
@@ -344,6 +376,13 @@ function ReportesPage() {
   const [selectedTipo, setSelectedTipo] = useState(null) // full tipo_reportes doc
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(false)
+
+  const [asistencias, setAsistencias] = useState([])
+  const [loadingAsistencias, setLoadingAsistencias] = useState(false)
+  const [asistenciaRoleFilter, setAsistenciaRoleFilter] = useState('')
+  const [asistenciaGradeFilter, setAsistenciaGradeFilter] = useState('')
+  const [asistenciaGroupFilter, setAsistenciaGroupFilter] = useState('')
+  const [asistenciaSearch, setAsistenciaSearch] = useState('')
 
   // Report types loaded from Firestore
   const [loadingTypes, setLoadingTypes] = useState(false)
