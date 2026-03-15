@@ -434,7 +434,7 @@ function AsistenciaPage() {
           </div>
 
           <div className="attendance-users">
-            <h3>Usuarios {selectedRoleLabel ? `(${selectedRoleLabel})` : ''}</h3>
+         
 
             {!selectedRole && <p className="feedback">Selecciona un rol para listar usuarios.</p>}
             {selectedRole === 'estudiante' && (!selectedGrade || !selectedGroup) && (
@@ -453,25 +453,7 @@ function AsistenciaPage() {
             {!loadingUsers && users.length > 0 && (
               <>
                 <div className="attendance-controls">
-                  <div className="attendance-controls-left">
-                    <button
-                      type="button"
-                      className="button secondary small"
-                      onClick={handleMarkAllSelected}
-                      disabled={!canUseAttendance}
-                    >
-                      Marcar todos
-                    </button>
-                    <button
-                      type="button"
-                      className="button secondary small"
-                      onClick={handleUnmarkAllSelected}
-                      disabled={!canUseAttendance}
-                    >
-                      Desmarcar todos
-                    </button>
-                    <span className="attendance-count">{selectedUserIds.length} seleccionados</span>
-                  </div>
+                  
                   <button
                     type="button"
                     className="button secondary small"
