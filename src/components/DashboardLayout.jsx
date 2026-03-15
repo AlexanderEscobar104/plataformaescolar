@@ -167,6 +167,7 @@ function DashboardLayout() {
     inactivityCountdownSeconds,
     continueActiveSession,
     hasPermission,
+    userNitRut,
   } = useAuth()
   const [userName, setUserName] = useState('')
   const [userRole, setUserRole] = useState('')
@@ -199,9 +200,35 @@ function DashboardLayout() {
   const canViewTasks = hasPermission(PERMISSION_KEYS.TASKS_VIEW)
   const canViewEvaluations = hasPermission(PERMISSION_KEYS.EVALUATIONS_VIEW)
   const canViewInasistencias = hasPermission(PERMISSION_KEYS.INASISTENCIAS_VIEW)
+  const canViewAsistencia = hasPermission(PERMISSION_KEYS.ASISTENCIA_VIEW) || canViewInasistencias
   const canViewPermisos = hasPermission(PERMISSION_KEYS.PERMISOS_VIEW)
   const canManageStorage = hasPermission(PERMISSION_KEYS.STORAGE_MANAGE)
   const showFloatingChat = location.pathname.startsWith('/dashboard')
+  const [customMemberRoles, setCustomMemberRoles] = useState([])
+
+  useEffect(() => {
+    if (!canManageMembers || !userNitRut) {
+      setCustomMemberRoles([])
+      return undefined
+    }
+
+    const base = new Set(['estudiante', 'profesor', 'aspirante', 'directivo'])
+    const rolesQuery = query(collection(db, 'roles'), where('nitRut', '==', userNitRut), where('status', '==', 'activo'))
+    const unsub = onSnapshot(rolesQuery, (snap) => {
+      const mapped = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .map((r) => {
+          const name = String(r.name || '').trim()
+          const value = String(r.name || '').toLowerCase().trim()
+          return { id: r.id, name, value }
+        })
+        .filter((r) => r.name && r.value && !base.has(r.value))
+        .sort((a, b) => a.name.localeCompare(b.name))
+      setCustomMemberRoles(mapped)
+    })
+
+    return () => unsub()
+  }, [canManageMembers, userNitRut])
 
   const academicItems = useMemo(() => {
     const items = []
@@ -218,12 +245,14 @@ function DashboardLayout() {
     }
     if (canViewInasistencias) {
       items.push({ label: 'Reportar inasistencias', to: '/dashboard/inasistencias', Icon: AbsencesIcon })
+    }
+    if (canViewAsistencia) {
       items.push({ label: 'Asistencia', to: '/dashboard/asistencia', Icon: AbsencesIcon })
     }
     
     items.push({ label: 'Reconocimientos', to: '/dashboard/reconocimientos', Icon: ReportsIcon })
     return items
-  }, [canViewTasks, canViewEvaluations, canViewPermisos, canViewInasistencias])
+  }, [canViewTasks, canViewEvaluations, canViewPermisos, canViewInasistencias, canViewAsistencia])
 
   const memberItems = useMemo(() => {
     if (userRole === 'estudiante') {
@@ -242,8 +271,13 @@ function DashboardLayout() {
       return []
     }
 
-    return memberItemsBase
-  }, [canManageMembers, userRole])
+    const dynamic = customMemberRoles.map((r) => ({
+      label: `Crear ${r.name}`,
+      to: `/dashboard/crear-rol/${r.id}`,
+      Icon: DirectorsIcon,
+    }))
+    return [...memberItemsBase, ...dynamic]
+  }, [canManageMembers, customMemberRoles, userRole])
   const configItems = useMemo(() => {
     const items = [{ label: 'Cambiar clave', to: '/dashboard/cambiar-clave', Icon: GearIcon }]
 
@@ -276,6 +310,7 @@ function DashboardLayout() {
       items.push({ label: 'Configuracion de chat', to: '/dashboard/configuracion-chat', Icon: MessageIcon })
       items.push({ label: 'Configuracion de mensajes', to: '/dashboard/configuracion-mensajes', Icon: MessageIcon })
       items.push({ label: 'Configuracion de notificaciones', to: '/dashboard/configuracion-notificaciones', Icon: BellIcon })
+      items.push({ label: 'Configuracion de asistencia', to: '/dashboard/configuracion-asistencia', Icon: AbsencesIcon })
       items.push({ label: 'Configuracion tipos de reporte', to: '/dashboard/configuracion-tipos-reporte', Icon: ReportsIcon })
     }
 

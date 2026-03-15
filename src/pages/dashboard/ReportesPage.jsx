@@ -32,10 +32,20 @@ function normalizeReportTypeKey(tipo) {
 function resolveReportKind(tipo) {
   const key = normalizeReportTypeKey(tipo)
   if (key === 'asistencia' || key === 'asistencias') return 'asistencias'
+  if (key === 'inasistencias' || key === 'reporte_inasistencias') return 'inasistencias'
+  if (key === 'permisos_solicitados' || key === 'permisos_solicitado' || key === 'permisos') return 'permisos'
   if (key === 'historial_modificaciones' || key === 'historial_de_modificaciones' || key === 'historial') {
     return 'historial_modificaciones'
   }
   return ''
+}
+
+function chunk(array, size) {
+  const result = []
+  for (let i = 0; i < array.length; i += size) {
+    result.push(array.slice(i, i + size))
+  }
+  return result
 }
 
 function splitName(fullName) {
@@ -68,6 +78,35 @@ function resolveUserNames(data) {
   }
 
   return splitName(data?.name)
+}
+
+function looksLikeEmail(value) {
+  const v = String(value || '').trim()
+  if (!v) return false
+  return v.includes('@') && v.includes('.')
+}
+
+function normalizeSoporteUrls(record) {
+  const out = []
+  const add = (u) => {
+    const s = String(u || '').trim()
+    if (!s) return
+    if (!out.includes(s)) out.push(s)
+  }
+  const extract = (v) => {
+    if (!v) return
+    if (Array.isArray(v)) return v.forEach(extract)
+    if (typeof v === 'string') return add(v)
+    if (typeof v === 'object') add(v.url || v.href || v.downloadURL || v.soporteUrl)
+  }
+
+  extract(record && record.soporteUrl)
+  extract(record && record.soporteUrls)
+  extract(record && record.adjuntos)
+  extract(record && record.adjuntosUrls)
+  extract(record && record.archivosAdjuntos)
+
+  return out
 }
 
 function serializeValue(val) {
@@ -399,6 +438,18 @@ function ReportesPage() {
   const [asistenciaFeedback, setAsistenciaFeedback] = useState('')
   const [asistenciaLegacyCount, setAsistenciaLegacyCount] = useState(0)
 
+  const [inasistencias, setInasistencias] = useState([])
+  const [loadingInasistencias, setLoadingInasistencias] = useState(false)
+  const [inasistenciasFeedback, setInasistenciasFeedback] = useState('')
+  const [inasistenciasSearch, setInasistenciasSearch] = useState('')
+  const [inasistenciasTipoFilter, setInasistenciasTipoFilter] = useState('')
+
+  const [permisos, setPermisos] = useState([])
+  const [loadingPermisos, setLoadingPermisos] = useState(false)
+  const [permisosFeedback, setPermisosFeedback] = useState('')
+  const [permisosSearch, setPermisosSearch] = useState('')
+  const [permisosTipoFilter, setPermisosTipoFilter] = useState('')
+
   const [customRoles, setCustomRoles] = useState([])
   const [asistenciaRoleFilter, setAsistenciaRoleFilter] = useState('')
   const [asistenciaTipoMarcacionFilter, setAsistenciaTipoMarcacionFilter] = useState('')
@@ -422,6 +473,22 @@ function ReportesPage() {
   // ── Load all active report types from Firestore ────────────────────────────
   const reportKind = useMemo(() => resolveReportKind(selectedTipo), [selectedTipo])
   const roleOptions = useMemo(() => buildAllRoleOptions(customRoles), [customRoles])
+  const inasistenciasTipoOptions = useMemo(() => {
+    const set = new Set(
+      inasistencias
+        .map((r) => String(r.tipoNombre || '').trim())
+        .filter((v) => v && v !== '-')
+    )
+    return [...set].sort()
+  }, [inasistencias])
+  const permisosTipoOptions = useMemo(() => {
+    const set = new Set(
+      permisos
+        .map((r) => String(r.tipoNombre || '').trim())
+        .filter((v) => v && v !== '-')
+    )
+    return [...set].sort()
+  }, [permisos])
 
   useEffect(() => {
     if (!userNitRut) return
@@ -439,9 +506,19 @@ function ReportesPage() {
           getDoc(doc(db, 'configuracion', `report_types_roles_${userNitRut}`)),
         ])
 
-        const allMapped = tenantSnap.docs
+        const allMappedRaw = tenantSnap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')))
+
+        // De-duplicate by name to prevent repeated options if multiple docs exist with the same nombre.
+        const seen = new Set()
+        const allMapped = allMappedRaw.filter((item) => {
+          const key = String(item.nombre || '').trim().toLowerCase()
+          if (!key) return true
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
         const roleMatrix = settingsSnapshot.data()?.roleMatrix || {}
         const sourceRole = normalizeRole(userRole)
         const configuredAllowedIds = roleMatrix[sourceRole]
@@ -612,11 +689,13 @@ function ReportesPage() {
         const markerData = markerUid ? (usersById.get(markerUid) || null) : null
         const resolvedMarkerName = (() => {
           const explicit = String(r.marcadoPorNombre || '').trim()
-          if (explicit) return explicit
+          if (explicit && !looksLikeEmail(explicit)) return explicit
           if (!markerData) return ''
           const { nombres: mn, apellidos: ma } = resolveUserNames(markerData)
           const full = `${mn} ${ma}`.replace(/\s+/g, ' ').trim()
-          return full || markerData.name || markerData.email || ''
+          if (full && !looksLikeEmail(full)) return full
+          const fallbackName = markerData.name || ''
+          return !looksLikeEmail(fallbackName) ? fallbackName : ''
         })()
         return {
           id: r.id,
@@ -655,6 +734,165 @@ function ReportesPage() {
       setAsistencias([])
     }
   }, [loadAsistencias, reportKind])
+
+  const loadInasistencias = useCallback(async () => {
+    if (!userNitRut) return
+    setLoadingInasistencias(true)
+    setInasistenciasFeedback('')
+    try {
+      const from = filterFechaDesde ? new Date(`${filterFechaDesde}T00:00:00`) : null
+      const to = filterFechaHasta ? new Date(`${filterFechaHasta}T23:59:59`) : null
+
+      const constraints = []
+      if (from) constraints.push(where('creadoEn', '>=', from))
+      if (to) constraints.push(where('creadoEn', '<=', to))
+      constraints.push(orderBy('creadoEn', 'desc'))
+
+      const snap = await getDocs(query(collection(db, 'inasistencias'), ...constraints))
+      const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
+      const studentIds = raw.map((r) => String(r.estudianteId || '')).filter(Boolean)
+      const creatorIds = raw.map((r) => String(r.creadoPorUid || '')).filter(Boolean)
+      const allIds = [...new Set([...studentIds, ...creatorIds])]
+      const usersById = new Map()
+
+      chunk(allIds, 10).forEach(() => {})
+      for (const group of chunk(allIds, 10)) {
+        const usersSnap = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', group)))
+        usersSnap.docs.forEach((ud) => usersById.set(ud.id, ud.data()))
+      }
+
+      const mapped = raw
+        .map((r) => {
+          const studentData = usersById.get(String(r.estudianteId || '')) || null
+          const creatorData = usersById.get(String(r.creadoPorUid || '')) || null
+
+          const studentProfile = studentData?.profile || {}
+          const { nombres, apellidos } = resolveUserNames(studentData || {})
+          const estudianteNombre = `${nombres} ${apellidos}`.replace(/\s+/g, ' ').trim() || r.estudianteNombre || '-'
+          const numeroDocumento = studentProfile.numeroDocumento || '-'
+
+          const { nombres: cn, apellidos: ca } = resolveUserNames(creatorData || {})
+          const creadoPorNombre = `${cn} ${ca}`.replace(/\s+/g, ' ').trim() || creatorData?.name || ''
+          const creatorNit = String(creatorData?.nitRut || creatorData?.profile?.nitRut || '').trim()
+          const studentNit = String(studentData?.nitRut || studentData?.profile?.nitRut || '').trim()
+          const belongsToTenant = Boolean((creatorNit && creatorNit === userNitRut) || (studentNit && studentNit === userNitRut))
+
+          return {
+            id: r.id,
+            belongsToTenant,
+            creadoEn: r.creadoEn || null,
+            fecha: r.creadoEn?.toDate?.() ? r.creadoEn.toDate().toISOString().split('T')[0] : '',
+            numeroDocumento,
+            estudianteNombre,
+            tipoNombre: r.tipoNombre || '-',
+            fechaDesde: r.fechaDesde || '-',
+            fechaHasta: r.fechaHasta || '-',
+            horaDesde: r.horaDesde || '-',
+            horaHasta: r.horaHasta || '-',
+            descripcion: r.descripcion || '-',
+            soporteUrls: normalizeSoporteUrls(r),
+            creadoPorNombre: creadoPorNombre && !looksLikeEmail(creadoPorNombre) ? creadoPorNombre : '-',
+          }
+        })
+        .filter((r) => r.belongsToTenant)
+
+      setInasistencias(mapped)
+    } catch (err) {
+      console.error('Error loading inasistencias:', err)
+      setInasistencias([])
+      setInasistenciasFeedback('No fue posible cargar las inasistencias registradas.')
+    } finally {
+      setLoadingInasistencias(false)
+    }
+  }, [filterFechaDesde, filterFechaHasta, userNitRut])
+
+  useEffect(() => {
+    if (reportKind === 'inasistencias') {
+      loadInasistencias()
+    } else {
+      setInasistencias([])
+    }
+  }, [loadInasistencias, reportKind])
+
+  const loadPermisos = useCallback(async () => {
+    if (!userNitRut) return
+    setLoadingPermisos(true)
+    setPermisosFeedback('')
+    try {
+      const from = filterFechaDesde ? new Date(`${filterFechaDesde}T00:00:00`) : null
+      const to = filterFechaHasta ? new Date(`${filterFechaHasta}T23:59:59`) : null
+
+      const constraints = []
+      if (from) constraints.push(where('creadoEn', '>=', from))
+      if (to) constraints.push(where('creadoEn', '<=', to))
+      constraints.push(orderBy('creadoEn', 'desc'))
+
+      const snap = await getDocs(query(collection(db, 'permisos'), ...constraints))
+      const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
+      const targetIds = raw.map((r) => String(r.estudianteId || '')).filter(Boolean)
+      const creatorIds = raw.map((r) => String(r.creadoPorUid || '')).filter(Boolean)
+      const allIds = [...new Set([...targetIds, ...creatorIds])]
+      const usersById = new Map()
+
+      for (const group of chunk(allIds, 10)) {
+        const usersSnap = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', group)))
+        usersSnap.docs.forEach((ud) => usersById.set(ud.id, ud.data()))
+      }
+
+      const mapped = raw
+        .map((r) => {
+          const targetData = usersById.get(String(r.estudianteId || '')) || null
+          const creatorData = usersById.get(String(r.creadoPorUid || '')) || null
+
+          const targetProfile = targetData?.profile || {}
+          const { nombres, apellidos } = resolveUserNames(targetData || {})
+          const targetNombre = `${nombres} ${apellidos}`.replace(/\s+/g, ' ').trim() || r.estudianteNombre || '-'
+          const numeroDocumento = targetProfile.numeroDocumento || '-'
+
+          const { nombres: cn, apellidos: ca } = resolveUserNames(creatorData || {})
+          const creadoPorNombre = `${cn} ${ca}`.replace(/\s+/g, ' ').trim() || creatorData?.name || ''
+          const creatorNit = String(creatorData?.nitRut || creatorData?.profile?.nitRut || '').trim()
+          const targetNit = String(targetData?.nitRut || targetData?.profile?.nitRut || '').trim()
+          const belongsToTenant = Boolean((creatorNit && creatorNit === userNitRut) || (targetNit && targetNit === userNitRut))
+
+          return {
+            id: r.id,
+            belongsToTenant,
+            creadoEn: r.creadoEn || null,
+            fecha: r.creadoEn?.toDate?.() ? r.creadoEn.toDate().toISOString().split('T')[0] : '',
+            numeroDocumento,
+            solicitanteNombre: targetNombre,
+            tipoNombre: r.tipoNombre || '-',
+            fechaDesde: r.fechaDesde || '-',
+            fechaHasta: r.fechaHasta || '-',
+            horaDesde: r.horaDesde || '-',
+            horaHasta: r.horaHasta || '-',
+            descripcion: r.descripcion || '-',
+            soporteUrls: normalizeSoporteUrls(r),
+            creadoPorNombre: creadoPorNombre && !looksLikeEmail(creadoPorNombre) ? creadoPorNombre : '-',
+          }
+        })
+        .filter((r) => r.belongsToTenant)
+
+      setPermisos(mapped)
+    } catch (err) {
+      console.error('Error loading permisos:', err)
+      setPermisos([])
+      setPermisosFeedback('No fue posible cargar los permisos solicitados.')
+    } finally {
+      setLoadingPermisos(false)
+    }
+  }, [filterFechaDesde, filterFechaHasta, userNitRut])
+
+  useEffect(() => {
+    if (reportKind === 'permisos') {
+      loadPermisos()
+    } else {
+      setPermisos([])
+    }
+  }, [loadPermisos, reportKind])
 
   const handleReportTypeChange = (e) => {
     const val = e.target.value
@@ -724,7 +962,9 @@ function ReportesPage() {
 
   const isHistorial = reportKind === 'historial_modificaciones'
   const isAsistencias = reportKind === 'asistencias'
-  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isAsistencias
+  const isInasistencias = reportKind === 'inasistencias'
+  const isPermisos = reportKind === 'permisos'
+  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isAsistencias && !isInasistencias && !isPermisos
 
   return (
     <section>
@@ -944,9 +1184,9 @@ function ReportesPage() {
               value={asistenciaEstadoFilter}
               onChange={(e) => { setAsistenciaEstadoFilter(e.target.value); setCurrentPage(1) }}
             >
-              <option value="">Si y No</option>
-              <option value="Si">Si</option>
-              <option value="No">No</option>
+              <option value="">Asistio (Si/No)</option>
+              <option value="Si">Asistio</option>
+              <option value="No">No asistio</option>
             </select>
             {asistenciaRoleFilter === 'estudiante' && (
               <>
@@ -1074,6 +1314,290 @@ function ReportesPage() {
                       <ExportExcelButton
                         data={exportRows}
                         filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'Asistencias'}
+                        onExportStart={() => setExportingAll(true)}
+                        onExportEnd={() => setExportingAll(false)}
+                      />
+                    </div>
+                  )}
+                </>
+              )
+            })()
+          )}
+        </>
+      )}
+
+      {/* Inasistencias */}
+      {isInasistencias && (
+        <>
+          <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <input
+              type="text"
+              placeholder="Buscar por documento o estudiante..."
+              value={inasistenciasSearch}
+              onChange={(e) => { setInasistenciasSearch(e.target.value); setCurrentPage(1) }}
+              style={{ flex: '1 1 240px' }}
+            />
+            <select
+              className="role-select-box"
+              value={inasistenciasTipoFilter}
+              onChange={(e) => { setInasistenciasTipoFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los tipos</option>
+              {inasistenciasTipoOptions.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.88em' }}>
+                Desde
+                <input type="date" value={filterFechaDesde} onChange={(e) => { setFilterFechaDesde(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+              <label style={{ fontSize: '0.88em' }}>
+                Hasta
+                <input type="date" value={filterFechaHasta} onChange={(e) => { setFilterFechaHasta(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+            </div>
+            <button type="button" className="button secondary small" onClick={loadInasistencias} disabled={loadingInasistencias}>
+              Refrescar
+            </button>
+          </div>
+
+          {inasistenciasFeedback && <p className="feedback error">{inasistenciasFeedback}</p>}
+
+          {loadingInasistencias ? (
+            <p>Cargando inasistencias...</p>
+          ) : (
+            (() => {
+              const q = inasistenciasSearch.trim().toLowerCase()
+              const filtered = inasistencias.filter((r) => {
+                if (inasistenciasTipoFilter && String(r.tipoNombre || '').trim() !== inasistenciasTipoFilter) return false
+                if (!q) return true
+                const hay = `${r.numeroDocumento} ${r.estudianteNombre} ${r.tipoNombre} ${r.descripcion}`.toLowerCase()
+                return hay.includes(q)
+              })
+              const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
+              const exportRows = filtered.map((r) => ({
+                Fecha: r.fecha || '-',
+                Documento: r.numeroDocumento || '-',
+                Estudiante: r.estudianteNombre || '-',
+                Tipo: r.tipoNombre || '-',
+                'Fecha desde': r.fechaDesde || '-',
+                'Fecha hasta': r.fechaHasta || '-',
+                'Hora desde': r.horaDesde || '-',
+                'Hora hasta': r.horaHasta || '-',
+                Motivo: r.descripcion || '-',
+                Adjuntos: r.soporteUrls && r.soporteUrls.length > 0 ? r.soporteUrls.join(' | ') : '-',
+                'Usuario registro': r.creadoPorNombre || '-',
+              }))
+
+              return (
+                <>
+                  <div className="students-table-wrap">
+                    <table className="students-table">
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Documento</th>
+                          <th>Estudiante</th>
+                          <th>Tipo</th>
+                          <th>Fecha desde</th>
+                          <th>Fecha hasta</th>
+                          <th>Hora desde</th>
+                          <th>Hora hasta</th>
+                          <th>Motivo</th>
+                          <th>Adjuntos</th>
+                          <th>Usuario registro</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length === 0 && (
+                          <tr>
+                            <td colSpan="11">No hay inasistencias para los filtros seleccionados.</td>
+                          </tr>
+                        )}
+                        {displayed.map((r) => (
+                          <tr key={r.id}>
+                            <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{r.fecha || '-'}</td>
+                            <td data-label="Documento">{r.numeroDocumento || '-'}</td>
+                            <td data-label="Estudiante">{r.estudianteNombre || '-'}</td>
+                            <td data-label="Tipo">{r.tipoNombre || '-'}</td>
+                            <td data-label="Fecha desde">{r.fechaDesde || '-'}</td>
+                            <td data-label="Fecha hasta">{r.fechaHasta || '-'}</td>
+                            <td data-label="Hora desde">{r.horaDesde || '-'}</td>
+                            <td data-label="Hora hasta">{r.horaHasta || '-'}</td>
+                            <td data-label="Motivo" style={{ whiteSpace: 'pre-wrap', minWidth: '220px' }}>{r.descripcion || '-'}</td>
+                            <td data-label="Adjuntos">
+                              {r.soporteUrls && r.soporteUrls.length > 0 ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  {r.soporteUrls.map((u, i) => (
+                                    <a key={`${r.id}-${i}`} href={u} target="_blank" rel="noopener noreferrer">
+                                      Descargar{r.soporteUrls.length > 1 ? ` ${i + 1}` : ''}
+                                    </a>
+                                  ))}
+                                </div>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            <td data-label="Usuario registro">{r.creadoPorNombre || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtered.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                  {canExportExcel && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                      <ExportExcelButton
+                        data={exportRows}
+                        filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'Inasistencias'}
+                        onExportStart={() => setExportingAll(true)}
+                        onExportEnd={() => setExportingAll(false)}
+                      />
+                    </div>
+                  )}
+                </>
+              )
+            })()
+          )}
+        </>
+      )}
+
+      {/* Permisos solicitados */}
+      {isPermisos && (
+        <>
+          <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <input
+              type="text"
+              placeholder="Buscar por documento o solicitante..."
+              value={permisosSearch}
+              onChange={(e) => { setPermisosSearch(e.target.value); setCurrentPage(1) }}
+              style={{ flex: '1 1 240px' }}
+            />
+            <select
+              className="role-select-box"
+              value={permisosTipoFilter}
+              onChange={(e) => { setPermisosTipoFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los tipos</option>
+              {permisosTipoOptions.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.88em' }}>
+                Desde
+                <input type="date" value={filterFechaDesde} onChange={(e) => { setFilterFechaDesde(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+              <label style={{ fontSize: '0.88em' }}>
+                Hasta
+                <input type="date" value={filterFechaHasta} onChange={(e) => { setFilterFechaHasta(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+            </div>
+            <button type="button" className="button secondary small" onClick={loadPermisos} disabled={loadingPermisos}>
+              Refrescar
+            </button>
+          </div>
+
+          {permisosFeedback && <p className="feedback error">{permisosFeedback}</p>}
+
+          {loadingPermisos ? (
+            <p>Cargando permisos...</p>
+          ) : (
+            (() => {
+              const q = permisosSearch.trim().toLowerCase()
+              const filtered = permisos.filter((r) => {
+                if (permisosTipoFilter && String(r.tipoNombre || '').trim() !== permisosTipoFilter) return false
+                if (!q) return true
+                const hay = `${r.numeroDocumento} ${r.solicitanteNombre} ${r.tipoNombre} ${r.descripcion}`.toLowerCase()
+                return hay.includes(q)
+              })
+              const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
+              const exportRows = filtered.map((r) => ({
+                Fecha: r.fecha || '-',
+                Documento: r.numeroDocumento || '-',
+                Solicitante: r.solicitanteNombre || '-',
+                Tipo: r.tipoNombre || '-',
+                'Fecha desde': r.fechaDesde || '-',
+                'Fecha hasta': r.fechaHasta || '-',
+                'Hora desde': r.horaDesde || '-',
+                'Hora hasta': r.horaHasta || '-',
+                Motivo: r.descripcion || '-',
+                Adjuntos: r.soporteUrls && r.soporteUrls.length > 0 ? r.soporteUrls.join(' | ') : '-',
+                'Usuario registro': r.creadoPorNombre || '-',
+              }))
+
+              return (
+                <>
+                  <div className="students-table-wrap">
+                    <table className="students-table">
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Documento</th>
+                          <th>Solicitante</th>
+                          <th>Tipo</th>
+                          <th>Fecha desde</th>
+                          <th>Fecha hasta</th>
+                          <th>Hora desde</th>
+                          <th>Hora hasta</th>
+                          <th>Motivo</th>
+                          <th>Adjuntos</th>
+                          <th>Usuario registro</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length === 0 && (
+                          <tr>
+                            <td colSpan="11">No hay permisos para los filtros seleccionados.</td>
+                          </tr>
+                        )}
+                        {displayed.map((r) => (
+                          <tr key={r.id}>
+                            <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{r.fecha || '-'}</td>
+                            <td data-label="Documento">{r.numeroDocumento || '-'}</td>
+                            <td data-label="Solicitante">{r.solicitanteNombre || '-'}</td>
+                            <td data-label="Tipo">{r.tipoNombre || '-'}</td>
+                            <td data-label="Fecha desde">{r.fechaDesde || '-'}</td>
+                            <td data-label="Fecha hasta">{r.fechaHasta || '-'}</td>
+                            <td data-label="Hora desde">{r.horaDesde || '-'}</td>
+                            <td data-label="Hora hasta">{r.horaHasta || '-'}</td>
+                            <td data-label="Motivo" style={{ whiteSpace: 'pre-wrap', minWidth: '220px' }}>{r.descripcion || '-'}</td>
+                            <td data-label="Adjuntos">
+                              {r.soporteUrls && r.soporteUrls.length > 0 ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  {r.soporteUrls.map((u, i) => (
+                                    <a key={`${r.id}-${i}`} href={u} target="_blank" rel="noopener noreferrer">
+                                      Descargar{r.soporteUrls.length > 1 ? ` ${i + 1}` : ''}
+                                    </a>
+                                  ))}
+                                </div>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            <td data-label="Usuario registro">{r.creadoPorNombre || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtered.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                  {canExportExcel && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                      <ExportExcelButton
+                        data={exportRows}
+                        filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'PermisosSolicitados'}
                         onExportStart={() => setExportingAll(true)}
                         onExportEnd={() => setExportingAll(false)}
                       />

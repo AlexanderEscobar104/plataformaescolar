@@ -31,6 +31,7 @@ function CircularsPage() {
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const canViewOnlyCirculars = !canManageCirculars
   const [subject, setSubject] = useState('')
+  const [fechaVencimiento, setFechaVencimiento] = useState('')
   const [pdfFile, setPdfFile] = useState(null)
   const [search, setSearch] = useState('')
   const [editingCircular, setEditingCircular] = useState(null)
@@ -123,6 +124,7 @@ function CircularsPage() {
       if (editingCircular?.id) {
         await updateDocTracked(doc(db, 'circulares', editingCircular.id), {
           subject: subject.trim(),
+          fechaVencimiento: String(fechaVencimiento || '').trim(),
           pdf: uploadedPdf || editingCircular.pdf || null,
           nitRut: userNitRut,
           updatedAt: serverTimestamp(),
@@ -131,6 +133,7 @@ function CircularsPage() {
       } else {
         await addDocTracked(collection(db, 'circulares'), {
           subject: subject.trim(),
+          fechaVencimiento: String(fechaVencimiento || '').trim(),
           pdf: uploadedPdf,
           nitRut: userNitRut,
           createdByUid: user?.uid || '',
@@ -140,6 +143,7 @@ function CircularsPage() {
         setSuccessMessage('Circular guardada correctamente.')
       }
       setSubject('')
+      setFechaVencimiento('')
       setPdfFile(null)
       setEditingCircular(null)
       setShowFormModal(false)
@@ -156,6 +160,7 @@ function CircularsPage() {
   const openNewCircularModal = () => {
     setEditingCircular(null)
     setSubject('')
+    setFechaVencimiento('')
     setPdfFile(null)
     setFeedback('')
     setShowFormModal(true)
@@ -164,6 +169,7 @@ function CircularsPage() {
   const openEditCircularModal = (item) => {
     setEditingCircular(item)
     setSubject(item.subject || '')
+    setFechaVencimiento(item.fechaVencimiento || '')
     setPdfFile(null)
     setFeedback('')
     setShowFormModal(true)
@@ -190,7 +196,7 @@ function CircularsPage() {
     if (!normalized) return circulars
 
     return circulars.filter((item) => {
-      const haystack = `${item.subject || ''} ${formatDate(item.createdAt)}`.toLowerCase()
+      const haystack = `${item.subject || ''} ${formatDate(item.createdAt)} ${item.fechaVencimiento || ''}`.toLowerCase()
       return haystack.includes(normalized)
     })
   }, [search, circulars])
@@ -230,6 +236,7 @@ function CircularsPage() {
               <tr>
                 <th>Asunto</th>
                 <th>Fecha</th>
+                <th>Fecha vencimiento</th>
                 <th>Archivo</th>
                 {canManageCirculars && <th>Acciones</th>}
               </tr>
@@ -237,13 +244,14 @@ function CircularsPage() {
             <tbody>
               {filteredCirculars.length === 0 && (
                 <tr>
-                  <td colSpan={canManageCirculars ? 4 : 3}>No hay circulares para mostrar.</td>
+                  <td colSpan={canManageCirculars ? 5 : 4}>No hay circulares para mostrar.</td>
                 </tr>
               )}
               {(exportingAll ? filteredCirculars : filteredCirculars.slice((currentPage - 1) * 10, currentPage * 10)).map((item) => (
                 <tr key={item.id}>
                   <td data-label="Asunto">{item.subject || '-'}</td>
                   <td data-label="Fecha">{formatDate(item.createdAt)}</td>
+                  <td data-label="Fecha vencimiento">{item.fechaVencimiento || '-'}</td>
                   <td data-label="Archivo">
                     {item.pdf?.url ? (
                       <a href={item.pdf.url} target="_blank" rel="noreferrer" download className="pdf-download-icon" title="Descargar PDF">
@@ -320,6 +328,15 @@ function CircularsPage() {
                     type="text"
                     value={subject}
                     onChange={(event) => setSubject(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="circular-expiration">
+                  Fecha de vencimiento
+                  <input
+                    id="circular-expiration"
+                    type="date"
+                    value={fechaVencimiento}
+                    onChange={(event) => setFechaVencimiento(event.target.value)}
                   />
                 </label>
                 <div>

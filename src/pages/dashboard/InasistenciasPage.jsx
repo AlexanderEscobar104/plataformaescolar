@@ -125,6 +125,10 @@ function InasistenciasPage() {
       setValidationError('Por favor, completa todos los campos obligatorios.')
       return
     }
+    if (String(form.fechaHasta) < String(form.fechaDesde)) {
+      setValidationError('La fecha hasta debe ser mayor o igual a la fecha desde.')
+      return
+    }
 
     try {
       setSaving(true)
@@ -426,6 +430,7 @@ function InasistenciasPage() {
                 <input
                   id="ina-fecha-hasta"
                   type="date"
+                  min={form.fechaDesde || undefined}
                   value={form.fechaHasta}
                   onChange={(e) => setForm((prev) => ({ ...prev, fechaHasta: e.target.value }))}
                 />

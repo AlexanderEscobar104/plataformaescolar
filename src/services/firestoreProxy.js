@@ -8,7 +8,7 @@ import {
   collection,
   serverTimestamp,
 } from 'firebase/firestore'
-import { db } from '../firebase'
+import { auth, db } from '../firebase'
 
 /**
  * Returns the tenant NIT from the global auth context.
@@ -28,6 +28,25 @@ function getCurrentUser() {
     return window.__CURRENT_USER__
   }
   return { uid: '', nombre: '', numeroDocumento: '' }
+}
+
+function resolveNameFromUserDoc(userData, firebaseUser) {
+  const profile = userData?.profile || {}
+  const role = String(userData?.role || '').trim().toLowerCase()
+
+  if (role === 'estudiante') {
+    const nombres = `${profile.primerNombre || ''} ${profile.segundoNombre || ''}`.replace(/\s+/g, ' ').trim()
+    const apellidos = `${profile.primerApellido || ''} ${profile.segundoApellido || ''}`.replace(/\s+/g, ' ').trim()
+    const full = `${nombres} ${apellidos}`.replace(/\s+/g, ' ').trim()
+    if (full) return full
+  }
+
+  if (profile.nombres || profile.apellidos) {
+    const full = `${profile.nombres || ''} ${profile.apellidos || ''}`.replace(/\s+/g, ' ').trim()
+    if (full) return full
+  }
+
+  return userData?.name || firebaseUser?.displayName || firebaseUser?.email || ''
 }
 
 /**
@@ -87,8 +106,29 @@ function computeDiff(before, incoming) {
  */
 async function logHistory({ coleccion, documentoId, operacion, datoAnterior, datoNuevo }) {
   try {
-    const nitRut = getTenantNit()
-    const usuario = getCurrentUser()
+    let nitRut = getTenantNit()
+    let usuario = getCurrentUser()
+
+    // Fallback: if window user is not set, derive from Firebase auth + user document.
+    if (!usuario?.uid) {
+      const firebaseUser = auth?.currentUser || null
+      if (firebaseUser?.uid) {
+        let nombre = firebaseUser.displayName || firebaseUser.email || ''
+        let numeroDocumento = ''
+        try {
+          const snap = await getDoc(doc(db, 'users', firebaseUser.uid))
+          const userData = snap.exists() ? snap.data() : {}
+          if (!nitRut) {
+            nitRut = String(userData?.nitRut || userData?.profile?.nitRut || '').trim()
+          }
+          nombre = resolveNameFromUserDoc(userData, firebaseUser) || nombre
+          numeroDocumento = userData?.profile?.numeroDocumento || ''
+        } catch {
+          // Ignore fallback failure.
+        }
+        usuario = { uid: firebaseUser.uid, nombre, numeroDocumento }
+      }
+    }
 
     // Never log chat collections to historial_modificaciones (privacy/noise).
     const normalizedCollection = String(coleccion || '').trim().toLowerCase()

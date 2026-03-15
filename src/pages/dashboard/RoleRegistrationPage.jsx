@@ -14,12 +14,13 @@ import { PERMISSION_KEYS } from '../../utils/permissions'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
-function RoleRegistrationPage({ role, title }) {
+function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
   const navigate = useNavigate()
   const { userRole, hasPermission, userNitRut } = useAuth()
-  const isStudentForm = role === 'estudiante'
-  const isTeacherForm = role === 'profesor'
-  const isDirectivoForm = role === 'directivo'
+  const template = formTemplate || role
+  const isStudentForm = template === 'estudiante'
+  const isTeacherForm = template === 'profesor'
+  const isDirectivoForm = template === 'directivo'
   const canManageMembers = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
   const canManageStudents = !isStudentForm || canManageMembers
   const canManageTeacherRecords = !isTeacherForm || canManageMembers
@@ -548,7 +549,7 @@ function RoleRegistrationPage({ role, title }) {
       setConfirmPassword('')
       if (isStudentForm) {
         clearStudentFields()
-        navigate('/dashboard/crear-estudiantes', {
+        navigate(backTo || '/dashboard/crear-estudiantes', {
           replace: true,
           state: { flash: { text: 'Estudiante creado correctamente.' } },
         })
@@ -570,7 +571,7 @@ function RoleRegistrationPage({ role, title }) {
         setAsignaturasSeleccionadasProfesor([])
         setActiveTab('profesor-basica')
         if (isDirectivoForm) {
-          navigate('/dashboard/crear-directivos', {
+          navigate(backTo || '/dashboard/crear-directivos', {
             replace: true,
             state: { flash: { text: 'Directivo creado correctamente.' } },
           })
@@ -591,21 +592,21 @@ function RoleRegistrationPage({ role, title }) {
       {isStudentForm ? (
         <div className="students-header">
           <h2>{title}</h2>
-          <Link className="button button-link secondary" to="/dashboard/crear-estudiantes">
+          <Link className="button button-link secondary" to={backTo || '/dashboard/crear-estudiantes'}>
             Volver al listado
           </Link>
         </div>
       ) : isTeacherForm ? (
         <div className="students-header">
           <h2>{title}</h2>
-          <Link className="button button-link secondary" to="/dashboard/crear-profesores">
+          <Link className="button button-link secondary" to={backTo || '/dashboard/crear-profesores'}>
             Volver al listado
           </Link>
         </div>
       ) : isDirectivoForm ? (
         <div className="students-header">
           <h2>{title}</h2>
-          <Link className="button button-link secondary" to="/dashboard/crear-directivos">
+          <Link className="button button-link secondary" to={backTo || '/dashboard/crear-directivos'}>
             Volver al listado
           </Link>
         </div>

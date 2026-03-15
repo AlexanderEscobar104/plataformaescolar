@@ -122,6 +122,18 @@ function DashboardHomePage() {
         // Circulars
         const mappedCirculars = circularsSnapshot.docs
           .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+          .filter((item) => {
+            // Requisito: si la fecha de vencimiento es mayor a hoy, no se muestra en el inicio.
+            // Guardamos `fechaVencimiento` como YYYY-MM-DD; si no existe, se muestra.
+            if (!item.fechaVencimiento) return true
+            if (typeof item.fechaVencimiento === 'string') return item.fechaVencimiento <= today
+            if (typeof item.fechaVencimiento?.toDate === 'function') {
+              const d = item.fechaVencimiento.toDate()
+              const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+              return iso <= today
+            }
+            return true
+          })
           .sort((a, b) => {
             const bValue = b.createdAt?.toMillis?.() || 0
             const aValue = a.createdAt?.toMillis?.() || 0

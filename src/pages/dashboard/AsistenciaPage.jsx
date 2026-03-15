@@ -101,7 +101,7 @@ function chunk(array, size) {
 }
 
 function AsistenciaPage() {
-  const { user, userNitRut, hasPermission } = useAuth()
+  const { user, userNitRut, userRole, hasPermission } = useAuth()
   const canUseAttendance =
     hasPermission(PERMISSION_KEYS.INASISTENCIAS_CREATE) ||
     hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
@@ -113,12 +113,14 @@ function AsistenciaPage() {
 
   const [customRoles, setCustomRoles] = useState([])
   const [loadingRoles, setLoadingRoles] = useState(true)
+  const [roleMatrix, setRoleMatrix] = useState({})
   const [selectedRole, setSelectedRole] = useState('')
   const [selectedGrade, setSelectedGrade] = useState('')
   const [selectedGroup, setSelectedGroup] = useState('')
 
   const [users, setUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
+  const [userSearch, setUserSearch] = useState('')
   const [selectedUsers, setSelectedUsers] = useState({})
   const [markedUsers, setMarkedUsers] = useState(() => new Set())
   const [attendanceByUid, setAttendanceByUid] = useState({})
@@ -127,9 +129,17 @@ function AsistenciaPage() {
   const [saving, setSaving] = useState(false)
   const [deletingUid, setDeletingUid] = useState('')
   const [feedback, setFeedback] = useState('')
+  const [confirmMarkAllOpen, setConfirmMarkAllOpen] = useState(false)
   const selectAllRef = useRef(null)
 
   const roleOptions = useMemo(() => buildAllRoleOptions(customRoles), [customRoles])
+  const allowedRoleOptions = useMemo(() => {
+    const source = String(userRole || '').trim().toLowerCase()
+    const allowedTargets = Array.isArray(roleMatrix[source]) ? roleMatrix[source] : null
+    if (!allowedTargets) return roleOptions
+    if (allowedTargets.length === 0) return []
+    return roleOptions.filter((opt) => allowedTargets.includes(String(opt.value || '').trim().toLowerCase()))
+  }, [roleMatrix, roleOptions, userRole])
   const selectedRoleLabel = useMemo(
     () => roleOptions.find((opt) => opt.value === selectedRole)?.label || '',
     [roleOptions, selectedRole],
@@ -139,6 +149,15 @@ function AsistenciaPage() {
     () => Object.keys(selectedUsers).filter((uid) => selectedUsers[uid]),
     [selectedUsers],
   )
+
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase()
+    if (!q) return users
+    return users.filter((u) => {
+      const hay = `${u.numeroDocumento} ${u.nombres} ${u.apellidos}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [userSearch, users])
 
   const allSelected = useMemo(
     () => users.length > 0 && selectedUserIds.length === users.length,
@@ -162,6 +181,26 @@ function AsistenciaPage() {
       setCustomRoles([])
     } finally {
       setLoadingRoles(false)
+    }
+  }, [userNitRut])
+
+  useEffect(() => {
+    if (!userNitRut) {
+      setRoleMatrix({})
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const snap = await getDoc(doc(db, 'configuracion', `attendance_roles_${userNitRut}`))
+        const saved = snap.exists() ? (snap.data()?.roleMatrix || {}) : {}
+        if (!cancelled) setRoleMatrix(saved || {})
+      } catch {
+        if (!cancelled) setRoleMatrix({})
+      }
+    })()
+    return () => {
+      cancelled = true
     }
   }, [userNitRut])
 
@@ -304,6 +343,7 @@ function AsistenciaPage() {
   useEffect(() => {
     setFeedback('')
     setUsers([])
+    setUserSearch('')
     setSelectedUsers({})
     setMarkedUsers(new Set())
     setAttendanceByUid({})
@@ -340,7 +380,7 @@ function AsistenciaPage() {
     setSelectedUsers({})
   }
 
-  const applyAttendanceToggle = async () => {
+  const applyAttendanceToggleWithSelectedIds = async (uidsToMark) => {
     if (!canUseAttendance) {
       setFeedback('No tienes permisos para registrar asistencia.')
       return
@@ -353,7 +393,7 @@ function AsistenciaPage() {
       setFeedback('Para estudiantes debes seleccionar grado y grupo.')
       return
     }
-    if (!anySelected) {
+    if (!Array.isArray(uidsToMark) || uidsToMark.length === 0) {
       setFeedback('Selecciona al menos un usuario.')
       return
     }
@@ -363,7 +403,7 @@ function AsistenciaPage() {
     try {
       const batchSize = 12
       const allUserIds = users.map((u) => u.id)
-      const selectedSet = new Set(selectedUserIds)
+      const selectedSet = new Set(uidsToMark)
 
       // If all selected are marked, the action becomes "desmarcar": force selected to No.
       const desiredByUid = {}
@@ -425,6 +465,19 @@ function AsistenciaPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const applyAttendanceToggle = async () => {
+    if (!anySelected) {
+      if (users.length === 0) {
+        setFeedback('No hay usuarios para marcar.')
+        return
+      }
+      setConfirmMarkAllOpen(true)
+      return
+    }
+
+    await applyAttendanceToggleWithSelectedIds(selectedUserIds)
   }
 
   const handleDeleteAttendanceForUid = async (uid) => {
@@ -496,7 +549,7 @@ function AsistenciaPage() {
           <div className="attendance-filters">
             <h3>Roles</h3>
             <div className="teacher-checkbox-list" aria-busy={loadingRoles ? 'true' : 'false'}>
-              {roleOptions.map((role) => (
+              {allowedRoleOptions.map((role) => (
                 <label key={role.value} className="teacher-checkbox-item">
                   <input
                     type="checkbox"
@@ -507,7 +560,7 @@ function AsistenciaPage() {
                   <span>{role.label}</span>
                 </label>
               ))}
-              {roleOptions.length === 0 && <p className="feedback">No hay roles disponibles.</p>}
+              {allowedRoleOptions.length === 0 && <p className="feedback">No hay roles disponibles.</p>}
             </div>
 
             {selectedRole === 'estudiante' && (
@@ -579,6 +632,16 @@ function AsistenciaPage() {
                   </button>
                 </div>
 
+                <div className="students-toolbar">
+                  <input
+                    type="text"
+                    value={userSearch}
+                    onChange={(event) => setUserSearch(event.target.value)}
+                    placeholder="Buscar por documento, nombres o apellidos"
+                    disabled={saving || loadingUsers}
+                  />
+                </div>
+
                 <div className="students-table-wrap">
                   <table className="students-table attendance-table">
                     <thead>
@@ -602,7 +665,7 @@ function AsistenciaPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {users.map((item) => {
+                      {filteredUsers.map((item) => {
                         const checked = Boolean(selectedUsers[item.id])
                         const todayStatus = attendanceByUid[item.id] || (markedUsers.has(item.id) ? 'Si' : '-')
                         const isMarked = todayStatus === 'Si'
@@ -644,11 +707,19 @@ function AsistenciaPage() {
                               {todayStatus === 'Si' ? (
                                 <button
                                   type="button"
-                                  className="button small danger"
+                                  className="button small danger icon-action-button"
                                   onClick={() => handleDeleteAttendanceForUid(item.id)}
                                   disabled={!canDeleteAttendance || saving || deletingUid === item.id}
+                                  title="Borrar asistencia"
+                                  aria-label="Borrar asistencia"
                                 >
-                                  {deletingUid === item.id ? 'Borrando...' : 'Borrar'}
+                                  {deletingUid === item.id ? (
+                                    '...'
+                                  ) : (
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                      <path d="M7 21a2 2 0 0 1-2-2V7h14v12a2 2 0 0 1-2 2H7Zm3-3h2V10h-2v8Zm4 0h2V10h-2v8ZM9 4h6l1 1h4v2H4V5h4l1-1Z" />
+                                    </svg>
+                                  )}
                                 </button>
                               ) : (
                                 <span className="roles-no-actions">-</span>
@@ -666,7 +737,7 @@ function AsistenciaPage() {
                     type="button"
                     className="button"
                     onClick={applyAttendanceToggle}
-                    disabled={!canUseAttendance || saving || !anySelected}
+                    disabled={!canUseAttendance || saving || users.length === 0}
                   >
                     {saving ? 'Procesando...' : actionLabel}
                   </button>
@@ -676,6 +747,41 @@ function AsistenciaPage() {
           </div>
         </div>
       </div>
+
+      {confirmMarkAllOpen && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Confirmar marcacion">
+            <button
+              type="button"
+              className="modal-close-icon"
+              aria-label="Cerrar"
+              onClick={() => setConfirmMarkAllOpen(false)}
+            >
+              x
+            </button>
+            <h3>Confirmar marcacion</h3>
+            <p>
+              No seleccionaste ningun usuario. Se marcara asistencia a todos los registros mostrados en la lista.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="button secondary" onClick={() => setConfirmMarkAllOpen(false)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={async () => {
+                  setConfirmMarkAllOpen(false)
+                  await applyAttendanceToggleWithSelectedIds(users.map((u) => u.id))
+                }}
+                disabled={saving}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

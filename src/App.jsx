@@ -28,6 +28,9 @@ import StudentsListPage from './pages/dashboard/StudentsListPage'
 import UsersPage from './pages/dashboard/UsersPage'
 import DirectivosListPage from './pages/dashboard/DirectivosListPage'
 import DirectivoEditPage from './pages/dashboard/DirectivoEditPage'
+import RoleMembersListPage from './pages/dashboard/RoleMembersListPage'
+import RoleMemberRegistrationPage from './pages/dashboard/RoleMemberRegistrationPage'
+import RoleMemberEditPage from './pages/dashboard/RoleMemberEditPage'
 import AspirantesListPage from './pages/dashboard/AspirantesListPage'
 import AspiranteRegistrationPage from './pages/dashboard/AspiranteRegistrationPage'
 import AspiranteEditPage from './pages/dashboard/AspiranteEditPage'
@@ -47,6 +50,7 @@ import PermisosPage from './pages/dashboard/PermisosPage'
 import ChatSettingsPage from './pages/dashboard/ChatSettingsPage'
 import MessageSettingsPage from './pages/dashboard/MessageSettingsPage'
 import NotificationSettingsPage from './pages/dashboard/NotificationSettingsPage'
+import AttendanceSettingsPage from './pages/dashboard/AttendanceSettingsPage'
 import ReportTypeSettingsPage from './pages/dashboard/ReportTypeSettingsPage'
 import PlanCreationPage from './pages/dashboard/PlanCreationPage'
 import CamarasAsistenciaPage from './pages/dashboard/CamarasAsistenciaPage'
@@ -115,6 +119,9 @@ function App() {
             element={<RoleRegistrationPage role="directivo" title="Crear directivos" />}
           />
           <Route path="crear-directivos/editar/:directivoId" element={<DirectivoEditPage />} />
+          <Route path="crear-rol/:roleId" element={<RoleMembersListPage />} />
+          <Route path="crear-rol/:roleId/nuevo" element={<RoleMemberRegistrationPage />} />
+          <Route path="crear-rol/:roleId/editar/:memberId" element={<RoleMemberEditPage />} />
           <Route path="crear-aspirantes" element={<AspirantesListPage />} />
           <Route path="crear-aspirantes/nuevo" element={<AspiranteRegistrationPage />} />
           <Route path="crear-aspirantes/editar/:aspiranteId" element={<AspiranteEditPage />} />
@@ -210,6 +217,7 @@ function App() {
           <Route path="configuracion-chat" element={<ChatSettingsPage />} />
           <Route path="configuracion-mensajes" element={<MessageSettingsPage />} />
           <Route path="configuracion-notificaciones" element={<NotificationSettingsPage />} />
+          <Route path="configuracion-asistencia" element={<AttendanceSettingsPage />} />
           <Route path="configuracion-tipos-reporte" element={<ReportTypeSettingsPage />} />
           <Route
             path="creacion-planes"
