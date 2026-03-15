@@ -799,5 +799,15 @@ paths:
   
 
   directivo-jxcbm:
-    source: 'rtsp://1113666677:Alexander2025*@192.168.20.34:554/cam/realmonitor?channel=2&subtype=0'
+    source: 'rtsp://1113666677:Alexander2025*@192.168.20.34:554/cam/realmonitor?channel=2&subtype=1'
+
+
+  1921682034-ch4-s0-66tbj:
+    source: 'rtsp://1113666677:Alexander2025*@192.168.20.34:554/cam/realmonitor?channel=3&subtype=1'
+
+  1921682034-ch3-s0-gzjcu:
+    source: 'rtsp://1113666677:Alexander2025*@192.168.20.34:554/cam/realmonitor?channel=3&subtype=1'
+
+  1921682034-ch4-s0-pp49v:
+    source: 'rtsp://1113666677:Alexander2025*@192.168.20.34:554/cam/realmonitor?channel=4&subtype=1'
   all_others:

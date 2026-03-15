@@ -1,80 +1,108 @@
-const VECTOR_SIZE = 16
+import * as faceapi from 'face-api.js'
 
-function createCanvas(size = VECTOR_SIZE) {
+const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models'
+const DETECTOR_OPTIONS = new faceapi.TinyFaceDetectorOptions({
+  inputSize: 320,
+  scoreThreshold: 0.45,
+})
+
+let modelLoadingPromise = null
+
+function similarityFromDistance(distance) {
+  if (!Number.isFinite(distance)) return 0
+  return Math.max(0, Math.min(1, 1 - distance))
+}
+
+async function ensureFaceModelsLoaded() {
+  if (!modelLoadingPromise) {
+    modelLoadingPromise = Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+    ])
+  }
+  await modelLoadingPromise
+}
+
+function createImageElement(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.crossOrigin = 'anonymous'
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('No fue posible cargar la imagen de referencia. Revisa CORS o la URL.'))
+    image.src = url
+  })
+}
+
+function canvasFromImageBitmap(bitmap) {
   const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(bitmap, 0, 0)
   return canvas
 }
 
-async function toBitmapFromFile(file) {
-  return createImageBitmap(file)
-}
+async function descriptorFromSource(source) {
+  await ensureFaceModelsLoaded()
+  const result = await faceapi
+    .detectSingleFace(source, DETECTOR_OPTIONS)
+    .withFaceLandmarks()
+    .withFaceDescriptor()
 
-async function toBitmapFromUrl(url) {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error('No fue posible descargar la imagen.')
-  }
-  const blob = await response.blob()
-  return createImageBitmap(blob)
-}
-
-function imageBitmapToVector(bitmap, size = VECTOR_SIZE) {
-  const canvas = createCanvas(size)
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  ctx.drawImage(bitmap, 0, 0, size, size)
-  const imageData = ctx.getImageData(0, 0, size, size).data
-  const values = []
-  for (let i = 0; i < imageData.length; i += 4) {
-    const r = imageData[i]
-    const g = imageData[i + 1]
-    const b = imageData[i + 2]
-    const gray = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-    values.push(gray)
+  if (!result?.descriptor) {
+    throw new Error('No se detecto un rostro claro en la imagen o frame.')
   }
 
-  const mean = values.reduce((acc, value) => acc + value, 0) / values.length
-  const centered = values.map((value) => value - mean)
-  const norm = Math.sqrt(centered.reduce((acc, value) => acc + value * value, 0))
-  if (norm <= 0.000001) return centered.map(() => 0)
-  return centered.map((value) => value / norm)
+  return Array.from(result.descriptor)
 }
 
 async function vectorFromFile(file) {
-  const bitmap = await toBitmapFromFile(file)
+  const bitmap = await createImageBitmap(file)
   try {
-    return imageBitmapToVector(bitmap)
+    const canvas = canvasFromImageBitmap(bitmap)
+    return descriptorFromSource(canvas)
   } finally {
     bitmap.close()
   }
 }
 
 async function vectorFromUrl(url) {
-  const bitmap = await toBitmapFromUrl(url)
-  try {
-    return imageBitmapToVector(bitmap)
-  } finally {
-    bitmap.close()
+  const image = await createImageElement(url)
+  return descriptorFromSource(image)
+}
+
+async function vectorFromVideoFrame(videoElement) {
+  await ensureFaceModelsLoaded()
+  const result = await faceapi
+    .detectSingleFace(videoElement, DETECTOR_OPTIONS)
+    .withFaceLandmarks()
+    .withFaceDescriptor()
+
+  if (!result?.descriptor) {
+    return {
+      vector: null,
+      vectors: [],
+      faceDetected: false,
+      detectionScore: 0,
+    }
+  }
+
+  const descriptor = Array.from(result.descriptor)
+  return {
+    vector: descriptor,
+    vectors: [{ label: 'rostro-detectado', vector: descriptor }],
+    faceDetected: true,
+    detectionScore: Number(result.detection?.score || 0),
   }
 }
 
 function cosineSimilarity(vectorA, vectorB) {
-  if (!Array.isArray(vectorA) || !Array.isArray(vectorB) || vectorA.length !== vectorB.length) {
+  if (!Array.isArray(vectorA) || !Array.isArray(vectorB) || vectorA.length !== vectorB.length || vectorA.length === 0) {
     return 0
   }
-  let dot = 0
-  let normA = 0
-  let normB = 0
-  for (let i = 0; i < vectorA.length; i += 1) {
-    const a = vectorA[i]
-    const b = vectorB[i]
-    dot += a * b
-    normA += a * a
-    normB += b * b
-  }
-  if (normA <= 0.000001 || normB <= 0.000001) return 0
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB))
+  const distance = faceapi.euclideanDistance(vectorA, vectorB)
+  return similarityFromDistance(distance)
 }
 
-export { VECTOR_SIZE, cosineSimilarity, vectorFromFile, vectorFromUrl }
+export { cosineSimilarity, ensureFaceModelsLoaded, similarityFromDistance, vectorFromFile, vectorFromUrl, vectorFromVideoFrame }
