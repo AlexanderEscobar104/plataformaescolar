@@ -22,7 +22,7 @@ function formatTimestamp(ts) {
 }
 
 function splitName(fullName) {
-  const clean = String(fullName || '').replace(/\\s+/g, ' ').trim()
+  const clean = String(fullName || '').replace(/\s+/g, ' ').trim()
   if (!clean) return { nombres: '-', apellidos: '-' }
 
   const parts = clean.split(' ')
@@ -38,8 +38,8 @@ function resolveUserNames(data) {
   const role = data?.role || ''
 
   if (role === 'estudiante') {
-    const nombres = `${profile.primerNombre || ''} ${profile.segundoNombre || ''}`.replace(/\\s+/g, ' ').trim()
-    const apellidos = `${profile.primerApellido || ''} ${profile.segundoApellido || ''}`.replace(/\\s+/g, ' ').trim()
+    const nombres = `${profile.primerNombre || ''} ${profile.segundoNombre || ''}`.replace(/\s+/g, ' ').trim()
+    const apellidos = `${profile.primerApellido || ''} ${profile.segundoApellido || ''}`.replace(/\s+/g, ' ').trim()
     return { nombres: nombres || '-', apellidos: apellidos || '-' }
   }
 
@@ -836,6 +836,147 @@ function ReportesPage() {
       )}
 
       {/* ── Custom report type — placeholder ── */}
+      {/* Asistencias */}
+      {isAsistencias && (
+        <>
+          <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <input
+              type="text"
+              placeholder="Buscar por documento o nombre..."
+              value={asistenciaSearch}
+              onChange={(e) => { setAsistenciaSearch(e.target.value); setCurrentPage(1) }}
+              style={{ flex: '1 1 240px' }}
+            />
+            <select
+              className="role-select-box"
+              value={asistenciaRoleFilter}
+              onChange={(e) => { setAsistenciaRoleFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los roles</option>
+              {[...new Set(asistencias.map((a) => a.role).filter(Boolean))].sort().map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+            {asistenciaRoleFilter === 'estudiante' && (
+              <>
+                <input
+                  type="text"
+                  value={asistenciaGradeFilter}
+                  onChange={(e) => { setAsistenciaGradeFilter(e.target.value); setCurrentPage(1) }}
+                  placeholder="Grado (opcional)"
+                  style={{ width: '160px' }}
+                />
+                <input
+                  type="text"
+                  value={asistenciaGroupFilter}
+                  onChange={(e) => { setAsistenciaGroupFilter(e.target.value); setCurrentPage(1) }}
+                  placeholder="Grupo (opcional)"
+                  style={{ width: '160px' }}
+                />
+              </>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.88em' }}>
+                Desde
+                <input type="date" value={filterFechaDesde} onChange={(e) => { setFilterFechaDesde(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+              <label style={{ fontSize: '0.88em' }}>
+                Hasta
+                <input type="date" value={filterFechaHasta} onChange={(e) => { setFilterFechaHasta(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+            </div>
+            <button type="button" className="button secondary small" onClick={loadAsistencias} disabled={loadingAsistencias}>
+              Refrescar
+            </button>
+          </div>
+
+          {loadingAsistencias ? (
+            <p>Cargando asistencias...</p>
+          ) : (
+            (() => {
+              const normalizedSearch = asistenciaSearch.trim().toLowerCase()
+              const filtered = asistencias.filter((a) => {
+                if (asistenciaRoleFilter && a.role !== asistenciaRoleFilter) return false
+                if (asistenciaRoleFilter === 'estudiante') {
+                  if (asistenciaGradeFilter && String(a.grado || '') !== String(asistenciaGradeFilter)) return false
+                  if (asistenciaGroupFilter && String(a.grupo || '') !== String(asistenciaGroupFilter)) return false
+                }
+                if (normalizedSearch) {
+                  const hay = `${a.numeroDocumento} ${a.nombres} ${a.apellidos}`.toLowerCase()
+                  if (!hay.includes(normalizedSearch)) return false
+                }
+                return true
+              })
+
+              const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
+              const exportRows = filtered.map((a) => ({
+                Fecha: a.fecha || '-',
+                Rol: a.role || '-',
+                Grado: a.grado || '-',
+                Grupo: a.grupo || '-',
+                Documento: a.numeroDocumento || '-',
+                Nombres: a.nombres || '-',
+                Apellidos: a.apellidos || '-',
+              }))
+
+              return (
+                <>
+                  <div className="students-table-wrap">
+                    <table className="students-table">
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Rol</th>
+                          <th>Grado</th>
+                          <th>Grupo</th>
+                          <th>Documento</th>
+                          <th>Nombres</th>
+                          <th>Apellidos</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length === 0 && (
+                          <tr>
+                            <td colSpan="7">No hay asistencias para los filtros seleccionados.</td>
+                          </tr>
+                        )}
+                        {displayed.map((a) => (
+                          <tr key={a.id}>
+                            <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{a.fecha || '-'}</td>
+                            <td data-label="Rol">{a.role || '-'}</td>
+                            <td data-label="Grado">{a.grado || '-'}</td>
+                            <td data-label="Grupo">{a.grupo || '-'}</td>
+                            <td data-label="Documento">{a.numeroDocumento || '-'}</td>
+                            <td data-label="Nombres">{a.nombres || '-'}</td>
+                            <td data-label="Apellidos">{a.apellidos || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtered.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                  {canExportExcel && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                      <ExportExcelButton
+                        data={exportRows}
+                        filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'Asistencias'}
+                        onExportStart={() => setExportingAll(true)}
+                        onExportEnd={() => setExportingAll(false)}
+                      />
+                    </div>
+                  )}
+                </>
+              )
+            })()
+          )}
+        </>
+      )}
+
       {isCustomType && (
         <div style={{
           marginTop: '24px',
