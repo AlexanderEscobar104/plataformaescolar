@@ -4,7 +4,7 @@ import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
-import { PERMISSION_KEYS } from '../../utils/permissions'
+import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 
 const OPERACION_OPTIONS = [
   { value: '', label: 'Todas las operaciones' },
@@ -396,6 +396,10 @@ function ReportesPage() {
 
   const [asistencias, setAsistencias] = useState([])
   const [loadingAsistencias, setLoadingAsistencias] = useState(false)
+  const [asistenciaFeedback, setAsistenciaFeedback] = useState('')
+  const [asistenciaLegacyCount, setAsistenciaLegacyCount] = useState(0)
+
+  const [customRoles, setCustomRoles] = useState([])
   const [asistenciaRoleFilter, setAsistenciaRoleFilter] = useState('')
   const [asistenciaGradeFilter, setAsistenciaGradeFilter] = useState('')
   const [asistenciaGroupFilter, setAsistenciaGroupFilter] = useState('')
@@ -415,6 +419,7 @@ function ReportesPage() {
 
   // ── Load all active report types from Firestore ────────────────────────────
   const reportKind = useMemo(() => resolveReportKind(selectedTipo), [selectedTipo])
+  const roleOptions = useMemo(() => buildAllRoleOptions(customRoles), [customRoles])
 
   useEffect(() => {
     if (!userNitRut) return
@@ -453,6 +458,13 @@ function ReportesPage() {
     }
     loadTypes()
   }, [userNitRut, userRole])
+
+  useEffect(() => {
+    if (!userNitRut) return
+    getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut)))
+      .then((snap) => setCustomRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
+      .catch(() => setCustomRoles([]))
+  }, [userNitRut])
 
   useEffect(() => {
     if (!selectedTipo) return
@@ -495,21 +507,48 @@ function ReportesPage() {
   const loadAsistencias = useCallback(async () => {
     if (!userNitRut) return
     setLoadingAsistencias(true)
+    setAsistenciaFeedback('')
     try {
       const desde = filterFechaDesde || new Date().toISOString().split('T')[0]
       const hasta = filterFechaHasta || new Date().toISOString().split('T')[0]
 
-      const snap = await getDocs(
+      // Primary strategy: query by tenant (uses single-field index) and filter by date client-side
+      // to avoid composite-index requirements.
+      const primarySnap = await getDocs(
         query(
           collection(db, 'asistencias'),
           where('nitRut', '==', userNitRut),
-          where('fecha', '>=', desde),
-          where('fecha', '<=', hasta),
-          orderBy('fecha', 'desc'),
         ),
       )
 
-      const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      let raw = primarySnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      raw = raw.filter((r) => String(r.fecha || '') >= String(desde) && String(r.fecha || '') <= String(hasta))
+
+      // Fallback for legacy records that were saved without nitRut.
+      // This query only touches the "fecha" field, so it should be indexed by default.
+      let legacyCount = 0
+      if (raw.length === 0) {
+        try {
+          const legacySnap = await getDocs(
+            query(
+              collection(db, 'asistencias'),
+              where('fecha', '>=', desde),
+              where('fecha', '<=', hasta),
+              orderBy('fecha', 'desc'),
+            ),
+          )
+          const legacyRaw = legacySnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+          const legacyFiltered = legacyRaw.filter((r) => !r.nitRut || String(r.nitRut) === String(userNitRut))
+          legacyCount = legacyFiltered.filter((r) => !r.nitRut).length
+          raw = legacyFiltered
+        } catch {
+          // Ignore fallback failure.
+        }
+      }
+
+      setAsistenciaLegacyCount(legacyCount)
+
+      raw = raw.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')))
       const uids = [...new Set(raw.map((r) => String(r.uid || '')).filter(Boolean))]
 
       const usersById = new Map()
@@ -543,6 +582,8 @@ function ReportesPage() {
     } catch (err) {
       console.error('Error loading asistencias:', err)
       setAsistencias([])
+      setAsistenciaLegacyCount(0)
+      setAsistenciaFeedback('No fue posible cargar las asistencias registradas.')
     } finally {
       setLoadingAsistencias(false)
     }
@@ -826,8 +867,8 @@ function ReportesPage() {
               onChange={(e) => { setAsistenciaRoleFilter(e.target.value); setCurrentPage(1) }}
             >
               <option value="">Todos los roles</option>
-              {[...new Set(asistencias.map((a) => a.role).filter(Boolean))].sort().map((role) => (
-                <option key={role} value={role}>{role}</option>
+              {roleOptions.map((role) => (
+                <option key={role.value} value={role.value}>{role.label}</option>
               ))}
             </select>
             {asistenciaRoleFilter === 'estudiante' && (
@@ -862,6 +903,13 @@ function ReportesPage() {
               Refrescar
             </button>
           </div>
+
+          {asistenciaFeedback && <p className="feedback error">{asistenciaFeedback}</p>}
+          {asistenciaLegacyCount > 0 && (
+            <p className="feedback">
+              Se incluyeron {asistenciaLegacyCount} registros antiguos sin NIT/RUT.
+            </p>
+          )}
 
           {loadingAsistencias ? (
             <p>Cargando asistencias...</p>
