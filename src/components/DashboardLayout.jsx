@@ -320,6 +320,7 @@ function DashboardLayout() {
 
     if (canManageMembers) {
       items.push({ label: 'Empleados', to: '/dashboard/empleados', Icon: UserIcon })
+      items.push({ label: 'Tipo empleado', to: '/dashboard/tipo-empleado', Icon: UserIcon })
       items.push({ label: 'Datos de cobro', to: '/dashboard/datos-cobro', Icon: GearIcon })
       items.push({ label: 'Servicios complementarios', to: '/dashboard/servicios-complementarios', Icon: GearIcon })
     }

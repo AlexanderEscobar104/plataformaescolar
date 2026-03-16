@@ -111,6 +111,7 @@ function MessagesPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [roleMatrix, setRoleMatrix] = useState({})
   const [roleMatrixReady, setRoleMatrixReady] = useState(false)
+  const [studentGroupMatrix, setStudentGroupMatrix] = useState({})
   const [readReceiptsModal, setReadReceiptsModal] = useState(null)
 
   useEffect(() => {
@@ -157,6 +158,7 @@ function MessagesPage() {
         }))
         const nextAllRoleValues = roleOptions.map((r) => r.value)
         const savedMatrix = settingsSnapshot.data()?.roleMatrix || {}
+        const savedStudentGroupMatrix = settingsSnapshot.data()?.studentGroupMatrix || {}
         const nextMatrix = {}
 
         nextAllRoleValues.forEach((role) => {
@@ -167,10 +169,12 @@ function MessagesPage() {
         setTargetRoleOptions(roleOptions)
         setAllRoleValues(nextAllRoleValues)
         setRoleMatrix(nextMatrix)
+        setStudentGroupMatrix(savedStudentGroupMatrix)
       } catch {
         setRoleMatrix({})
         setTargetRoleOptions([])
         setAllRoleValues([])
+        setStudentGroupMatrix({})
       } finally {
         setRoleMatrixReady(true)
       }
@@ -261,6 +265,9 @@ function MessagesPage() {
   }, [allRoleValues, isUserActive, user?.uid, users])
 
   const studentGroups = useMemo(() => {
+    const source = normalizeRole(userRole)
+    const allowedKeys = Array.isArray(studentGroupMatrix[source]) ? studentGroupMatrix[source] : null
+
     const map = new Map()
     ;(usersByRole.estudiante || []).forEach((item) => {
       const grade = item.grade || '-'
@@ -270,11 +277,14 @@ function MessagesPage() {
       existing.uids.push(item.uid)
       map.set(key, existing)
     })
-    return Array.from(map.values()).sort((a, b) => {
+    const groups = Array.from(map.values()).sort((a, b) => {
       if (a.grade !== b.grade) return a.grade.localeCompare(b.grade, undefined, { numeric: true })
       return a.group.localeCompare(b.group)
     })
-  }, [usersByRole])
+
+    if (!allowedKeys) return groups
+    return groups.filter((g) => allowedKeys.includes(g.key))
+  }, [studentGroupMatrix, userRole, usersByRole])
 
   const selectedStudentGroupUids = useMemo(() => {
     const set = new Set()
@@ -1028,7 +1038,13 @@ function MessagesPage() {
 
       {readReceiptsModal && (
         <div className="modal-overlay" role="presentation">
-          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Leidos del mensaje">
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Leidos del mensaje"
+            style={{ width: 'min(94vw, 920px)', maxWidth: '920px', maxHeight: '84vh', overflowY: 'auto' }}
+          >
             <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={() => setReadReceiptsModal(null)}>
               x
             </button>
@@ -1052,7 +1068,10 @@ function MessagesPage() {
                     </tr>
                   )}
                   {(readReceiptsModal.recipients || []).map((r) => (
-                    <tr key={r.uid || `${r.name}-${r.estado}`}>
+                    <tr
+                      key={r.uid || `${r.name}-${r.estado}`}
+                      style={r.estado === 'No leido' ? { background: '#ffe4e6' } : undefined}
+                    >
                       <td data-label="Destinatario">{r.name || '-'}</td>
                       <td data-label="Estado">{r.estado || '-'}</td>
                       <td data-label="Fecha y hora de leido" style={{ whiteSpace: 'nowrap' }}>

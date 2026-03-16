@@ -81,10 +81,14 @@ function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser)
+      setLoading(true)
 
       if (!firebaseUser) {
+        setUser(null)
         setUserRole('')
+        setUserNitRut('')
+        window.__TENANT_ID__ = undefined
+        window.__CURRENT_USER__ = undefined
         setLoading(false)
         return
       }
@@ -92,7 +96,22 @@ function AuthProvider({ children }) {
       try {
         const userSnapshot = await getDoc(doc(db, 'users', firebaseUser.uid))
         const userData = userSnapshot.data() || {}
+        const profile = userData.profile || {}
+        const infoComplementaria = profile.informacionComplementaria || {}
+        const estado = String(infoComplementaria.estado || profile.estado || 'activo').trim().toLowerCase()
 
+        if (estado !== 'activo') {
+          // Usuario bloqueado: no permitir sesion.
+          window.__TENANT_ID__ = undefined
+          window.__CURRENT_USER__ = undefined
+          setUser(null)
+          setUserRole('')
+          setUserNitRut('')
+          await signOut(auth).catch(() => {})
+          return
+        }
+
+        setUser(firebaseUser)
         setUserRole(userData.role || '')
         setUserNitRut(userData.nitRut || '')
 
@@ -114,8 +133,11 @@ function AuthProvider({ children }) {
           error: error.message,
           timestamp: new Date().toISOString(),
         })
+        setUser(null)
         setUserRole('')
         setUserNitRut('')
+        window.__TENANT_ID__ = undefined
+        window.__CURRENT_USER__ = undefined
       } finally {
         setLoading(false)
       }
@@ -201,6 +223,15 @@ function AuthProvider({ children }) {
       const userSnapshot = await getDoc(doc(db, 'users', preCredentials.user.uid))
       const userData = userSnapshot.data() || {}
       const userNit = String(userData.nitRut || userData.profile?.nitRut || '').trim()
+      const profile = userData.profile || {}
+      const infoComplementaria = profile.informacionComplementaria || {}
+      const estado = String(infoComplementaria.estado || profile.estado || 'activo').trim().toLowerCase()
+
+      if (estado !== 'activo') {
+        const blockedError = new Error('El usuario no se encuentra activo.')
+        blockedError.code = 'user/inactive'
+        throw blockedError
+      }
 
       if (userNit) {
         const latestPlan = await getLatestPlanByNit(userNit)

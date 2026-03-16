@@ -59,15 +59,18 @@ function UsersPage() {
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const [users, setUsers] = useState([])
   const [editableRoles, setEditableRoles] = useState({})
+  const [editableStates, setEditableStates] = useState({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [updatingRoleUserId, setUpdatingRoleUserId] = useState('')
+  const [updatingStateUserId, setUpdatingStateUserId] = useState('')
   const [userToDelete, setUserToDelete] = useState(null)
   const [noPermDeleteModal, setNoPermDeleteModal] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [customRoles, setCustomRoles] = useState([])
   const [roleChangeConfirm, setRoleChangeConfirm] = useState(null)
+  const [stateChangeConfirm, setStateChangeConfirm] = useState(null)
 
   const loadUsers = useCallback(async () => {
     if (!canViewUsers) {
@@ -117,13 +120,19 @@ function UsersPage() {
             estado,
           }
         })
-        .filter((item) => String(item.estado).toLowerCase() !== 'inactivo')
         .sort((a, b) => `${a.nombres} ${a.apellidos}`.localeCompare(`${b.nombres} ${b.apellidos}`))
 
       setUsers(mappedUsers)
       setEditableRoles(
         mappedUsers.reduce((accumulator, item) => {
           accumulator[item.id] = item.rol === '-' ? '' : item.rol
+          return accumulator
+        }, {}),
+      )
+      setEditableStates(
+        mappedUsers.reduce((accumulator, item) => {
+          const normalized = String(item.estado || 'activo').trim().toLowerCase()
+          accumulator[item.id] = normalized || 'activo'
           return accumulator
         }, {}),
       )
@@ -208,6 +217,50 @@ function UsersPage() {
     }
   }
 
+  const handleStateChange = (item, newStateValue) => {
+    const oldState = String(editableStates[item.id] || '').trim().toLowerCase()
+    const normalizedNext = String(newStateValue || '').trim().toLowerCase()
+
+    if (normalizedNext && normalizedNext !== oldState) {
+      setStateChangeConfirm({ item, oldState, newState: normalizedNext })
+    }
+
+    setEditableStates((previous) => ({ ...previous, [item.id]: normalizedNext }))
+  }
+
+  const handleCancelStateChange = () => {
+    if (!stateChangeConfirm) return
+    setEditableStates((previous) => ({ ...previous, [stateChangeConfirm.item.id]: stateChangeConfirm.oldState }))
+    setStateChangeConfirm(null)
+  }
+
+  const handleAssignStateConfirm = async () => {
+    if (!canAssignRoles || !stateChangeConfirm) {
+      setFeedback('No tienes permisos para cambiar el estado del usuario o la sesion expiro.')
+      setStateChangeConfirm(null)
+      return
+    }
+
+    const { item, newState } = stateChangeConfirm
+    try {
+      setUpdatingStateUserId(item.id)
+      await updateDocTracked(doc(db, 'users', item.id), {
+        'profile.estado': newState,
+        'profile.informacionComplementaria.estado': newState,
+        updatedAt: new Date().toISOString(),
+      })
+      setFeedback('Estado actualizado correctamente.')
+      setStateChangeConfirm(null)
+      await loadUsers()
+    } catch {
+      setFeedback('No fue posible actualizar el estado del usuario.')
+      setEditableStates((previous) => ({ ...previous, [item.id]: stateChangeConfirm.oldState }))
+      setStateChangeConfirm(null)
+    } finally {
+      setUpdatingStateUserId('')
+    }
+  }
+
   const filteredUsers = useMemo(() => {
     const normalized = search.trim().toLowerCase()
     if (!normalized) return users
@@ -221,7 +274,7 @@ function UsersPage() {
   return (
     <section>
       <h2>Usuarios</h2>
-      <p>Listado de usuarios activos de la plataforma.</p>
+      <p>Listado de usuarios de la plataforma.</p>
       {!canViewUsers && <p className="feedback">No tienes permisos para ver usuarios.</p>}
       <div className="students-toolbar">
 
@@ -255,7 +308,7 @@ function UsersPage() {
             <tbody>
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan="9">No hay usuarios activos para mostrar.</td>
+                  <td colSpan="9">No hay usuarios para mostrar.</td>
                 </tr>
               )}
               {filteredUsers.map((item) => (
@@ -283,7 +336,28 @@ function UsersPage() {
                   </td>
                   <td data-label="Fecha de creacion">{formatDate(item.fechaCreacion)}</td>
                   <td data-label="Fecha de acceso">{formatDate(item.fechaAcceso)}</td>
-                  <td data-label="Estado">{item.estado}</td>
+                  <td data-label="Estado">
+                    <select
+                      className="role-select-box"
+                      value={editableStates[item.id] || 'activo'}
+                      onChange={(event) => handleStateChange(item, event.target.value)}
+                      disabled={!canAssignRoles || updatingStateUserId === item.id}
+                      aria-label="Cambiar estado del usuario"
+                      title={canAssignRoles ? 'Cambiar estado' : 'Sin permiso para cambiar estado'}
+                    >
+                      <option value="activo">Activo</option>
+                      <option value="inactivo">Inactivo</option>
+                      {(() => {
+                        const current = String(editableStates[item.id] || '').trim().toLowerCase()
+                        if (!current || current === 'activo' || current === 'inactivo') return null
+                        return (
+                          <option value={current}>
+                            {current}
+                          </option>
+                        )
+                      })()}
+                    </select>
+                  </td>
                   <td className="student-actions" data-label="Eliminar">
                     <button
                       type="button"
@@ -413,6 +487,42 @@ function UsersPage() {
                 className="button secondary"
                 disabled={updatingRoleUserId !== ''}
                 onClick={handleCancelRoleChange}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stateChangeConfirm && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Confirmar cambio de estado">
+            <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={handleCancelStateChange}>
+              x
+            </button>
+            <h3>Confirmar cambio de estado</h3>
+            <p>
+              Seguro que deseas cambiar el estado a <strong>"{stateChangeConfirm.newState}"</strong> para el usuario{' '}
+              <strong>{stateChangeConfirm.item.nombres} {stateChangeConfirm.item.apellidos}</strong>?
+            </p>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+              El estado anterior era: {stateChangeConfirm.oldState || 'activo'}
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="button"
+                disabled={updatingStateUserId !== ''}
+                onClick={handleAssignStateConfirm}
+              >
+                {updatingStateUserId !== '' ? 'Guardando...' : 'Si, cambiar estado'}
+              </button>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={updatingStateUserId !== ''}
+                onClick={handleCancelStateChange}
               >
                 Cancelar
               </button>

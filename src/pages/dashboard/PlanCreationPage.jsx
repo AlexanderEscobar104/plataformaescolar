@@ -40,6 +40,7 @@ const MODULE_OPTIONS = [
   { key: 'creacion-planes', label: 'Creacion de planes', route: '/dashboard/creacion-planes' },
   { key: 'almacenamiento', label: 'Almacenamiento', route: '/dashboard/almacenamiento' },
   { key: 'empleados', label: 'Empleados', route: '/dashboard/empleados' },
+  { key: 'tipo-empleado', label: 'Tipo empleado', route: '/dashboard/tipo-empleado' },
   { key: 'datos-cobro', label: 'Datos de cobro', route: '/dashboard/datos-cobro' },
   { key: 'servicios-complementarios', label: 'Servicios complementarios', route: '/dashboard/servicios-complementarios' },
   { key: 'mensajes', label: 'Mensajes', route: '/dashboard/mensajes' },

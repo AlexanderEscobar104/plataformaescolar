@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { doc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { setDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
@@ -12,8 +12,11 @@ function DatosCobroPage() {
   const { hasPermission, userNitRut } = useAuth()
   const canManage = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
 
-  const [fechaCobro, setFechaCobro] = useState('')
+  const [diaCorte, setDiaCorte] = useState('')
   const [cobraServiciosComplementarios, setCobraServiciosComplementarios] = useState(false)
+  const [cobradores, setCobradores] = useState([])
+  const [cobradorAutomaticoId, setCobradorAutomaticoId] = useState('')
+  const [loadingCobradores, setLoadingCobradores] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
@@ -23,19 +26,46 @@ function DatosCobroPage() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true)
+      setLoadingCobradores(true)
       try {
-        const snapshot = await getDoc(doc(db, 'configuracion', `datos_cobro_${userNitRut}`))
+        const [snapshot, empleadosSnap] = await Promise.all([
+          getDoc(doc(db, 'configuracion', `datos_cobro_${userNitRut}`)),
+          getDocs(query(collection(db, 'empleados'), where('nitRut', '==', userNitRut))),
+        ])
+
+        const mappedCobradores = empleadosSnap.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+          .filter((emp) => String(emp.tipoEmpleado || '').trim().toLowerCase() === 'cobrador')
+          .sort((a, b) => `${a.nombres || ''} ${a.apellidos || ''}`.localeCompare(`${b.nombres || ''} ${b.apellidos || ''}`))
+
+        setCobradores(mappedCobradores)
+
         if (snapshot.exists()) {
           const data = snapshot.data()
-          setFechaCobro(data.fechaCobro || '')
+          const storedDiaCorte = data.diaCorte
+          if (typeof storedDiaCorte === 'number') {
+            setDiaCorte(String(storedDiaCorte))
+          } else if (typeof storedDiaCorte === 'string') {
+            setDiaCorte(storedDiaCorte)
+          } else if (data.fechaCobro) {
+            const parsed = new Date(data.fechaCobro)
+            const day = Number.isNaN(parsed.getTime()) ? '' : String(Math.min(Math.max(parsed.getDate(), 1), 30))
+            setDiaCorte(day)
+          } else {
+            setDiaCorte('')
+          }
+
           setCobraServiciosComplementarios(!!data.cobraServiciosComplementarios)
+          setCobradorAutomaticoId(String(data.cobradorAutomaticoId || ''))
         }
       } finally {
+        setLoadingCobradores(false)
         setLoading(false)
       }
     }
+    if (!userNitRut) return
     loadData()
-  }, [])
+  }, [userNitRut])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -45,8 +75,10 @@ function DatosCobroPage() {
       setModalOpen(true)
       return
     }
-    if (!fechaCobro) {
-      setModalMessage('Debes seleccionar una fecha de cobro.')
+
+    const parsedDia = Number.parseInt(String(diaCorte || '').trim(), 10)
+    if (!Number.isInteger(parsedDia) || parsedDia < 1 || parsedDia > 30) {
+      setModalMessage('Debes ingresar el dia de corte (numero del 1 al 30).')
       setModalType('error')
       setModalOpen(true)
       return
@@ -54,9 +86,16 @@ function DatosCobroPage() {
 
     try {
       setSaving(true)
+      const selected = cobradores.find((emp) => emp.id === cobradorAutomaticoId) || null
       await setDocTracked(
         doc(db, 'configuracion', `datos_cobro_${userNitRut}`),
-        { fechaCobro, cobraServiciosComplementarios, updatedAt: serverTimestamp() },
+        {
+          diaCorte: parsedDia,
+          cobraServiciosComplementarios,
+          cobradorAutomaticoId: cobradorAutomaticoId || '',
+          cobradorAutomaticoNombre: selected ? `${selected.nombres || ''} ${selected.apellidos || ''}`.trim() : '',
+          updatedAt: serverTimestamp(),
+        },
         { merge: true },
       )
       setModalMessage('Datos de cobro guardados correctamente.')
@@ -88,14 +127,44 @@ function DatosCobroPage() {
         <div className="home-left-card evaluations-card" style={{ maxWidth: '600px' }}>
           <form className="form role-form" onSubmit={handleSubmit}>
             <fieldset className="form-fieldset" disabled={!canManage || saving}>
-              <label htmlFor="fecha-cobro">
-                Fecha de cobro
+              <label htmlFor="dia-corte">
+                Dia de corte (1 a 30)
                 <input
-                  id="fecha-cobro"
-                  type="date"
-                  value={fechaCobro}
-                  onChange={(e) => setFechaCobro(e.target.value)}
+                  id="dia-corte"
+                  type="number"
+                  min={1}
+                  max={30}
+                  inputMode="numeric"
+                  value={diaCorte}
+                  onChange={(e) => setDiaCorte(e.target.value)}
                 />
+              </label>
+
+              <label htmlFor="cobrador-automatico" style={{ marginTop: '14px' }}>
+                Cobrador automatico
+                <select
+                  id="cobrador-automatico"
+                  value={cobradorAutomaticoId}
+                  onChange={(e) => setCobradorAutomaticoId(e.target.value)}
+                  disabled={loadingCobradores}
+                >
+                  <option value="">{loadingCobradores ? 'Cargando cobradores...' : 'Sin asignar'}</option>
+                  {cobradores.map((emp) => (
+                    <option
+                      key={emp.id}
+                      value={emp.id}
+                      disabled={String(emp.estado || 'activo').trim().toLowerCase() !== 'activo'}
+                    >
+                      {`${emp.nombres || ''} ${emp.apellidos || ''}`.trim() || 'Empleado'} - {String(emp.estado || 'activo')}
+                      {emp.numeroDocumento ? ` (${emp.numeroDocumento})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {!loadingCobradores && cobradores.length === 0 && (
+                  <small style={{ display: 'block', marginTop: '6px', color: 'var(--text-secondary)' }}>
+                    No hay empleados con tipo de empleado "Cobrador".
+                  </small>
+                )}
               </label>
 
               <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>

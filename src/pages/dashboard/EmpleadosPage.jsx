@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDocs, serverTimestamp, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { addDocTracked, updateDocTracked, deleteDocTracked } from '../../services/firestoreProxy'
@@ -23,17 +23,22 @@ const EMPTY_FORM = {
   telefono: '',
   direccion: '',
   email: '',
+  tipoEmpleado: '',
   cargo: '',
+  estado: 'activo',
 }
 
 function EmpleadosPage() {
   const { hasPermission, userNitRut } = useAuth()
   const canManage = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
 
   const [empleados, setEmpleados] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [tiposEmpleado, setTiposEmpleado] = useState([])
+  const [loadingTipos, setLoadingTipos] = useState(true)
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -43,7 +48,12 @@ function EmpleadosPage() {
   const [empleadoToDelete, setEmpleadoToDelete] = useState(null)
   const [flashMessage, setFlashMessage] = useState('')
 
-  const loadEmpleados = async () => {
+  const loadEmpleados = useCallback(async () => {
+    if (!userNitRut) {
+      setEmpleados([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const snapshot = await getDocs(query(collection(db, 'empleados'), where('nitRut', '==', userNitRut)))
@@ -54,10 +64,30 @@ function EmpleadosPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [userNitRut])
 
   useEffect(() => {
     loadEmpleados()
+  }, [loadEmpleados])
+
+  useEffect(() => {
+    let mounted = true
+    const loadTipos = async () => {
+      setLoadingTipos(true)
+      try {
+        const snapshot = await getDocs(collection(db, 'tipo_empleados'))
+        const mapped = snapshot.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+          .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')))
+        if (mounted) setTiposEmpleado(mapped)
+      } finally {
+        if (mounted) setLoadingTipos(false)
+      }
+    }
+    loadTipos()
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const handleOpenCreate = () => {
@@ -77,7 +107,9 @@ function EmpleadosPage() {
       telefono: empleado.telefono || '',
       direccion: empleado.direccion || '',
       email: empleado.email || '',
+      tipoEmpleado: empleado.tipoEmpleado || '',
       cargo: empleado.cargo || '',
+      estado: empleado.estado || 'activo',
     })
     setFormError('')
     setShowForm(true)
@@ -113,7 +145,9 @@ function EmpleadosPage() {
         telefono: form.telefono.trim(),
         direccion: form.direccion.trim(),
         email: form.email.trim().toLowerCase(),
+        tipoEmpleado: form.tipoEmpleado.trim(),
         cargo: form.cargo.trim(),
+        estado: form.estado || 'activo',
         updatedAt: serverTimestamp(),
       }
 
@@ -149,17 +183,54 @@ function EmpleadosPage() {
     }
   }
 
+  const tiposEmpleadoActivos = useMemo(() => {
+    return tiposEmpleado.filter((t) => String(t.estado || '').toLowerCase() !== 'inactivo')
+  }, [tiposEmpleado])
+
+  const exportRows = useMemo(() => {
+    return empleados.map((emp) => ({
+      TipoDocumento: emp.tipoDocumento || '-',
+      NumeroDocumento: emp.numeroDocumento || '-',
+      Nombres: emp.nombres || '-',
+      Apellidos: emp.apellidos || '-',
+      Telefono: emp.telefono || '-',
+      Direccion: emp.direccion || '-',
+      Email: emp.email || '-',
+      TipoEmpleado: emp.tipoEmpleado || '-',
+      Cargo: emp.cargo || '-',
+      Estado: emp.estado || 'activo',
+    }))
+  }, [empleados])
+
   return (
     <section>
       <div className="students-header">
         <h2>Empleados</h2>
-        {canManage && (
-          <button type="button" className="button" onClick={handleOpenCreate}>
-            Agregar empleado
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {canExportExcel && (
+            <ExportExcelButton data={exportRows} filename="Empleados" />
+          )}
+          {canManage && (
+            <button type="button" className="button" onClick={handleOpenCreate}>
+              Agregar empleado
+            </button>
+          )}
+        </div>
       </div>
       <p>Gestiona el listado de empleados de la institucion.</p>
+
+      <div className="home-left-card evaluations-card" style={{ maxWidth: '900px' }}>
+        <h3>Tipos de empleado</h3>
+        {loadingTipos ? (
+          <p>Cargando tipos de empleado...</p>
+        ) : (
+          <p style={{ margin: 0 }}>
+            {tiposEmpleadoActivos.length === 0
+              ? 'No hay tipos de empleado activos. Crea uno en Configuracion > Tipo empleado.'
+              : tiposEmpleadoActivos.map((t) => t.nombre).filter(Boolean).join(', ')}
+          </p>
+        )}
+      </div>
 
       {loading ? (
         <p>Cargando empleados...</p>
@@ -175,14 +246,16 @@ function EmpleadosPage() {
                 <th>Telefono</th>
                 <th>Direccion</th>
                 <th>Email</th>
+                <th>Tipo empleado</th>
                 <th>Cargo</th>
+                <th>Estado</th>
                 {canManage && <th>Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {empleados.length === 0 && (
                 <tr>
-                  <td colSpan={canManage ? 9 : 8}>No hay empleados registrados.</td>
+                  <td colSpan={canManage ? 11 : 10}>No hay empleados registrados.</td>
                 </tr>
               )}
               {empleados.map((emp) => (
@@ -194,7 +267,9 @@ function EmpleadosPage() {
                   <td data-label="Telefono">{emp.telefono || '-'}</td>
                   <td data-label="Direccion">{emp.direccion || '-'}</td>
                   <td data-label="Email">{emp.email || '-'}</td>
+                  <td data-label="Tipo empleado">{emp.tipoEmpleado || '-'}</td>
                   <td data-label="Cargo">{emp.cargo || '-'}</td>
+                  <td data-label="Estado">{emp.estado || 'activo'}</td>
                   {canManage && (
                     <td className="student-actions" data-label="Acciones">
                       <button
@@ -262,7 +337,7 @@ function EmpleadosPage() {
                 <label htmlFor="emp-nombres">
                   Nombres
                   <input
-                    id="exp-nombres"
+                    id="emp-nombres"
                     type="text"
                     value={form.nombres}
                     onChange={(e) => handleChange('nombres', e.target.value)}
@@ -285,6 +360,33 @@ function EmpleadosPage() {
                     value={form.telefono}
                     onChange={(e) => handleChange('telefono', e.target.value)}
                   />
+                </label>
+                <label htmlFor="emp-tipo-empleado">
+                  Tipo empleado
+                  <select
+                    id="emp-tipo-empleado"
+                    value={form.tipoEmpleado}
+                    onChange={(e) => handleChange('tipoEmpleado', e.target.value)}
+                    disabled={loadingTipos}
+                  >
+                    <option value="">{loadingTipos ? 'Cargando tipos...' : 'Seleccionar tipo'}</option>
+                    {tiposEmpleadoActivos.map((tipo) => (
+                      <option key={tipo.id} value={tipo.nombre || ''}>
+                        {tipo.nombre || '-'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label htmlFor="emp-estado">
+                  Estado
+                  <select
+                    id="emp-estado"
+                    value={form.estado}
+                    onChange={(e) => handleChange('estado', e.target.value)}
+                  >
+                    <option value="activo">Activo</option>
+                    <option value="inactivo">Inactivo</option>
+                  </select>
                 </label>
                 <label htmlFor="emp-cargo">
                   Cargo

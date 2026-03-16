@@ -35,6 +35,7 @@ import AspirantesListPage from './pages/dashboard/AspirantesListPage'
 import AspiranteRegistrationPage from './pages/dashboard/AspiranteRegistrationPage'
 import AspiranteEditPage from './pages/dashboard/AspiranteEditPage'
 import EmpleadosPage from './pages/dashboard/EmpleadosPage'
+import TipoEmpleadosPage from './pages/dashboard/TipoEmpleadosPage'
 import DatosCobroPage from './pages/dashboard/DatosCobroPage'
 import ServiciosComplementariosPage from './pages/dashboard/ServiciosComplementariosPage'
 import StoragePage from './pages/dashboard/StoragePage'
@@ -231,6 +232,7 @@ function App() {
           <Route path="asistencia" element={<AsistenciaPage />} />
           <Route path="almacenamiento" element={<StoragePage />} />
           <Route path="empleados" element={<EmpleadosPage />} />
+          <Route path="tipo-empleado" element={<TipoEmpleadosPage />} />
           <Route path="datos-cobro" element={<DatosCobroPage />} />
           <Route path="servicios-complementarios" element={<ServiciosComplementariosPage />} />
           <Route path="mensajes" element={<MessagesPage />} />

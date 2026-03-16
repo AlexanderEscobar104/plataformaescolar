@@ -9,6 +9,7 @@ const authErrorMessages = {
   'auth/wrong-password': 'La contrasena es incorrecta.',
   'auth/weak-password': 'La contrasena debe tener al menos 6 caracteres.',
   'plan/inactive': 'No se puede ingresar a la plataforma porque el plan asociado a la empresa no se encuentra activo.',
+  'user/inactive': 'No puedes iniciar sesion porque tu usuario no se encuentra activo. Contacta al administrador.',
 }
 
 function getAuthErrorMessage(code) {
