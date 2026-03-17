@@ -8,6 +8,7 @@ import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
+import { fileToSafeDataUrl, MAX_DATAURL_CHARS } from '../../utils/imageDataUrl'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
@@ -36,6 +37,8 @@ function PlantelDataPage() {
   const [pais, setPais] = useState('')
   const [telefono, setTelefono] = useState('')
   const [correoCorporativo, setCorreoCorporativo] = useState('')
+  const [paginaWeb, setPaginaWeb] = useState('')
+  const [eslogan, setEslogan] = useState('')
   const [planNombre, setPlanNombre] = useState('')
   const [planFechaVencimiento, setPlanFechaVencimiento] = useState('')
   const [planEstado, setPlanEstado] = useState('')
@@ -106,6 +109,8 @@ function PlantelDataPage() {
         setPais(data.pais || '')
         setTelefono(data.telefono || '')
         setCorreoCorporativo(data.correoCorporativo || '')
+        setPaginaWeb(data.paginaWeb || data.sitioWeb || data.web || '')
+        setEslogan(data.eslogan || data.lema || '')
         await loadAssociatedPlan(resolvedNit)
       } finally {
         setLoading(false)
@@ -150,12 +155,25 @@ function PlantelDataPage() {
     const logoRef = ref(storage, filePath)
     await uploadBytesTracked(logoRef, logoNuevo)
 
+    const { dataUrl, tooLarge } = await fileToSafeDataUrl(logoNuevo, {
+      maxWidth: 256,
+      maxHeight: 256,
+      format: logoNuevo.type === 'image/png' ? 'image/png' : 'image/jpeg',
+      quality: 0.9,
+    })
+    if (tooLarge) {
+      setModalType('error')
+      setErrorModalMessage(`El logo es muy pesado para incrustar (max ${MAX_DATAURL_CHARS} caracteres). Usa una imagen mas liviana.`)
+      setShowErrorModal(true)
+    }
+
     return {
       name: logoNuevo.name,
       size: logoNuevo.size,
       type: logoNuevo.type || 'application/octet-stream',
       url: await getDownloadURL(logoRef),
       path: filePath,
+      dataUrl: tooLarge ? '' : dataUrl,
     }
   }
 
@@ -212,6 +230,8 @@ function PlantelDataPage() {
           pais: pais.trim(),
           telefono: telefono.trim(),
           correoCorporativo: correoCorporativo.trim(),
+          paginaWeb: paginaWeb.trim(),
+          eslogan: eslogan.trim(),
           updatedAt: serverTimestamp(),
         },
         { merge: true },
@@ -265,7 +285,7 @@ function PlantelDataPage() {
             <div className="student-photo-preview-wrap">
               <img
                 className="student-photo-preview"
-                src={logoPreview || logoActual?.url}
+                src={logoPreview || logoActual?.dataUrl || logoActual?.url}
                 alt="Logo del plantel"
               />
             </div>
@@ -371,6 +391,26 @@ function PlantelDataPage() {
                 type="email"
                 value={correoCorporativo}
                 onChange={(event) => setCorreoCorporativo(event.target.value)}
+              />
+            </label>
+            <label htmlFor="plantel-pagina-web">
+              Pagina web
+              <input
+                id="plantel-pagina-web"
+                type="url"
+                value={paginaWeb}
+                onChange={(event) => setPaginaWeb(event.target.value)}
+                placeholder="https://..."
+              />
+            </label>
+            <label htmlFor="plantel-eslogan">
+              Eslogan
+              <input
+                id="plantel-eslogan"
+                type="text"
+                value={eslogan}
+                onChange={(event) => setEslogan(event.target.value)}
+                placeholder='Ej: "FORMAMOS CIUDADANOS DEL MUNDO"'
               />
             </label>
             <label htmlFor="plantel-plan-asociado">

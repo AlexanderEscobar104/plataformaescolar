@@ -63,6 +63,10 @@ import ReportTypeSettingsPage from './pages/dashboard/ReportTypeSettingsPage'
 import PlanCreationPage from './pages/dashboard/PlanCreationPage'
 import CamarasAsistenciaPage from './pages/dashboard/CamarasAsistenciaPage'
 import AsistenciaPage from './pages/dashboard/AsistenciaPage'
+import CertificadosPage from './pages/dashboard/CertificadosPage'
+import CertificadosTemplatesPage from './pages/dashboard/CertificadosTemplatesPage'
+import BoletinesPage from './pages/dashboard/BoletinesPage'
+import BoletinesStructurePage from './pages/dashboard/BoletinesStructurePage'
 
 function App() {
   return (
@@ -156,13 +160,9 @@ function App() {
           />
           <Route
             path="reconocimientos"
-            element={
-              <SimpleModulePage
-                title="Certificados"
-                description="Diplomas, boletines y reconocimientos."
-              />
-            }
+            element={<CertificadosPage />}
           />
+          <Route path="boletines" element={<BoletinesPage />} />
           <Route
             path="tareas"
             element={<TasksPage />}
@@ -243,6 +243,8 @@ function App() {
           <Route path="empleados/editar/:empleadoId" element={<EmpleadoEditPage />} />
           <Route path="tipo-empleado" element={<TipoEmpleadosPage />} />
           <Route path="tipo-certificado" element={<TipoCertificadosPage />} />
+          <Route path="plantillas-certificados" element={<CertificadosTemplatesPage />} />
+          <Route path="estructura-boletines" element={<BoletinesStructurePage />} />
           <Route path="datos-cobro" element={<DatosCobroPage />} />
           <Route path="impuestos" element={<ImpuestosPage />} />
           <Route path="caja" element={<CajaPage />} />

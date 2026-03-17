@@ -245,7 +245,17 @@ function DashboardLayout() {
   const canManagePaymentsItemCobro = hasPermission(PERMISSION_KEYS.PAYMENTS_ITEM_COBRO_MANAGE)
   const canManagePaymentsServiciosComplementarios = hasPermission(PERMISSION_KEYS.PAYMENTS_SERVICIOS_COMPLEMENTARIOS_MANAGE)
   const canViewSchedule = hasPermission(PERMISSION_KEYS.SCHEDULE_VIEW) || hasPermission(PERMISSION_KEYS.SCHEDULE_EDIT)
-  const canViewCertificados = hasPermission(PERMISSION_KEYS.CERTIFICADOS_VIEW)
+  const canViewCertificados =
+    hasPermission(PERMISSION_KEYS.CERTIFICADOS_VIEW) ||
+    hasPermission(PERMISSION_KEYS.CERTIFICADOS_GENERATE)
+  const canViewBoletines =
+    hasPermission(PERMISSION_KEYS.BOLETINES_VIEW) ||
+    hasPermission(PERMISSION_KEYS.BOLETINES_GENERATE) ||
+    hasPermission(PERMISSION_KEYS.BOLETINES_EDIT)
+  const canManageCertificadosTemplates =
+    hasPermission(PERMISSION_KEYS.CONFIG_CERTIFICADOS_TEMPLATES_MANAGE) || canManagePermissions
+  const canManageBoletinesStructure =
+    hasPermission(PERMISSION_KEYS.CONFIG_BOLETINES_STRUCTURE_MANAGE) || canManageAcademicSetup || canManagePermissions
   const canManageStorage = hasPermission(PERMISSION_KEYS.STORAGE_MANAGE)
   const showFloatingChat = location.pathname.startsWith('/dashboard') && hasPermission(PERMISSION_KEYS.CHAT_ONLINE_VIEW)
   const [customMemberRoles, setCustomMemberRoles] = useState([])
@@ -302,8 +312,11 @@ function DashboardLayout() {
     if (canViewCertificados) {
       items.push({ label: 'Certificados', to: '/dashboard/reconocimientos', Icon: ReportsIcon })
     }
+    if (canViewBoletines) {
+      items.push({ label: 'Boletines', to: '/dashboard/boletines', Icon: ReportsIcon })
+    }
     return items
-  }, [canViewTasks, canViewEvaluations, canViewPermisos, canViewInasistencias, canViewAsistencia, canViewSchedule, canViewCertificados])
+  }, [canViewTasks, canViewEvaluations, canViewPermisos, canViewInasistencias, canViewAsistencia, canViewSchedule, canViewCertificados, canViewBoletines])
 
   const paymentsItems = useMemo(() => {
     if (!canViewPayments) return []
@@ -378,6 +391,7 @@ function DashboardLayout() {
 
     return items
   }, [
+    canAccessAspirantesModule,
     canAccessDirectivosModule,
     canAccessEmployeesModule,
     canAccessStudentsModule,
@@ -404,6 +418,12 @@ function DashboardLayout() {
 
     if (canManageTipoCertificado || canManageAcademicSetup) {
       items.push({ label: 'Tipo de certificado', to: '/dashboard/tipo-certificado', Icon: ReportsIcon })
+    }
+    if (canManageCertificadosTemplates) {
+      items.push({ label: 'Plantillas de certificados', to: '/dashboard/plantillas-certificados', Icon: ReportsIcon })
+    }
+    if (canManageBoletinesStructure) {
+      items.push({ label: 'Estructura de boletines', to: '/dashboard/estructura-boletines', Icon: ReportsIcon })
     }
 
     if (canManageEvents) {
@@ -473,6 +493,8 @@ function DashboardLayout() {
     canManageRoles,
     canManageSubjects,
     canManageTipoCertificado,
+    canManageCertificadosTemplates,
+    canManageBoletinesStructure,
     canManageTipoInasistencias,
     canManageTipoPermisos,
     canViewPlantelData,

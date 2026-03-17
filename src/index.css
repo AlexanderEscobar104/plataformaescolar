@@ -644,6 +644,34 @@ body {
   background: #f4f9ff;
 }
 
+.boletin-notas-table th:nth-child(3),
+.boletin-notas-table td:nth-child(3) {
+  width: 160px;
+}
+
+.boletin-notas-table th:nth-child(4),
+.boletin-notas-table td:nth-child(4) {
+  width: 120px;
+}
+
+.boletin-notas-table th:nth-child(3),
+.boletin-notas-table th:nth-child(4),
+.boletin-notas-table td:nth-child(3),
+.boletin-notas-table td:nth-child(4) {
+  text-align: center;
+}
+
+.boletin-notas-control {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d4dfec;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  background: #ffffff;
+  text-align: center;
+}
+
 .student-actions {
   display: flex;
   gap: 8px;
