@@ -10,6 +10,7 @@ import { provisionUserWithRole } from '../../services/userProvisioning'
 import { getAuthErrorMessage } from '../../utils/authErrors'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
+import PasswordField from '../../components/PasswordField'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
@@ -21,14 +22,16 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
   const isStudentForm = template === 'estudiante'
   const isTeacherForm = template === 'profesor'
   const isDirectivoForm = template === 'directivo'
-  const canManageMembers = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
-  const canManageStudents = !isStudentForm || canManageMembers
-  const canManageTeacherRecords = !isTeacherForm || canManageMembers
+  const canCreateStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_CREATE)
+  const canCreateTeacherRecords = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_CREATE)
+  const canCreateDirectivoRecords = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_CREATE)
   const canUseCurrentForm = isStudentForm
-    ? canManageStudents
+    ? canCreateStudents
     : isTeacherForm
-      ? canManageTeacherRecords
-      : true
+      ? canCreateTeacherRecords
+      : isDirectivoForm
+        ? canCreateDirectivoRecords
+        : true
   const isTeacherSelectionReadOnly = ['estudiante', 'profesor'].includes(userRole)
   const today = new Date()
   const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
@@ -393,12 +396,16 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
     setError('')
     setSuccess('')
 
-    if (!canManageStudents) {
+    if (isStudentForm && !canCreateStudents) {
       setError('No tienes permisos para crear estudiantes.')
       return
     }
-    if (isTeacherForm && !canManageTeacherRecords) {
+    if (isTeacherForm && !canCreateTeacherRecords) {
       setError('No tienes permisos para crear profesores.')
+      return
+    }
+    if (isDirectivoForm && !canCreateDirectivoRecords) {
+      setError('No tienes permisos para crear directivos.')
       return
     }
 
@@ -617,12 +624,12 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
         Crea credenciales de acceso. El usuario se guardara con rol
         <strong> {role}</strong>.
       </p>
-      {!canManageStudents && (
+      {isStudentForm && !canCreateStudents && (
         <p className="feedback error">
           Tu rol no tiene permisos para crear registros de estudiantes.
         </p>
       )}
-      {isTeacherForm && !canManageTeacherRecords && (
+      {isTeacherForm && !canCreateTeacherRecords && (
         <p className="feedback error">
           Tu rol no tiene permisos para crear registros de profesores.
         </p>
@@ -651,26 +658,22 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
             placeholder="correo@dominio.com"
           />
         </label>
-        <label htmlFor={`password-${role}`}>
-          Contrasena
-          <input
-            id={`password-${role}`}
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="********"
-          />
-        </label>
-        <label htmlFor={`confirm-${role}`}>
-          Confirmar contrasena
-          <input
-            id={`confirm-${role}`}
-            type="password"
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            placeholder="********"
-          />
-        </label>
+        <PasswordField
+          id={`password-${role}`}
+          label="Contrasena"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="********"
+          autoComplete="new-password"
+        />
+        <PasswordField
+          id={`confirm-${role}`}
+          label="Confirmar contrasena"
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          placeholder="********"
+          autoComplete="new-password"
+        />
         {isTeacherForm && (
           <>
             <div className="tabs">

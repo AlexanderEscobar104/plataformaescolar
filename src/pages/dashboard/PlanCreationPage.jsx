@@ -6,13 +6,13 @@ import { db, firebaseConfig } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { provisionUserWithRole } from '../../services/userProvisioning'
 import { getAuthErrorMessage } from '../../utils/authErrors'
-import { DEFAULT_ROLE_PERMISSIONS, PERMISSIONS_CATALOG } from '../../utils/permissions'
+import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_KEYS } from '../../utils/permissions'
 
 const MODULE_OPTIONS = [
   { key: 'inicio', label: 'Inicio', route: '/dashboard' },
   { key: 'pagos', label: 'Pagos', route: '/dashboard/pagos' },
   { key: 'reportes', label: 'Reportes', route: '/dashboard/reportes' },
-  { key: 'reconocimientos', label: 'Reconocimientos', route: '/dashboard/reconocimientos' },
+  { key: 'reconocimientos', label: 'Certificados', route: '/dashboard/reconocimientos' },
   { key: 'tareas', label: 'Tareas', route: '/dashboard/tareas' },
   { key: 'evaluaciones', label: 'Evaluaciones', route: '/dashboard/evaluaciones' },
   { key: 'horario', label: 'Horario', route: '/dashboard/horario' },
@@ -77,7 +77,6 @@ function PlanCreationPage() {
   const [editingPlan, setEditingPlan] = useState(null)
   const [planToDelete, setPlanToDelete] = useState(null)
   const [moduleSearch, setModuleSearch] = useState('')
-  const [permissionSearch, setPermissionSearch] = useState('')
   const [form, setForm] = useState({
     nombrePlan: '',
     razonSocial: '',
@@ -119,17 +118,6 @@ function PlanCreationPage() {
     })
   }, [moduleSearch])
 
-  const filteredAdminPermissions = useMemo(() => {
-    const query = permissionSearch.trim().toLowerCase()
-    const adminPermissions = new Set(DEFAULT_ROLE_PERMISSIONS.administrador || [])
-    const catalog = PERMISSIONS_CATALOG.filter((permission) => adminPermissions.has(permission.key))
-    if (!query) return catalog
-    return catalog.filter((permission) => {
-      const haystack = `${permission.group} ${permission.label} ${permission.description || ''}`.toLowerCase()
-      return haystack.includes(query)
-    })
-  }, [permissionSearch])
-
   const openStatusModal = (message) => {
     setStatusMessage(message)
     setShowStatusModal(true)
@@ -138,7 +126,6 @@ function PlanCreationPage() {
   const resetForm = () => {
     setEditingPlan(null)
     setModuleSearch('')
-    setPermissionSearch('')
     setForm({
       nombrePlan: '',
       razonSocial: '',
@@ -328,7 +315,7 @@ function PlanCreationPage() {
         {
           roles: {
             ...DEFAULT_ROLE_PERMISSIONS,
-            administrador: [...(DEFAULT_ROLE_PERMISSIONS.administrador || [])],
+            administrador: Array.from(new Set(Object.values(PERMISSION_KEYS))),
           },
           updatedAt: serverTimestamp(),
           updatedByUid: user?.uid || '',
@@ -584,33 +571,6 @@ function PlanCreationPage() {
               </div>
             </div>
 
-            <div className="evaluation-field-full">
-              <div className="students-header">
-                <strong>Configuracion de permisos (Administrador)</strong>
-              </div>
-              <label htmlFor="plan-permisos-search" className="evaluation-field-full">
-                Buscar permiso
-                <input
-                  id="plan-permisos-search"
-                  type="search"
-                  value={permissionSearch}
-                  onChange={(event) => setPermissionSearch(event.target.value)}
-                  placeholder="Buscar permiso de administrador"
-                />
-              </label>
-              <div className="teacher-checkbox-list">
-                {filteredAdminPermissions.length === 0 && (
-                  <p className="feedback">No se encontraron permisos con ese filtro.</p>
-                )}
-                {filteredAdminPermissions.map((permission) => (
-                  <label key={permission.key} className="teacher-checkbox-item">
-                    <input type="checkbox" checked readOnly />
-                    <span>{permission.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
             <label htmlFor="plan-fecha-adquisicion">
               Fecha adquisicion
               <input
@@ -645,7 +605,7 @@ function PlanCreationPage() {
             </label>
 
             <p className="feedback">
-              El usuario se crea con rol <strong>administrador</strong>, por lo que sus permisos quedan habilitados por defecto segun la configuracion del rol administrador.
+              El usuario se crea con rol <strong>administrador</strong> con todos los permisos habilitados por defecto.
             </p>
 
             <div className="modal-actions evaluation-field-full">

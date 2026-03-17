@@ -4,6 +4,8 @@ import {
   doc,
   getDocs,
   getDoc,
+  query,
+  where,
 } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
@@ -13,6 +15,7 @@ import {
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_KEYS,
   PERMISSIONS_CATALOG,
+  buildDynamicMemberPermissionKey,
   buildAllRoleOptions,
   normalizeRolePermissionsData,
 } from '../../utils/permissions'
@@ -35,7 +38,7 @@ function PermissionsPage() {
       try {
         const [permSnap, rolesSnap] = await Promise.all([
           getDoc(doc(db, 'configuracion', permissionsDocId)),
-          getDocs(collection(db, 'roles')),
+          userNitRut ? getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut))) : Promise.resolve({ docs: [] }),
         ])
         const data = permSnap.data() || {}
         const loaded = normalizeRolePermissionsData(data.roles)
@@ -64,14 +67,53 @@ function PermissionsPage() {
     () => allRoleOptions.filter((role) => rolesPermissions[role.value] !== undefined || true),
     [allRoleOptions, rolesPermissions],
   )
+  const dynamicRolePermissions = useMemo(() => {
+    return (customRoles || [])
+      .filter((role) => String(role.status || '').trim().toLowerCase() === 'activo')
+      .flatMap((role) => {
+        const name = String(role.name || '').trim()
+        const label = name || 'rol'
+        return [
+          {
+            group: 'Miembros',
+            key: buildDynamicMemberPermissionKey(role.id, 'view'),
+            label: `Ver ${label}`,
+            description: `Permite visualizar el modulo de ${label}.`,
+          },
+          {
+            group: 'Miembros',
+            key: buildDynamicMemberPermissionKey(role.id, 'create'),
+            label: `Crear ${label}`,
+            description: `Permite crear ${label}.`,
+          },
+          {
+            group: 'Miembros',
+            key: buildDynamicMemberPermissionKey(role.id, 'edit'),
+            label: `Editar ${label}`,
+            description: `Permite editar ${label}.`,
+          },
+          {
+            group: 'Miembros',
+            key: buildDynamicMemberPermissionKey(role.id, 'delete'),
+            label: `Eliminar ${label}`,
+            description: `Permite eliminar ${label}.`,
+          },
+        ]
+      })
+  }, [customRoles])
+
+  const fullCatalog = useMemo(() => {
+    return [...PERMISSIONS_CATALOG, ...dynamicRolePermissions]
+  }, [dynamicRolePermissions])
+
   const groupedPermissions = useMemo(() => {
-    return PERMISSIONS_CATALOG.reduce((accumulator, permission) => {
+    return fullCatalog.reduce((accumulator, permission) => {
       const groupName = permission.group || 'General'
       if (!accumulator[groupName]) accumulator[groupName] = []
       accumulator[groupName].push(permission)
       return accumulator
     }, {})
-  }, [])
+  }, [fullCatalog])
 
   const filteredGroupedPermissions = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -108,6 +150,10 @@ function PermissionsPage() {
     })
   }, [filteredGroupedPermissions, search])
 
+  const allPermissionKeys = useMemo(() => {
+    return fullCatalog.map((permission) => permission.key).filter(Boolean)
+  }, [fullCatalog])
+
   const togglePermission = (role, permissionKey) => {
     setRolesPermissions((previous) => {
       const rolePermissions = previous[role] || []
@@ -120,6 +166,15 @@ function PermissionsPage() {
           : [...rolePermissions, permissionKey],
       }
     })
+  }
+
+  const toggleAllRolePermissions = (role, enabled) => {
+    if (!canManagePermissions || saving) return
+
+    setRolesPermissions((previous) => ({
+      ...previous,
+      [role]: enabled ? [...allPermissionKeys] : [],
+    }))
   }
 
   const toggleGroup = (groupName) => {
@@ -198,7 +253,25 @@ function PermissionsPage() {
               <tr>
                 <th>Permiso</th>
                 {orderedRoles.map((role) => (
-                  <th key={role.value}>{role.label}</th>
+                  <th key={role.value}>
+                    <div className="permissions-role-header">
+                      <span>{role.label}</span>
+                      <input
+                        type="checkbox"
+                        aria-label={`Activar o desactivar todos los permisos de ${role.label}`}
+                        disabled={!canManagePermissions || saving}
+                        checked={allPermissionKeys.every((key) => (rolesPermissions[role.value] || []).includes(key))}
+                        ref={(element) => {
+                          if (!element) return
+                          const rolePermissions = rolesPermissions[role.value] || []
+                          const hasAny = allPermissionKeys.some((key) => rolePermissions.includes(key))
+                          const hasAll = allPermissionKeys.every((key) => rolePermissions.includes(key))
+                          element.indeterminate = hasAny && !hasAll
+                        }}
+                        onChange={(event) => toggleAllRolePermissions(role.value, event.target.checked)}
+                      />
+                    </div>
+                  </th>
                 ))}
               </tr>
             </thead>

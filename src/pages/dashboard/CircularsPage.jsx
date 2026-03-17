@@ -27,7 +27,8 @@ function CircularsPage() {
   const [exportingAll, setExportingAll] = useState(false)
 
   const { user, hasPermission, userNitRut } = useAuth()
-  const canManageCirculars = hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
+  const canManageCirculars =
+    hasPermission(PERMISSION_KEYS.CIRCULARS_MANAGE) || hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const canViewOnlyCirculars = !canManageCirculars
   const [subject, setSubject] = useState('')

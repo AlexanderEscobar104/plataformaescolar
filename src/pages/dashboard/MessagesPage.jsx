@@ -82,6 +82,9 @@ function DeleteConfirmModal({ onConfirm, onCancel }) {
 function MessagesPage() {
   const { user, userRole, hasPermission, userNitRut } = useAuth()
   const canDeleteMessages = hasPermission(PERMISSION_KEYS.MESSAGES_DELETE)
+  const canSendMessages = hasPermission(PERMISSION_KEYS.MESSAGES_SEND)
+  const canReplyMessages = hasPermission(PERMISSION_KEYS.MESSAGES_REPLY)
+  const canViewReadReceipts = hasPermission(PERMISSION_KEYS.MESSAGES_READ_RECEIPTS_VIEW)
   const [users, setUsers] = useState([])
   const [inbox, setInbox] = useState([])
   const [sent, setSent] = useState([])
@@ -551,6 +554,16 @@ function MessagesPage() {
     event.preventDefault()
     setFeedback('')
 
+    if (replyContext && !canReplyMessages) {
+      setFeedback('No tienes permisos para responder mensajes.')
+      return
+    }
+
+    if (!replyContext && !canSendMessages) {
+      setFeedback('No tienes permisos para enviar mensajes.')
+      return
+    }
+
     const trimmedSubject = subject.trim()
     const trimmedBody = body.trim()
     const recipientUidsToSend = replyContext ? recipientUids : buildGroupRecipientUids()
@@ -617,6 +630,11 @@ function MessagesPage() {
 
       <div className="messages-grid">
         <form className="form messages-compose" onSubmit={sendMessage}>
+          {replyContext ? (
+            !canReplyMessages && <p className="feedback">No tienes permisos para responder mensajes.</p>
+          ) : (
+            !canSendMessages && <p className="feedback">No tienes permisos para enviar mensajes.</p>
+          )}
           <div className="messages-compose-header">
             <h3>Redactar mensaje</h3>
             {replyContext && (
@@ -629,6 +647,7 @@ function MessagesPage() {
             <p className="feedback">Respondiendo en hilo: {replyContext.subject}</p>
           )}
 
+          <fieldset className="form-fieldset" disabled={sending || (replyContext ? !canReplyMessages : !canSendMessages)}>
           {replyContext ? (
             <p className="feedback">
               Destinatario: {users.find((u) => u.uid === recipientUids[0])?.name || recipientUids[0] || '-'}
@@ -879,6 +898,7 @@ function MessagesPage() {
           <button className="button" type="submit" disabled={sending}>
             {sending ? 'Enviando...' : 'Enviar mensaje'}
           </button>
+          </fieldset>
         </form>
 
         <div className="messages-inbox">
@@ -958,6 +978,7 @@ function MessagesPage() {
                         onClick={openReadReceipts}
                         title="Ver leidos"
                         aria-label="Ver leidos"
+                        disabled={!canViewReadReceipts}
                       >
                         <EyeIcon />
                       </button>
@@ -968,6 +989,7 @@ function MessagesPage() {
                       onClick={handleReply}
                       title="Responder"
                       aria-label="Responder mensaje"
+                      disabled={!canReplyMessages}
                     >
                       <ReplyIcon />
                     </button>

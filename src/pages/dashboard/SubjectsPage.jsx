@@ -13,7 +13,8 @@ function SubjectsPage() {
   const [_exportingAll, setExportingAll] = useState(false)
 
   const { user, hasPermission, userNitRut } = useAuth()
-  const canManageSubjects = hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
+  const canManageSubjects =
+    hasPermission(PERMISSION_KEYS.SUBJECTS_MANAGE) || hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
 
   const [subjects, setSubjects] = useState([])

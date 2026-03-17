@@ -7,6 +7,7 @@ import {
 import { useAuth } from '../../hooks/useAuth'
 import { getAuthErrorMessage } from '../../utils/authErrors'
 import OperationStatusModal from '../../components/OperationStatusModal'
+import PasswordField from '../../components/PasswordField'
 
 function ChangePasswordPage() {
   const { user } = useAuth()
@@ -69,36 +70,30 @@ function ChangePasswordPage() {
       <p>Actualiza tu contrasena de acceso.</p>
 
       <form className="form role-form" onSubmit={handleSubmit}>
-        <label htmlFor="current-password">
-          Contrasena actual
-          <input
-            id="current-password"
-            type="password"
-            value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
-            placeholder="********"
-          />
-        </label>
-        <label htmlFor="new-password">
-          Nueva contrasena
-          <input
-            id="new-password"
-            type="password"
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            placeholder="********"
-          />
-        </label>
-        <label htmlFor="confirm-new-password">
-          Confirmar nueva contrasena
-          <input
-            id="confirm-new-password"
-            type="password"
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            placeholder="********"
-          />
-        </label>
+        <PasswordField
+          id="current-password"
+          label="Contrasena actual"
+          value={currentPassword}
+          onChange={(event) => setCurrentPassword(event.target.value)}
+          placeholder="********"
+          autoComplete="current-password"
+        />
+        <PasswordField
+          id="new-password"
+          label="Nueva contrasena"
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
+          placeholder="********"
+          autoComplete="new-password"
+        />
+        <PasswordField
+          id="confirm-new-password"
+          label="Confirmar nueva contrasena"
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          placeholder="********"
+          autoComplete="new-password"
+        />
         {error && <p className="feedback error">{error}</p>}
         {success && <p className="feedback success">{success}</p>}
         <button className="button" type="submit" disabled={loading}>

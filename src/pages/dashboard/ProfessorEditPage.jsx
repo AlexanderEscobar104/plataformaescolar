@@ -16,7 +16,9 @@ function ProfessorEditPage() {
   const navigate = useNavigate()
   const { professorId } = useParams()
   const { hasPermission, userNitRut } = useAuth()
-  const canEditProfessor = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canViewProfessor = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_VIEW)
+  const canEditProfessor = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_EDIT)
+  const canAccessProfessor = canViewProfessor || canEditProfessor
   const [activeTab, setActiveTab] = useState('profesor-basica')
   const [directors, setDirectors] = useState([])
   const [loading, setLoading] = useState(true)
@@ -54,6 +56,12 @@ function ProfessorEditPage() {
   )
 
   useEffect(() => {
+    if (!canAccessProfessor) {
+      setErrorModalMessage('No tienes permiso para ver profesores.')
+      setShowErrorModal(true)
+      setLoading(false)
+      return
+    }
     const loadData = async () => {
       setLoading(true)
       try {
@@ -120,7 +128,7 @@ function ProfessorEditPage() {
     }
 
     loadData()
-  }, [professorId, userNitRut])
+  }, [canAccessProfessor, professorId, userNitRut])
 
   const fotoNuevaPreview = useMemo(() => (fotoNueva ? URL.createObjectURL(fotoNueva) : ''), [fotoNueva])
 

@@ -11,7 +11,8 @@ function normalizeRole(roleValue) {
 
 function ChatSettingsPage() {
   const { hasPermission, userNitRut } = useAuth()
-  const canManage = hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
+  const canManage =
+    hasPermission(PERMISSION_KEYS.CONFIG_CHAT_MANAGE) || hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
   const [customRoles, setCustomRoles] = useState([])
   const [roleMatrix, setRoleMatrix] = useState({})
   const [studentGroups, setStudentGroups] = useState([])

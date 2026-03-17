@@ -35,8 +35,15 @@ import AspirantesListPage from './pages/dashboard/AspirantesListPage'
 import AspiranteRegistrationPage from './pages/dashboard/AspiranteRegistrationPage'
 import AspiranteEditPage from './pages/dashboard/AspiranteEditPage'
 import EmpleadosPage from './pages/dashboard/EmpleadosPage'
+import EmpleadoRegistrationPage from './pages/dashboard/EmpleadoRegistrationPage'
+import EmpleadoEditPage from './pages/dashboard/EmpleadoEditPage'
 import TipoEmpleadosPage from './pages/dashboard/TipoEmpleadosPage'
 import DatosCobroPage from './pages/dashboard/DatosCobroPage'
+import ImpuestosPage from './pages/dashboard/ImpuestosPage'
+import CajaPage from './pages/dashboard/CajaPage'
+import ItemCobroPage from './pages/dashboard/ItemCobroPage'
+import ResolucionesPage from './pages/dashboard/ResolucionesPage'
+import TipoCertificadosPage from './pages/dashboard/TipoCertificadosPage'
 import ServiciosComplementariosPage from './pages/dashboard/ServiciosComplementariosPage'
 import StoragePage from './pages/dashboard/StoragePage'
 import ReportesPage from './pages/dashboard/ReportesPage'
@@ -151,8 +158,8 @@ function App() {
             path="reconocimientos"
             element={
               <SimpleModulePage
-                title="Reconocimientos"
-                description="Consulta y administra reconocimientos institucionales."
+                title="Certificados"
+                description="Diplomas, boletines y reconocimientos."
               />
             }
           />
@@ -232,8 +239,15 @@ function App() {
           <Route path="asistencia" element={<AsistenciaPage />} />
           <Route path="almacenamiento" element={<StoragePage />} />
           <Route path="empleados" element={<EmpleadosPage />} />
+          <Route path="empleados/nuevo" element={<EmpleadoRegistrationPage />} />
+          <Route path="empleados/editar/:empleadoId" element={<EmpleadoEditPage />} />
           <Route path="tipo-empleado" element={<TipoEmpleadosPage />} />
+          <Route path="tipo-certificado" element={<TipoCertificadosPage />} />
           <Route path="datos-cobro" element={<DatosCobroPage />} />
+          <Route path="impuestos" element={<ImpuestosPage />} />
+          <Route path="caja" element={<CajaPage />} />
+          <Route path="resoluciones" element={<ResolucionesPage />} />
+          <Route path="item-cobro" element={<ItemCobroPage />} />
           <Route path="servicios-complementarios" element={<ServiciosComplementariosPage />} />
           <Route path="mensajes" element={<MessagesPage />} />
           <Route path="notificaciones" element={<NotificationsPage />} />

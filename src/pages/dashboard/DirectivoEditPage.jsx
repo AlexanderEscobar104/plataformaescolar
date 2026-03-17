@@ -16,7 +16,9 @@ function DirectivoEditPage() {
   const navigate = useNavigate()
   const { directivoId } = useParams()
   const { hasPermission, userNitRut } = useAuth()
-  const canEdit = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canViewDirectivo = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_VIEW)
+  const canEdit = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_EDIT)
+  const canAccessDirectivo = canViewDirectivo || canEdit
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -40,6 +42,12 @@ function DirectivoEditPage() {
   const [documentosNuevos, setDocumentosNuevos] = useState([])
 
   useEffect(() => {
+    if (!canAccessDirectivo) {
+      setErrorModalMessage('No tienes permiso para ver directivos.')
+      setShowErrorModal(true)
+      setLoading(false)
+      return
+    }
     const loadData = async () => {
       setLoading(true)
       try {
@@ -71,7 +79,7 @@ function DirectivoEditPage() {
       }
     }
     loadData()
-  }, [directivoId])
+  }, [canAccessDirectivo, directivoId])
 
   const handleFotoChange = (event) => {
     const pickedFile = event.target.files?.[0] || null

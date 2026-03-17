@@ -17,7 +17,10 @@ function DirectivosListPage() {
   const { hasPermission, userNitRut } = useAuth()
   const _canDeleteUsers = hasPermission(PERMISSION_KEYS.USERS_DELETE)
   const _canAssignRole = hasPermission(PERMISSION_KEYS.USERS_ASSIGN_ROLE)
-  const canManageMembers = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canViewDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_VIEW)
+  const canCreateDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_CREATE)
+  const canEditDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_EDIT)
+  const canDeleteDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_DELETE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const [directivos, setDirectivos] = useState([])
   const [search, setSearch] = useState('')
@@ -27,6 +30,11 @@ function DirectivosListPage() {
   const [flashMessage, setFlashMessage] = useState('')
 
   const loadDirectivos = useCallback(async () => {
+    if (!canViewDirectivos) {
+      setDirectivos([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const snapshot = await getDocs(
@@ -51,7 +59,7 @@ function DirectivosListPage() {
     } finally {
       setLoading(false)
     }
-  }, [userNitRut])
+  }, [canViewDirectivos, userNitRut])
 
   useEffect(() => {
     loadDirectivos()
@@ -77,7 +85,7 @@ function DirectivosListPage() {
   }, [search, directivos])
 
   const handleDelete = async () => {
-    if (!canManageMembers) { // Changed from canManageDirectivos
+    if (!canDeleteDirectivos) {
       setFlashMessage('No tienes permiso para eliminar registros.')
       return
     }
@@ -97,11 +105,20 @@ function DirectivosListPage() {
     }
   }
 
+  if (!canViewDirectivos) {
+    return (
+      <section>
+        <h2>Directivos</h2>
+        <p className="feedback error">No tienes permiso para ver directivos.</p>
+      </section>
+    )
+  }
+
   return (
     <section>
       <div className="students-header">
         <h2>Crear directivos</h2>
-        {canManageMembers && ( // Changed from canManageDirectivos
+        {canCreateDirectivos && (
           <Link className="button button-link" to="/dashboard/crear-directivos/nuevo">
             Agregar nuevo directivo
           </Link>
@@ -152,10 +169,10 @@ function DirectivosListPage() {
                       type="button"
                       className="button small icon-action-button"
                       onClick={() => navigate(`/dashboard/crear-directivos/editar/${directivo.id}`)}
-                      aria-label={canManageMembers ? 'Editar directivo' : 'Ver directivo'} // Changed from canManageDirectivos
-                      title={canManageMembers ? 'Editar' : 'Ver mas'} // Changed from canManageDirectivos
+                      aria-label={canEditDirectivos ? 'Editar directivo' : 'Ver directivo'}
+                      title={canEditDirectivos ? 'Editar' : 'Ver mas'}
                     >
-                      {canManageMembers ? ( // Changed from canManageDirectivos
+                      {canEditDirectivos ? (
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <path d="m3 17.3 10.9-10.9 2.7 2.7L5.7 20H3v-2.7Zm17.7-10.1a1 1 0 0 0 0-1.4L18.2 3.3a1 1 0 0 0-1.4 0l-1.4 1.4 4.1 4.1 1.2-1.6Z" />
                         </svg>
@@ -165,7 +182,7 @@ function DirectivosListPage() {
                         </svg>
                       )}
                     </button>
-                    {canManageMembers && ( // Changed from canManageDirectivos
+                    {canDeleteDirectivos && (
                       <button
                         type="button"
                         className="button small danger icon-action-button"

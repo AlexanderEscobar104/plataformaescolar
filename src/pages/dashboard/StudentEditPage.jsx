@@ -17,7 +17,9 @@ function StudentEditPage() {
   const navigate = useNavigate()
   const { studentId } = useParams()
   const { userRole, hasPermission, userNitRut } = useAuth()
-  const canEditStudent = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canViewStudent = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_VIEW)
+  const canEditStudent = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_EDIT)
+  const canAccessStudent = canViewStudent || canEditStudent
   const isTeacherSelectionReadOnly = ['estudiante', 'profesor'].includes(userRole)
   const today = new Date()
   const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
@@ -71,6 +73,12 @@ function StudentEditPage() {
   const groupOptions = useMemo(() => GROUP_OPTIONS, [])
 
   useEffect(() => {
+    if (!canAccessStudent) {
+      setErrorModalMessage('No tienes permiso para ver estudiantes.')
+      setShowErrorModal(true)
+      setLoading(false)
+      return
+    }
     const loadData = async () => {
       setLoading(true)
       try {
@@ -144,7 +152,7 @@ function StudentEditPage() {
     }
 
     loadData()
-  }, [studentId, userNitRut])
+  }, [canAccessStudent, studentId, userNitRut])
 
   const fotoEstudianteNuevaPreview = useMemo(
     () => (fotoEstudianteNueva ? URL.createObjectURL(fotoEstudianteNueva) : ''),

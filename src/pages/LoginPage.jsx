@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { getAuthErrorMessage } from '../utils/authErrors'
 import logoFallback from '../assets/logo-plataforma.svg'
+import PasswordField from '../components/PasswordField'
 import OperationStatusModal from '../components/OperationStatusModal'
 
 function LoginPage() {
@@ -41,7 +42,7 @@ function LoginPage() {
 
   return (
     <main className="page">
-      <section className="card">
+      <section className="card auth-card">
         <div className="auth-logo-wrap">
           <img
             src={logo}
@@ -66,17 +67,14 @@ function LoginPage() {
             />
           </label>
 
-          <label htmlFor="login-password">
-            Contrasena
-            <input
-              id="login-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="********"
-              autoComplete="current-password"
-            />
-          </label>
+          <PasswordField
+            id="login-password"
+            label="Contrasena"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="********"
+            autoComplete="current-password"
+          />
 
           <button className="button" type="submit">
             {loading ? 'Entrando...' : 'Entrar'}

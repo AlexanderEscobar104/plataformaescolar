@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
-import { PERMISSION_KEYS, PROTECTED_ROLE_VALUES } from '../../utils/permissions'
+import { buildDynamicMemberPermissionKey, PERMISSION_KEYS, PROTECTED_ROLE_VALUES } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
 
@@ -29,6 +29,7 @@ function RolesPage() {
   const [deleting, setDeleting] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [errorModal, setErrorModal] = useState('')
+  const [blockedDeleteModal, setBlockedDeleteModal] = useState('')
   const [roleToDelete, setRoleToDelete] = useState(null)
   const [editingRole, setEditingRole] = useState(null)
   const [search, setSearch] = useState('')
@@ -138,31 +139,43 @@ function RolesPage() {
       setDeleting(true)
       const roleValue = roleToDelete.name.toLowerCase().trim()
 
-      // 1. Delete the role document
-      await deleteDocTracked(doc(db, 'roles', roleToDelete.id))
-
-      // 2. Find all users with this role and clear their role field
       const usersSnap = await getDocs(
         query(collection(db, 'users'), where('role', '==', roleValue), where('nitRut', '==', userNitRut)),
       )
       if (!usersSnap.empty) {
-        const batch = writeBatch(db)
-        usersSnap.docs.forEach((userDoc) => {
-          batch.update(userDoc.ref, { role: '' })
-        })
-        await batch.commit()
+        setRoleToDelete(null)
+        setBlockedDeleteModal(
+          `No se puede eliminar el rol "${roleToDelete.name}" porque hay usuarios con el rol asignado. Debes primero cambiar el rol en el menu Usuarios.`,
+        )
+        return
       }
 
-      // 3. Remove the role key from configuracion/permisosRoles
+      // 1. Delete the role document
+      await deleteDocTracked(doc(db, 'roles', roleToDelete.id))
+
+      // 2. Remove the role key from configuracion/permisosRoles
       const permDoc = doc(db, 'configuracion', permissionsDocId)
       const permSnap = await getDoc(permDoc)
       if (permSnap.exists()) {
         const current = permSnap.data()?.roles || {}
-        if (current[roleValue] !== undefined) {
-          const updated = { ...current }
+        const updated = { ...current }
+        const dynamicPermissionKeys = [
+          buildDynamicMemberPermissionKey(roleToDelete.id, 'view'),
+          buildDynamicMemberPermissionKey(roleToDelete.id, 'create'),
+          buildDynamicMemberPermissionKey(roleToDelete.id, 'edit'),
+          buildDynamicMemberPermissionKey(roleToDelete.id, 'delete'),
+        ]
+
+        Object.keys(updated).forEach((roleKey) => {
+          const list = Array.isArray(updated[roleKey]) ? updated[roleKey] : []
+          updated[roleKey] = list.filter((permissionKey) => !dynamicPermissionKeys.includes(permissionKey))
+        })
+
+        if (updated[roleValue] !== undefined) {
           delete updated[roleValue]
-          await updateDocTracked(permDoc, { roles: updated })
         }
+
+        await updateDocTracked(permDoc, { roles: updated })
       }
 
       setFeedback('Rol eliminado correctamente.')
@@ -384,7 +397,7 @@ function RolesPage() {
               ¿Deseas eliminar el rol <strong>{roleToDelete.name}</strong>?
             </p>
             <p className="feedback">
-              Esta acción también eliminará el rol de todos los usuarios que lo tengan asignado y borrará sus permisos configurados.
+              Esta acción borrará los permisos configurados para este rol.
             </p>
             <div className="modal-actions">
               <button type="button" className="button danger" disabled={deleting} onClick={handleDelete}>
@@ -397,6 +410,28 @@ function RolesPage() {
                 onClick={() => setRoleToDelete(null)}
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {blockedDeleteModal && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="No se puede eliminar rol">
+            <button
+              type="button"
+              className="modal-close-icon"
+              aria-label="Cerrar"
+              onClick={() => setBlockedDeleteModal('')}
+            >
+              x
+            </button>
+            <h3>No se puede eliminar</h3>
+            <p>{blockedDeleteModal}</p>
+            <div className="modal-actions">
+              <button type="button" className="button" onClick={() => setBlockedDeleteModal('')}>
+                Aceptar
               </button>
             </div>
           </div>

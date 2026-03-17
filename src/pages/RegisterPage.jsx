@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { getAuthErrorMessage } from '../utils/authErrors'
+import PasswordField from '../components/PasswordField'
 
 function RegisterPage() {
   const navigate = useNavigate()
@@ -75,29 +76,23 @@ function RegisterPage() {
             />
           </label>
 
-          <label htmlFor="register-password">
-            Contrasena
-            <input
-              id="register-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="********"
-              autoComplete="new-password"
-            />
-          </label>
+          <PasswordField
+            id="register-password"
+            label="Contrasena"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="********"
+            autoComplete="new-password"
+          />
 
-          <label htmlFor="register-confirm-password">
-            Confirmar contrasena
-            <input
-              id="register-confirm-password"
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="********"
-              autoComplete="new-password"
-            />
-          </label>
+          <PasswordField
+            id="register-confirm-password"
+            label="Confirmar contrasena"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            placeholder="********"
+            autoComplete="new-password"
+          />
 
           {error && <p className="feedback error">{error}</p>}
 

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { PERMISSION_KEYS } from '../../utils/permissions'
+import { buildDynamicMemberPermissionKey, PERMISSION_KEYS } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
 import { deleteDocTracked } from '../../services/firestoreProxy'
@@ -15,7 +15,10 @@ function RoleMembersListPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { hasPermission, userNitRut } = useAuth()
-  const canManageMembers = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canViewMembers = hasPermission(buildDynamicMemberPermissionKey(roleId, 'view'))
+  const canCreateMembers = hasPermission(buildDynamicMemberPermissionKey(roleId, 'create'))
+  const canEditMembers = hasPermission(buildDynamicMemberPermissionKey(roleId, 'edit'))
+  const canDeleteMembers = hasPermission(buildDynamicMemberPermissionKey(roleId, 'delete'))
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
 
   const [currentPage, setCurrentPage] = useState(1)
@@ -70,6 +73,11 @@ function RoleMembersListPage() {
 
   const loadMembers = useCallback(async () => {
     if (!roleValue || !userNitRut) return
+    if (!canViewMembers) {
+      setMembers([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const snapshot = await getDocs(
@@ -93,7 +101,7 @@ function RoleMembersListPage() {
     } finally {
       setLoading(false)
     }
-  }, [roleValue, userNitRut])
+  }, [canViewMembers, roleValue, userNitRut])
 
   useEffect(() => {
     loadRole()
@@ -115,7 +123,7 @@ function RoleMembersListPage() {
   }, [members, search])
 
   const handleDelete = async () => {
-    if (!canManageMembers) {
+    if (!canDeleteMembers) {
       setFlashMessage('No tienes permiso para eliminar registros.')
       return
     }
@@ -136,11 +144,20 @@ function RoleMembersListPage() {
 
   const displayed = filteredMembers.slice((currentPage - 1) * 10, currentPage * 10)
 
+  if (!canViewMembers) {
+    return (
+      <section>
+        <h2>Miembros</h2>
+        <p className="feedback error">No tienes permiso para ver este modulo.</p>
+      </section>
+    )
+  }
+
   return (
     <section>
       <div className="students-header">
         <h2>{`Crear ${roleName || 'rol'}`}</h2>
-        {canManageMembers && !roleError && (
+        {canCreateMembers && !roleError && (
           <Link className="button button-link" to={`/dashboard/crear-rol/${roleId}/nuevo`}>
             {`Agregar nuevo ${roleName || 'rol'}`}
           </Link>
@@ -193,10 +210,10 @@ function RoleMembersListPage() {
                       type="button"
                       className="button small icon-action-button"
                       onClick={() => navigate(`/dashboard/crear-rol/${roleId}/editar/${m.id}`)}
-                      aria-label={canManageMembers ? 'Editar registro' : 'Ver registro'}
-                      title={canManageMembers ? 'Editar' : 'Ver mas'}
+                      aria-label={canEditMembers ? 'Editar registro' : 'Ver registro'}
+                      title={canEditMembers ? 'Editar' : 'Ver mas'}
                     >
-                      {canManageMembers ? (
+                      {canEditMembers ? (
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <path d="m3 17.3 10.9-10.9 2.7 2.7L5.7 20H3v-2.7Zm17.7-10.1a1 1 0 0 0 0-1.4L18.2 3.3a1 1 0 0 0-1.4 0l-1.4 1.4 4.1 4.1 1.2-1.6Z" />
                         </svg>
@@ -206,7 +223,7 @@ function RoleMembersListPage() {
                         </svg>
                       )}
                     </button>
-                    {canManageMembers && (
+                    {canDeleteMembers && (
                       <button
                         type="button"
                         className="button small danger icon-action-button"
@@ -283,4 +300,3 @@ function RoleMembersListPage() {
 }
 
 export default RoleMembersListPage
-

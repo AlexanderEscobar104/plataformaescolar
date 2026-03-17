@@ -10,6 +10,7 @@ import { provisionUserWithRole } from '../../services/userProvisioning'
 import { getAuthErrorMessage } from '../../utils/authErrors'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
+import PasswordField from '../../components/PasswordField'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
@@ -17,7 +18,7 @@ const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 function AspiranteRegistrationPage() {
   const navigate = useNavigate()
   const { hasPermission, userNitRut } = useAuth()
-  const canManage = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canManage = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_CREATE)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -292,14 +293,22 @@ function AspiranteRegistrationPage() {
             Correo electronico
             <input id="email-aspirante" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="correo@dominio.com" />
           </label>
-          <label htmlFor="password-aspirante">
-            Contrasena
-            <input id="password-aspirante" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="********" />
-          </label>
-          <label htmlFor="confirm-aspirante">
-            Confirmar contrasena
-            <input id="confirm-aspirante" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="********" />
-          </label>
+          <PasswordField
+            id="password-aspirante"
+            label="Contrasena"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="********"
+            autoComplete="new-password"
+          />
+          <PasswordField
+            id="confirm-aspirante"
+            label="Confirmar contrasena"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="********"
+            autoComplete="new-password"
+          />
 
           <div className="section-title">Informacion basica del aspirante</div>
           <div>

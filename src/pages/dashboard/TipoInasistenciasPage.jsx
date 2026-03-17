@@ -17,9 +17,12 @@ import PaginationControls from '../../components/PaginationControls'
 function TipoInasistenciasPage() {
   const { user, hasPermission } = useAuth()
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
-  const canCreate = hasPermission(PERMISSION_KEYS.INASISTENCIAS_CREATE)
-  const canEdit = hasPermission(PERMISSION_KEYS.INASISTENCIAS_EDIT)
-  const canDelete = hasPermission(PERMISSION_KEYS.INASISTENCIAS_DELETE)
+  const canCreate =
+    hasPermission(PERMISSION_KEYS.CONFIG_TIPO_INASISTENCIAS_MANAGE) || hasPermission(PERMISSION_KEYS.INASISTENCIAS_CREATE)
+  const canEdit =
+    hasPermission(PERMISSION_KEYS.CONFIG_TIPO_INASISTENCIAS_MANAGE) || hasPermission(PERMISSION_KEYS.INASISTENCIAS_EDIT)
+  const canDelete =
+    hasPermission(PERMISSION_KEYS.CONFIG_TIPO_INASISTENCIAS_MANAGE) || hasPermission(PERMISSION_KEYS.INASISTENCIAS_DELETE)
 
   const [tipos, setTipos] = useState([])
   const [loading, setLoading] = useState(true)

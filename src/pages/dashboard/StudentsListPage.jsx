@@ -15,7 +15,10 @@ function StudentsListPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { userRole, user, hasPermission, userNitRut } = useAuth()
-  const canManageStudents = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canViewStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_VIEW)
+  const canCreateStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_CREATE)
+  const canEditStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_EDIT)
+  const canDeleteStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_DELETE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const [students, setStudents] = useState([])
   const [search, setSearch] = useState('')
@@ -25,6 +28,11 @@ function StudentsListPage() {
   const [flashMessage, setFlashMessage] = useState('')
 
   const loadStudents = useCallback(async () => {
+    if (!canViewStudents) {
+      setStudents([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       let gradosActivosProfesor = []
@@ -75,7 +83,7 @@ function StudentsListPage() {
     } finally {
       setLoading(false)
     }
-  }, [userRole, user?.uid, userNitRut])
+  }, [canViewStudents, userRole, user?.uid, userNitRut])
 
   useEffect(() => {
     loadStudents()
@@ -100,7 +108,7 @@ function StudentsListPage() {
   }, [search, students])
 
   const handleDelete = async () => {
-    if (!canManageStudents) {
+    if (!canDeleteStudents) {
       setFlashMessage('No tienes permiso para eliminar registros.')
       return
     }
@@ -120,11 +128,20 @@ function StudentsListPage() {
     }
   }
 
+  if (!canViewStudents) {
+    return (
+      <section>
+        <h2>Estudiantes</h2>
+        <p className="feedback error">No tienes permiso para ver estudiantes.</p>
+      </section>
+    )
+  }
+
   return (
     <section>
       <div className="students-header">
         <h2>{userRole === 'profesor' ? 'Ver estudiantes' : 'Crear estudiantes'}</h2>
-        {canManageStudents && (
+        {canCreateStudents && (
           <Link className="button button-link" to="/dashboard/crear-estudiantes/nuevo">
             Crear nuevo estudiante
           </Link>
@@ -181,10 +198,10 @@ function StudentsListPage() {
                       onClick={() =>
                         navigate(`/dashboard/crear-estudiantes/editar/${student.id}`)
                       }
-                      aria-label={canManageStudents ? 'Editar estudiante' : 'Ver estudiante'}
-                      title={canManageStudents ? 'Editar' : 'Ver mas'}
+                      aria-label={canEditStudents ? 'Editar estudiante' : 'Ver estudiante'}
+                      title={canEditStudents ? 'Editar' : 'Ver mas'}
                     >
-                      {canManageStudents ? (
+                      {canEditStudents ? (
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <path d="m3 17.3 10.9-10.9 2.7 2.7L5.7 20H3v-2.7Zm17.7-10.1a1 1 0 0 0 0-1.4L18.2 3.3a1 1 0 0 0-1.4 0l-1.4 1.4 4.1 4.1 1.2-1.6Z" />
                         </svg>
@@ -194,7 +211,7 @@ function StudentsListPage() {
                         </svg>
                       )}
                     </button>
-                    {canManageStudents && (
+                    {canDeleteStudents && (
                       <button
                         type="button"
                         className="button small danger icon-action-button"

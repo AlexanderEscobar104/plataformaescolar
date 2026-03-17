@@ -2,12 +2,64 @@ const PERMISSION_KEYS = {
   USERS_VIEW: 'users_view',
   USERS_DELETE: 'users_delete',
   USERS_ASSIGN_ROLE: 'users_assign_role',
+  USERS_CHANGE_STATE: 'users_change_state',
   MEMBERS_MANAGE: 'members_manage',
+  MEMBERS_STUDENTS_VIEW: 'members_students_view',
+  MEMBERS_STUDENTS_CREATE: 'members_students_create',
+  MEMBERS_STUDENTS_EDIT: 'members_students_edit',
+  MEMBERS_STUDENTS_DELETE: 'members_students_delete',
+  MEMBERS_STUDENTS_MANAGE: 'members_students_manage',
+  MEMBERS_PROFESORES_VIEW: 'members_profesores_view',
+  MEMBERS_PROFESORES_CREATE: 'members_profesores_create',
+  MEMBERS_PROFESORES_EDIT: 'members_profesores_edit',
+  MEMBERS_PROFESORES_DELETE: 'members_profesores_delete',
+  MEMBERS_PROFESORES_MANAGE: 'members_profesores_manage',
+  MEMBERS_DIRECTIVOS_VIEW: 'members_directivos_view',
+  MEMBERS_DIRECTIVOS_CREATE: 'members_directivos_create',
+  MEMBERS_DIRECTIVOS_EDIT: 'members_directivos_edit',
+  MEMBERS_DIRECTIVOS_DELETE: 'members_directivos_delete',
+  MEMBERS_DIRECTIVOS_MANAGE: 'members_directivos_manage',
+  MEMBERS_ASPIRANTES_VIEW: 'members_aspirantes_view',
+  MEMBERS_ASPIRANTES_CREATE: 'members_aspirantes_create',
+  MEMBERS_ASPIRANTES_EDIT: 'members_aspirantes_edit',
+  MEMBERS_ASPIRANTES_DELETE: 'members_aspirantes_delete',
+  MEMBERS_ASPIRANTES_MANAGE: 'members_aspirantes_manage',
+  MEMBERS_DYNAMIC_MENUS_VIEW: 'members_dynamic_menus_view',
+  EMPLEADOS_VIEW: 'empleados_view',
+  EMPLEADOS_CREATE: 'empleados_create',
+  EMPLEADOS_EDIT: 'empleados_edit',
+  EMPLEADOS_DELETE: 'empleados_delete',
+  EMPLEADOS_MANAGE: 'empleados_manage',
   PLANTEL_VIEW: 'plantel_view',
   PLANTEL_MANAGE: 'plantel_manage',
   ACADEMIC_SETUP_MANAGE: 'academic_setup_manage',
+  EVENTS_MANAGE: 'events_manage',
+  CIRCULARS_MANAGE: 'circulars_manage',
+  SUBJECTS_MANAGE: 'subjects_manage',
+  REPORTS_VIEW: 'reports_view',
+  PAYMENTS_VIEW: 'payments_view',
+  PAYMENTS_IMPUESTOS_MANAGE: 'payments_impuestos_manage',
+  PAYMENTS_RESOLUCIONES_MANAGE: 'payments_resoluciones_manage',
+  PAYMENTS_CAJA_MANAGE: 'payments_caja_manage',
+  PAYMENTS_DATOS_COBRO_MANAGE: 'payments_datos_cobro_manage',
+  PAYMENTS_ITEM_COBRO_MANAGE: 'payments_item_cobro_manage',
+  PAYMENTS_SERVICIOS_COMPLEMENTARIOS_MANAGE: 'payments_servicios_complementarios_manage',
+  CERTIFICADOS_VIEW: 'certificados_view',
+  SCHEDULE_VIEW: 'schedule_view',
+  CONFIG_CHAT_MANAGE: 'config_chat_manage',
+  CONFIG_MESSAGES_MANAGE: 'config_messages_manage',
+  CONFIG_NOTIFICATIONS_MANAGE: 'config_notifications_manage',
+  CONFIG_REPORT_TYPES_MANAGE: 'config_report_types_manage',
+  CONFIG_TIPO_PERMISOS_MANAGE: 'config_tipo_permisos_manage',
+  CONFIG_TIPO_INASISTENCIAS_MANAGE: 'config_tipo_inasistencias_manage',
+  CONFIG_TIPO_CERTIFICADO_MANAGE: 'config_tipo_certificado_manage',
+  CONFIG_TIPO_EMPLEADO_MANAGE: 'config_tipo_empleado_manage',
   NOTIFICATIONS_CREATE: 'notifications_create',
   MESSAGES_DELETE: 'messages_delete',
+  MESSAGES_SEND: 'messages_send',
+  MESSAGES_REPLY: 'messages_reply',
+  MESSAGES_READ_RECEIPTS_VIEW: 'messages_read_receipts_view',
+  CHAT_ONLINE_VIEW: 'chat_online_view',
   TASKS_VIEW: 'tasks_view',
   TASKS_CREATE: 'tasks_create',
   TASKS_EDIT: 'tasks_edit',
@@ -76,10 +128,130 @@ const PERMISSIONS_CATALOG = [
     description: 'Permite cambiar el rol de un usuario.',
   },
   {
+    group: 'Usuarios',
+    key: PERMISSION_KEYS.USERS_CHANGE_STATE,
+    label: 'Cambiar estado',
+    description: 'Permite cambiar el estado (activo/inactivo) de un usuario.',
+  },
+  {
     group: 'Miembros',
-    key: PERMISSION_KEYS.MEMBERS_MANAGE,
-    label: 'Gestion de miembros',
-    description: 'Permite crear, editar y administrar estudiantes y profesores.',
+    key: PERMISSION_KEYS.MEMBERS_STUDENTS_VIEW,
+    label: 'Ver estudiantes',
+    description: 'Permite visualizar el modulo de estudiantes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_STUDENTS_CREATE,
+    label: 'Crear estudiantes',
+    description: 'Permite crear estudiantes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_STUDENTS_EDIT,
+    label: 'Editar estudiantes',
+    description: 'Permite editar estudiantes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_STUDENTS_DELETE,
+    label: 'Eliminar estudiantes',
+    description: 'Permite eliminar estudiantes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_PROFESORES_VIEW,
+    label: 'Ver profesores',
+    description: 'Permite visualizar el modulo de profesores.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_PROFESORES_CREATE,
+    label: 'Crear profesores',
+    description: 'Permite crear profesores.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_PROFESORES_EDIT,
+    label: 'Editar profesores',
+    description: 'Permite editar profesores.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_PROFESORES_DELETE,
+    label: 'Eliminar profesores',
+    description: 'Permite eliminar profesores.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_DIRECTIVOS_VIEW,
+    label: 'Ver directivos',
+    description: 'Permite visualizar el modulo de directivos.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_DIRECTIVOS_CREATE,
+    label: 'Crear directivos',
+    description: 'Permite crear directivos.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_DIRECTIVOS_EDIT,
+    label: 'Editar directivos',
+    description: 'Permite editar directivos.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_DIRECTIVOS_DELETE,
+    label: 'Eliminar directivos',
+    description: 'Permite eliminar directivos.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_ASPIRANTES_VIEW,
+    label: 'Ver aspirantes',
+    description: 'Permite visualizar el modulo de aspirantes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_ASPIRANTES_CREATE,
+    label: 'Crear aspirantes',
+    description: 'Permite crear aspirantes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_ASPIRANTES_EDIT,
+    label: 'Editar aspirantes',
+    description: 'Permite editar aspirantes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_ASPIRANTES_DELETE,
+    label: 'Eliminar aspirantes',
+    description: 'Permite eliminar aspirantes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.EMPLEADOS_VIEW,
+    label: 'Ver empleados',
+    description: 'Permite visualizar el modulo de empleados.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.EMPLEADOS_CREATE,
+    label: 'Crear empleados',
+    description: 'Permite crear empleados.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.EMPLEADOS_EDIT,
+    label: 'Editar empleados',
+    description: 'Permite editar empleados.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.EMPLEADOS_DELETE,
+    label: 'Eliminar empleados',
+    description: 'Permite eliminar empleados.',
   },
   {
     group: 'Plantel',
@@ -96,8 +268,86 @@ const PERMISSIONS_CATALOG = [
   {
     group: 'Academico',
     key: PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE,
-    label: 'Gestion academica',
-    description: 'Permite gestionar eventos, circulares y asignaturas.',
+    label: 'Gestion academica (general)',
+    description: 'Permite gestionar configuraciones academicas (permiso general).',
+  },
+  {
+    group: 'Academico',
+    key: PERMISSION_KEYS.EVENTS_MANAGE,
+    label: 'Gestionar eventos',
+    description: 'Permite gestionar eventos.',
+  },
+  {
+    group: 'Academico',
+    key: PERMISSION_KEYS.CIRCULARS_MANAGE,
+    label: 'Gestionar circulares',
+    description: 'Permite gestionar circulares.',
+  },
+  {
+    group: 'Academico',
+    key: PERMISSION_KEYS.SUBJECTS_MANAGE,
+    label: 'Gestionar asignaturas',
+    description: 'Permite gestionar asignaturas.',
+  },
+  {
+    group: 'Reportes',
+    key: PERMISSION_KEYS.REPORTS_VIEW,
+    label: 'Ver reportes',
+    description: 'Permite visualizar el modulo de reportes.',
+  },
+  {
+    group: 'Pagos',
+    key: PERMISSION_KEYS.PAYMENTS_VIEW,
+    label: 'Ver pagos',
+    description: 'Permite visualizar el modulo de pagos.',
+  },
+  {
+    group: 'Pagos',
+    key: PERMISSION_KEYS.PAYMENTS_IMPUESTOS_MANAGE,
+    label: 'Gestionar impuestos',
+    description: 'Permite crear y administrar impuestos.',
+  },
+  {
+    group: 'Pagos',
+    key: PERMISSION_KEYS.PAYMENTS_RESOLUCIONES_MANAGE,
+    label: 'Gestionar resoluciones',
+    description: 'Permite crear y administrar resoluciones.',
+  },
+  {
+    group: 'Pagos',
+    key: PERMISSION_KEYS.PAYMENTS_CAJA_MANAGE,
+    label: 'Gestionar cajas',
+    description: 'Permite crear y administrar cajas.',
+  },
+  {
+    group: 'Pagos',
+    key: PERMISSION_KEYS.PAYMENTS_DATOS_COBRO_MANAGE,
+    label: 'Gestionar datos de cobro',
+    description: 'Permite administrar la configuracion de datos de cobro.',
+  },
+  {
+    group: 'Pagos',
+    key: PERMISSION_KEYS.PAYMENTS_ITEM_COBRO_MANAGE,
+    label: 'Gestionar items de cobro',
+    description: 'Permite crear y administrar items de cobro.',
+  },
+  {
+    group: 'Pagos',
+    key: PERMISSION_KEYS.PAYMENTS_SERVICIOS_COMPLEMENTARIOS_MANAGE,
+    label: 'Gestionar servicios complementarios',
+    description: 'Permite crear y administrar servicios complementarios.',
+  },
+  {
+    group: 'Academico',
+    key: PERMISSION_KEYS.SCHEDULE_VIEW,
+    label: 'Ver horario',
+    description: 'Permite visualizar el modulo de horario.',
+  },
+  {
+    group: 'Academico',
+    key: PERMISSION_KEYS.CERTIFICADOS_VIEW,
+    label: 'Ver certificados',
+    description: 'Permite visualizar el modulo de certificados.',
   },
   {
     group: 'Notificaciones',
@@ -128,6 +378,30 @@ const PERMISSIONS_CATALOG = [
     key: PERMISSION_KEYS.MESSAGES_DELETE,
     label: 'Eliminar mensajes',
     description: 'Permite eliminar mensajes en el modulo de mensajeria.',
+  },
+  {
+    group: 'Mensajes',
+    key: PERMISSION_KEYS.MESSAGES_SEND,
+    label: 'Enviar mensajes',
+    description: 'Permite redactar y enviar mensajes a otros usuarios.',
+  },
+  {
+    group: 'Mensajes',
+    key: PERMISSION_KEYS.MESSAGES_REPLY,
+    label: 'Responder mensajes',
+    description: 'Permite responder mensajes recibidos.',
+  },
+  {
+    group: 'Mensajes',
+    key: PERMISSION_KEYS.MESSAGES_READ_RECEIPTS_VIEW,
+    label: 'Ver leidos',
+    description: 'Permite ver el estado (leido/no leido) de los destinatarios en mensajes enviados.',
+  },
+  {
+    group: 'Mensajes',
+    key: PERMISSION_KEYS.CHAT_ONLINE_VIEW,
+    label: 'Chat en linea',
+    description: 'Permite acceder al chat en linea dentro de la plataforma.',
   },
   {
     group: 'Academico',
@@ -182,6 +456,54 @@ const PERMISSIONS_CATALOG = [
     key: PERMISSION_KEYS.PERMISSIONS_MANAGE,
     label: 'Gestionar permisos',
     description: 'Permite configurar los permisos por rol.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_CHAT_MANAGE,
+    label: 'Configuracion de chat',
+    description: 'Permite configurar reglas de chat por rol/grupo.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_MESSAGES_MANAGE,
+    label: 'Configuracion de mensajes',
+    description: 'Permite configurar reglas de mensajeria por rol/grupo.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_NOTIFICATIONS_MANAGE,
+    label: 'Configuracion de notificaciones',
+    description: 'Permite configurar reglas de notificaciones por rol/grupo.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_REPORT_TYPES_MANAGE,
+    label: 'Configuracion tipos de reporte',
+    description: 'Permite configurar a que roles aplica cada tipo de reporte.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_TIPO_PERMISOS_MANAGE,
+    label: 'Tipos de permiso',
+    description: 'Permite administrar los tipos de permiso.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_TIPO_INASISTENCIAS_MANAGE,
+    label: 'Tipos de inasistencia',
+    description: 'Permite administrar los tipos de inasistencia.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_TIPO_CERTIFICADO_MANAGE,
+    label: 'Tipo de certificado',
+    description: 'Permite administrar los tipos de certificado.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_TIPO_EMPLEADO_MANAGE,
+    label: 'Tipo empleado',
+    description: 'Permite crear y administrar tipos de empleado.',
   },
   {
     group: 'Configuración',
@@ -258,115 +580,33 @@ const PERMISSIONS_CATALOG = [
 ]
 
 const DEFAULT_ROLE_PERMISSIONS = {
-  administrador: [
-    PERMISSION_KEYS.USERS_VIEW,
-    PERMISSION_KEYS.USERS_DELETE,
-    PERMISSION_KEYS.USERS_ASSIGN_ROLE,
-    PERMISSION_KEYS.MEMBERS_MANAGE,
-    PERMISSION_KEYS.PLANTEL_VIEW,
-    PERMISSION_KEYS.PLANTEL_MANAGE,
-    PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE,
-    PERMISSION_KEYS.NOTIFICATIONS_CREATE,
-    PERMISSION_KEYS.MESSAGES_DELETE,
-    PERMISSION_KEYS.TASKS_VIEW,
-    PERMISSION_KEYS.TASKS_CREATE,
-    PERMISSION_KEYS.TASKS_EDIT,
-    PERMISSION_KEYS.TASKS_DELETE,
-    PERMISSION_KEYS.TASKS_REPLY,
-    PERMISSION_KEYS.EVALUATIONS_VIEW,
-    PERMISSION_KEYS.EVALUATIONS_MANAGE,
-    PERMISSION_KEYS.SCHEDULE_EDIT,
-    PERMISSION_KEYS.PERMISSIONS_MANAGE,
-    PERMISSION_KEYS.ROLES_MANAGE,
-    PERMISSION_KEYS.BULK_UPLOAD_MANAGE,
-    PERMISSION_KEYS.EXPORT_EXCEL,
-    PERMISSION_KEYS.INASISTENCIAS_VIEW,
-    PERMISSION_KEYS.INASISTENCIAS_CREATE,
-    PERMISSION_KEYS.INASISTENCIAS_EDIT,
-    PERMISSION_KEYS.INASISTENCIAS_DELETE,
-    PERMISSION_KEYS.PERMISOS_VIEW,
-    PERMISSION_KEYS.PERMISOS_CREATE,
-    PERMISSION_KEYS.PERMISOS_EDIT,
-    PERMISSION_KEYS.PERMISOS_DELETE,
-    PERMISSION_KEYS.STORAGE_MANAGE,
-  ],
-  directivo: [
-    PERMISSION_KEYS.USERS_VIEW,
-    PERMISSION_KEYS.USERS_DELETE,
-    PERMISSION_KEYS.USERS_ASSIGN_ROLE,
-    PERMISSION_KEYS.MEMBERS_MANAGE,
-    PERMISSION_KEYS.PLANTEL_VIEW,
-    PERMISSION_KEYS.PLANTEL_MANAGE,
-    PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE,
-    PERMISSION_KEYS.NOTIFICATIONS_CREATE,
-    PERMISSION_KEYS.MESSAGES_DELETE,
-    PERMISSION_KEYS.TASKS_VIEW,
-    PERMISSION_KEYS.TASKS_CREATE,
-    PERMISSION_KEYS.TASKS_EDIT,
-    PERMISSION_KEYS.TASKS_DELETE,
-    PERMISSION_KEYS.TASKS_REPLY,
-    PERMISSION_KEYS.EVALUATIONS_VIEW,
-    PERMISSION_KEYS.EVALUATIONS_MANAGE,
-    PERMISSION_KEYS.SCHEDULE_EDIT,
-    PERMISSION_KEYS.PERMISSIONS_MANAGE,
-    PERMISSION_KEYS.ROLES_MANAGE,
-    PERMISSION_KEYS.BULK_UPLOAD_MANAGE,
-    PERMISSION_KEYS.EXPORT_EXCEL,
-    PERMISSION_KEYS.INASISTENCIAS_VIEW,
-    PERMISSION_KEYS.INASISTENCIAS_CREATE,
-    PERMISSION_KEYS.INASISTENCIAS_EDIT,
-    PERMISSION_KEYS.INASISTENCIAS_DELETE,
-    PERMISSION_KEYS.PERMISOS_VIEW,
-    PERMISSION_KEYS.PERMISOS_CREATE,
-    PERMISSION_KEYS.PERMISOS_EDIT,
-    PERMISSION_KEYS.PERMISOS_DELETE,
-    PERMISSION_KEYS.STORAGE_MANAGE,
-  ],
-  profesor: [
-    PERMISSION_KEYS.PLANTEL_VIEW,
-    PERMISSION_KEYS.NOTIFICATIONS_CREATE,
-    PERMISSION_KEYS.TASKS_VIEW,
-    PERMISSION_KEYS.TASKS_CREATE,
-    PERMISSION_KEYS.TASKS_EDIT,
-    PERMISSION_KEYS.TASKS_DELETE,
-    PERMISSION_KEYS.TASKS_REPLY,
-    PERMISSION_KEYS.EVALUATIONS_VIEW,
-    PERMISSION_KEYS.EVALUATIONS_MANAGE,
-    PERMISSION_KEYS.SCHEDULE_EDIT,
-    PERMISSION_KEYS.INASISTENCIAS_VIEW,
-    PERMISSION_KEYS.INASISTENCIAS_CREATE,
-    PERMISSION_KEYS.PERMISOS_VIEW,
-    PERMISSION_KEYS.PERMISOS_CREATE,
-  ],
-  estudiante: [
-    PERMISSION_KEYS.PLANTEL_VIEW,
-    PERMISSION_KEYS.TASKS_VIEW,
-    PERMISSION_KEYS.EVALUATIONS_VIEW,
-    PERMISSION_KEYS.INASISTENCIAS_VIEW,
-    PERMISSION_KEYS.INASISTENCIAS_CREATE,
-    PERMISSION_KEYS.PERMISOS_VIEW,
-    PERMISSION_KEYS.PERMISOS_CREATE,
-  ],
-  aspirante: [
-    PERMISSION_KEYS.PLANTEL_VIEW,
-    PERMISSION_KEYS.TASKS_VIEW,
-    PERMISSION_KEYS.EVALUATIONS_VIEW,
-  ],
+  administrador: [],
+  directivo: [],
+  profesor: [],
+  estudiante: [],
+  aspirante: [],
 }
 
 function normalizeRolePermissionsData(rawData) {
   const normalized = {}
-  Object.entries(DEFAULT_ROLE_PERMISSIONS).forEach(([roleName, permissions]) => {
+  Object.keys(DEFAULT_ROLE_PERMISSIONS).forEach((roleName) => {
     const incoming = rawData?.[roleName]
-    if (!Array.isArray(incoming)) {
-      normalized[roleName] = [...permissions]
-      return
-    }
+    normalized[roleName] = Array.isArray(incoming)
+      ? incoming
+        .filter((permission) => typeof permission === 'string')
+        .map((permission) => permission.trim())
+        .filter(Boolean)
+      : []
+  })
 
-    normalized[roleName] = incoming
-      .filter((permission) => typeof permission === 'string')
-      .map((permission) => permission.trim())
-      .filter(Boolean)
+  Object.entries(rawData || {}).forEach(([roleName, permissions]) => {
+    if (normalized[roleName] !== undefined) return
+    normalized[roleName] = Array.isArray(permissions)
+      ? permissions
+        .filter((permission) => typeof permission === 'string')
+        .map((permission) => permission.trim())
+        .filter(Boolean)
+      : []
   })
   return normalized
 }
@@ -382,6 +622,17 @@ function hasRolePermission(role, permissionKey, rolePermissionsMap) {
   return resolveRolePermissions(role, rolePermissionsMap).includes(permissionKey)
 }
 
+function buildDynamicMemberPermissionKey(roleId, action) {
+  const normalizedId = String(roleId || '').trim()
+  const normalizedAction = String(action || '').trim().toLowerCase()
+  if (!normalizedId) return 'members_dynamic_role__invalid__'
+
+  const allowed = new Set(['view', 'create', 'edit', 'delete'])
+  if (!allowed.has(normalizedAction)) return `members_dynamic_role_${normalizedId}__invalid__`
+
+  return `members_dynamic_role_${normalizedId}_${normalizedAction}`
+}
+
 export {
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_KEYS,
@@ -389,6 +640,7 @@ export {
   PROTECTED_ROLE_VALUES,
   ROLE_OPTIONS,
   buildAllRoleOptions,
+  buildDynamicMemberPermissionKey,
   hasRolePermission,
   normalizeRolePermissionsData,
   resolveRolePermissions,

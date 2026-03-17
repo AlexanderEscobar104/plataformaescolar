@@ -11,7 +11,8 @@ function normalizeRole(roleValue) {
 
 function MessageSettingsPage() {
   const { hasPermission, userNitRut } = useAuth()
-  const canManage = hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
+  const canManage =
+    hasPermission(PERMISSION_KEYS.CONFIG_MESSAGES_MANAGE) || hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
   const [customRoles, setCustomRoles] = useState([])
   const [roleMatrix, setRoleMatrix] = useState({})
   const [studentGroups, setStudentGroups] = useState([])

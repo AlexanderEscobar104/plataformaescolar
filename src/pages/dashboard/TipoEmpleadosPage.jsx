@@ -17,7 +17,7 @@ import PaginationControls from '../../components/PaginationControls'
 function TipoEmpleadosPage() {
   const { user, hasPermission } = useAuth()
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
-  const canManage = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canManage = hasPermission(PERMISSION_KEYS.CONFIG_TIPO_EMPLEADO_MANAGE)
   const canCreate = canManage
   const canEdit = canManage
   const canDelete = canManage
@@ -196,7 +196,7 @@ function TipoEmpleadosPage() {
           <form id="tipo-empleados-form" className="form evaluation-create-form" onSubmit={handleSubmit}>
             <fieldset className="form-fieldset" disabled={saving}>
               <label htmlFor="te-nombre" className="evaluation-field-full">
-                Nombre
+                Tipo
                 <input
                   ref={nameInputRef}
                   id="te-nombre"
@@ -271,7 +271,7 @@ function TipoEmpleadosPage() {
                 setSearch(event.target.value)
                 setCurrentPage(1)
               }}
-              placeholder="Buscar por nombre, descripcion o estado"
+              placeholder="Buscar por Tipo, descripcion o estado"
             />
           </div>
 
@@ -282,7 +282,7 @@ function TipoEmpleadosPage() {
               <table className="students-table">
                 <thead>
                   <tr>
-                    <th>Nombre</th>
+                    <th>Tipo</th>
                     <th>Descripcion</th>
                     <th>Estado</th>
                     {(canEdit || canDelete) && <th>Acciones</th>}
@@ -405,4 +405,3 @@ function TipoEmpleadosPage() {
 }
 
 export default TipoEmpleadosPage
-

@@ -7,16 +7,28 @@ import { PERMISSION_KEYS } from '../../utils/permissions'
 import OperationStatusModal from '../../components/OperationStatusModal'
 
 const DOC_REF = 'configuracion/datos_cobro'
+const ROLE_OPTIONS_BASE = [
+  { id: '__administrador', name: 'Administrador', value: 'administrador' },
+  { id: '__directivo', name: 'Directivo', value: 'directivo' },
+  { id: '__profesor', name: 'Profesor', value: 'profesor' },
+  { id: '__estudiante', name: 'Estudiante', value: 'estudiante' },
+  { id: '__aspirante', name: 'Aspirante', value: 'aspirante' },
+]
 
 function DatosCobroPage() {
   const { hasPermission, userNitRut } = useAuth()
-  const canManage = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canManage = hasPermission(PERMISSION_KEYS.PAYMENTS_DATOS_COBRO_MANAGE)
 
   const [diaCorte, setDiaCorte] = useState('')
   const [cobraServiciosComplementarios, setCobraServiciosComplementarios] = useState(false)
   const [cobradores, setCobradores] = useState([])
   const [cobradorAutomaticoId, setCobradorAutomaticoId] = useState('')
   const [loadingCobradores, setLoadingCobradores] = useState(true)
+  const [cajas, setCajas] = useState([])
+  const [cajaId, setCajaId] = useState('')
+  const [loadingCajas, setLoadingCajas] = useState(true)
+  const [roleOptions, setRoleOptions] = useState(ROLE_OPTIONS_BASE)
+  const [rolesParaRecibos, setRolesParaRecibos] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
@@ -27,10 +39,13 @@ function DatosCobroPage() {
     const loadData = async () => {
       setLoading(true)
       setLoadingCobradores(true)
+      setLoadingCajas(true)
       try {
-        const [snapshot, empleadosSnap] = await Promise.all([
+        const [snapshot, empleadosSnap, rolesSnap, cajasSnap] = await Promise.all([
           getDoc(doc(db, 'configuracion', `datos_cobro_${userNitRut}`)),
           getDocs(query(collection(db, 'empleados'), where('nitRut', '==', userNitRut))),
+          getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut))),
+          getDocs(query(collection(db, 'cajas'), where('nitRut', '==', userNitRut))),
         ])
 
         const mappedCobradores = empleadosSnap.docs
@@ -39,6 +54,26 @@ function DatosCobroPage() {
           .sort((a, b) => `${a.nombres || ''} ${a.apellidos || ''}`.localeCompare(`${b.nombres || ''} ${b.apellidos || ''}`))
 
         setCobradores(mappedCobradores)
+
+        const mappedCajas = cajasSnap.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+          .sort((a, b) => String(a.nombreCaja || '').localeCompare(String(b.nombreCaja || '')))
+        setCajas(mappedCajas)
+
+        const custom = rolesSnap.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+          .map((role) => {
+            const name = String(role.name || '').trim()
+            const value = String(role.name || '').toLowerCase().trim()
+            return { id: role.id, name, value, status: role.status || 'activo' }
+          })
+          .filter((role) => role.name && role.value && String(role.status || 'activo').toLowerCase() === 'activo')
+          .sort((a, b) => a.name.localeCompare(b.name))
+
+        setRoleOptions([
+          ...ROLE_OPTIONS_BASE,
+          ...custom.filter((role) => !ROLE_OPTIONS_BASE.some((base) => base.value === role.value)),
+        ])
 
         if (snapshot.exists()) {
           const data = snapshot.data()
@@ -57,15 +92,31 @@ function DatosCobroPage() {
 
           setCobraServiciosComplementarios(!!data.cobraServiciosComplementarios)
           setCobradorAutomaticoId(String(data.cobradorAutomaticoId || ''))
+          setCajaId(String(data.cajaId || ''))
+          setRolesParaRecibos(Array.isArray(data.rolesParaRecibos) ? data.rolesParaRecibos.filter(Boolean).map(String) : [])
         }
+      } catch {
+        setCobradores([])
+        setRoleOptions(ROLE_OPTIONS_BASE)
+        setCajas([])
       } finally {
         setLoadingCobradores(false)
+        setLoadingCajas(false)
         setLoading(false)
       }
     }
     if (!userNitRut) return
     loadData()
   }, [userNitRut])
+
+  const toggleRolRecibo = (value) => {
+    setRolesParaRecibos((prev) => {
+      const normalized = String(value || '').trim().toLowerCase()
+      if (!normalized) return prev
+      if (prev.includes(normalized)) return prev.filter((r) => r !== normalized)
+      return [...prev, normalized]
+    })
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -87,6 +138,7 @@ function DatosCobroPage() {
     try {
       setSaving(true)
       const selected = cobradores.find((emp) => emp.id === cobradorAutomaticoId) || null
+      const selectedCaja = cajas.find((c) => c.id === cajaId) || null
       await setDocTracked(
         doc(db, 'configuracion', `datos_cobro_${userNitRut}`),
         {
@@ -94,6 +146,9 @@ function DatosCobroPage() {
           cobraServiciosComplementarios,
           cobradorAutomaticoId: cobradorAutomaticoId || '',
           cobradorAutomaticoNombre: selected ? `${selected.nombres || ''} ${selected.apellidos || ''}`.trim() : '',
+          cajaId: cajaId || '',
+          cajaNombre: selectedCaja ? String(selectedCaja.nombreCaja || '').trim() : '',
+          rolesParaRecibos: rolesParaRecibos,
           updatedAt: serverTimestamp(),
         },
         { merge: true },
@@ -167,6 +222,33 @@ function DatosCobroPage() {
                 )}
               </label>
 
+              <label htmlFor="caja-predeterminada" style={{ marginTop: '14px' }}>
+                Caja
+                <select
+                  id="caja-predeterminada"
+                  value={cajaId}
+                  onChange={(e) => setCajaId(e.target.value)}
+                  disabled={loadingCajas}
+                >
+                  <option value="">{loadingCajas ? 'Cargando cajas...' : 'Sin asignar'}</option>
+                  {cajas.map((caja) => (
+                    <option
+                      key={caja.id}
+                      value={caja.id}
+                      disabled={String(caja.estado || 'activo').trim().toLowerCase() !== 'activo'}
+                    >
+                      {String(caja.nombreCaja || 'Caja').trim() || 'Caja'} - {String(caja.estado || 'activo')}
+                      {(caja.resolucionNombre || caja.resolucion) ? ` (${caja.resolucionNombre || caja.resolucion})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {!loadingCajas && cajas.length === 0 && (
+                  <small style={{ display: 'block', marginTop: '6px', color: 'var(--text-secondary)' }}>
+                    No hay cajas registradas. Crea una en Configuracion &gt; Caja.
+                  </small>
+                )}
+              </label>
+
               <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <input
                   id="cobra-serv"
@@ -178,6 +260,28 @@ function DatosCobroPage() {
                 <label htmlFor="cobra-serv" style={{ margin: 0, cursor: 'pointer', fontWeight: '500', display: 'block' }}>
                   Cobra servicios complementarios
                 </label>
+              </div>
+
+              <div style={{ marginTop: '22px' }}>
+                <h3 style={{ margin: 0 }}>Generar recibos</h3>
+                <p style={{ marginTop: '8px', marginBottom: '10px', color: 'var(--text-secondary)' }}>
+                  Selecciona uno o varios roles a los que se les generaran recibos.
+                </p>
+                <div className="teacher-checkbox-list">
+                  {roleOptions.map((role) => (
+                    <label key={role.id || role.value} className="teacher-checkbox-item">
+                      <input
+                        type="checkbox"
+                        checked={rolesParaRecibos.includes(String(role.value || '').toLowerCase())}
+                        onChange={() => toggleRolRecibo(role.value)}
+                      />
+                      <span>{role.name}</span>
+                    </label>
+                  ))}
+                </div>
+                <small style={{ display: 'block', marginTop: '8px', color: 'var(--text-secondary)' }}>
+                  Roles seleccionados: {rolesParaRecibos.length}
+                </small>
               </div>
 
               {canManage && (

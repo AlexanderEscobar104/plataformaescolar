@@ -4,12 +4,14 @@ import { useParams } from 'react-router-dom'
 import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import RoleRegistrationPage from './RoleRegistrationPage'
+import { buildDynamicMemberPermissionKey } from '../../utils/permissions'
 
 const normalizeRoleValue = (name) => String(name || '').toLowerCase().trim()
 
 function RoleMemberRegistrationPage() {
   const { roleId } = useParams()
-  const { userNitRut } = useAuth()
+  const { userNitRut, hasPermission } = useAuth()
+  const canCreate = hasPermission(buildDynamicMemberPermissionKey(roleId, 'create'))
   const [loading, setLoading] = useState(true)
   const [roleName, setRoleName] = useState('')
   const [roleValue, setRoleValue] = useState('')
@@ -63,6 +65,17 @@ function RoleMemberRegistrationPage() {
     )
   }
 
+  if (!canCreate) {
+    return (
+      <section>
+        <h2>Crear miembro</h2>
+        <p className="feedback error">
+          No tienes permisos para crear miembros en este rol. Habilita el permiso del rol en el menu Permisos.
+        </p>
+      </section>
+    )
+  }
+
   return (
     <RoleRegistrationPage
       role={roleValue}
@@ -74,4 +87,3 @@ function RoleMemberRegistrationPage() {
 }
 
 export default RoleMemberRegistrationPage
-

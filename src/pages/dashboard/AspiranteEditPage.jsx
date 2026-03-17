@@ -17,7 +17,9 @@ function AspiranteEditPage() {
   const navigate = useNavigate()
   const { aspiranteId } = useParams()
   const { hasPermission, userNitRut } = useAuth()
-  const canEdit = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canViewAspirante = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_VIEW)
+  const canEdit = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_EDIT)
+  const canAccessAspirante = canViewAspirante || canEdit
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -98,6 +100,12 @@ function AspiranteEditPage() {
   }, [userNitRut])
 
   useEffect(() => {
+    if (!canAccessAspirante) {
+      setErrorModalMessage('No tienes permiso para ver aspirantes.')
+      setShowErrorModal(true)
+      setLoading(false)
+      return
+    }
     const loadData = async () => {
       setLoading(true)
       try {
@@ -145,7 +153,7 @@ function AspiranteEditPage() {
       }
     }
     loadData()
-  }, [aspiranteId])
+  }, [canAccessAspirante, aspiranteId])
 
   const handleFotoChange = (event) => {
     const pickedFile = event.target.files?.[0] || null

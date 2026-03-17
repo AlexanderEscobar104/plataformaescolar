@@ -67,7 +67,8 @@ function EventsPage() {
   const [exportingAll, setExportingAll] = useState(false)
 
   const { user, hasPermission, userNitRut } = useAuth()
-  const canManageEvents = hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
+  const canManageEvents =
+    hasPermission(PERMISSION_KEYS.EVENTS_MANAGE) || hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const [anchorDate, setAnchorDate] = useState(new Date())
   const [events, setEvents] = useState([])

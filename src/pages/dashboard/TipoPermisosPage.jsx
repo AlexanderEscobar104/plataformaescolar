@@ -17,9 +17,12 @@ import PaginationControls from '../../components/PaginationControls'
 function TipoPermisosPage() {
   const { user, hasPermission } = useAuth()
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
-  const canCreate = hasPermission(PERMISSION_KEYS.PERMISOS_CREATE)
-  const canEdit = hasPermission(PERMISSION_KEYS.PERMISOS_EDIT)
-  const canDelete = hasPermission(PERMISSION_KEYS.PERMISOS_DELETE)
+  const canCreate =
+    hasPermission(PERMISSION_KEYS.CONFIG_TIPO_PERMISOS_MANAGE) || hasPermission(PERMISSION_KEYS.PERMISOS_CREATE)
+  const canEdit =
+    hasPermission(PERMISSION_KEYS.CONFIG_TIPO_PERMISOS_MANAGE) || hasPermission(PERMISSION_KEYS.PERMISOS_EDIT)
+  const canDelete =
+    hasPermission(PERMISSION_KEYS.CONFIG_TIPO_PERMISOS_MANAGE) || hasPermission(PERMISSION_KEYS.PERMISOS_DELETE)
 
   const [tipos, setTipos] = useState([])
   const [loading, setLoading] = useState(true)

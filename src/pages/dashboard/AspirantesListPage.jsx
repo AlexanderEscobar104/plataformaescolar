@@ -17,7 +17,10 @@ function AspirantesListPage() {
   const { hasPermission, userNitRut } = useAuth()
   const _canDeleteUsers = hasPermission(PERMISSION_KEYS.USERS_DELETE)
   const _canAssignRole = hasPermission(PERMISSION_KEYS.USERS_ASSIGN_ROLE)
-  const canManageMembers = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canViewAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_VIEW)
+  const canCreateAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_CREATE)
+  const canEditAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_EDIT)
+  const canDeleteAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_DELETE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const [aspirantes, setAspirantes] = useState([])
   const [search, setSearch] = useState('')
@@ -31,6 +34,11 @@ function AspirantesListPage() {
   const [convertError, setConvertError] = useState('')
 
   const loadAspirantes = useCallback(async () => {
+    if (!canViewAspirantes) {
+      setAspirantes([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const snapshot = await getDocs(
@@ -59,7 +67,7 @@ function AspirantesListPage() {
     } finally {
       setLoading(false)
     }
-  }, [userNitRut])
+  }, [canViewAspirantes, userNitRut])
 
   useEffect(() => {
     loadAspirantes()
@@ -84,7 +92,7 @@ function AspirantesListPage() {
   }, [search, aspirantes])
 
   const handleDelete = async () => {
-    if (!canManageMembers) {
+    if (!canDeleteAspirantes) {
       setFlashMessage('No tienes permiso para eliminar registros.')
       return
     }
@@ -126,11 +134,20 @@ function AspirantesListPage() {
     }
   }
 
+  if (!canViewAspirantes) {
+    return (
+      <section>
+        <h2>Aspirantes</h2>
+        <p className="feedback error">No tienes permiso para ver aspirantes.</p>
+      </section>
+    )
+  }
+
   return (
     <section>
       <div className="students-header">
         <h2>Crear aspirantes</h2>
-        {canManageMembers && (
+        {canCreateAspirantes && (
           <Link className="button button-link" to="/dashboard/crear-aspirantes/nuevo">
             Agregar nuevo aspirante
           </Link>
@@ -182,10 +199,10 @@ function AspirantesListPage() {
                       type="button"
                       className="button small icon-action-button"
                       onClick={() => navigate(`/dashboard/crear-aspirantes/editar/${aspirante.id}`)}
-                      aria-label={canManageMembers ? 'Editar aspirante' : 'Ver aspirante'}
-                      title={canManageMembers ? 'Editar' : 'Ver mas'}
+                      aria-label={canEditAspirantes ? 'Editar aspirante' : 'Ver aspirante'}
+                      title={canEditAspirantes ? 'Editar' : 'Ver mas'}
                     >
-                      {canManageMembers ? (
+                      {canEditAspirantes ? (
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <path d="m3 17.3 10.9-10.9 2.7 2.7L5.7 20H3v-2.7Zm17.7-10.1a1 1 0 0 0 0-1.4L18.2 3.3a1 1 0 0 0-1.4 0l-1.4 1.4 4.1 4.1 1.2-1.6Z" />
                         </svg>
@@ -196,7 +213,7 @@ function AspirantesListPage() {
                       )}
                     </button>
                     {/* Convert to Estudiante */}
-                    {canManageMembers && (
+                    {canEditAspirantes && (
                       <button
                         type="button"
                         className="button small success icon-action-button"
@@ -210,7 +227,7 @@ function AspirantesListPage() {
                       </button>
                     )}
                     {/* Delete */}
-                    {canManageMembers && (
+                    {canDeleteAspirantes && (
                       <button
                         type="button"
                         className="button small danger icon-action-button"

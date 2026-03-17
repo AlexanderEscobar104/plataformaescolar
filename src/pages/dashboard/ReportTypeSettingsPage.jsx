@@ -11,7 +11,8 @@ function normalizeRole(roleValue) {
 
 function ReportTypeSettingsPage() {
   const { hasPermission, userNitRut } = useAuth()
-  const canManage = hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
+  const canManage =
+    hasPermission(PERMISSION_KEYS.CONFIG_REPORT_TYPES_MANAGE) || hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
   const [customRoles, setCustomRoles] = useState([])
   const [reportTypes, setReportTypes] = useState([])
   const [roleMatrix, setRoleMatrix] = useState({})

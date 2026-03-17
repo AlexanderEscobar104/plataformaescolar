@@ -52,10 +52,11 @@ function UsersPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [_exportingAll, setExportingAll] = useState(false)
 
-  const { hasPermission, userNitRut } = useAuth()
+  const { hasPermission, userNitRut, resetPassword } = useAuth()
   const canViewUsers = hasPermission(PERMISSION_KEYS.USERS_VIEW)
   const canDeleteUsers = hasPermission(PERMISSION_KEYS.USERS_DELETE)
   const canAssignRoles = hasPermission(PERMISSION_KEYS.USERS_ASSIGN_ROLE)
+  const canChangeUserState = hasPermission(PERMISSION_KEYS.USERS_CHANGE_STATE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const [users, setUsers] = useState([])
   const [editableRoles, setEditableRoles] = useState({})
@@ -63,6 +64,7 @@ function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [resettingUserId, setResettingUserId] = useState('')
   const [updatingRoleUserId, setUpdatingRoleUserId] = useState('')
   const [updatingStateUserId, setUpdatingStateUserId] = useState('')
   const [userToDelete, setUserToDelete] = useState(null)
@@ -169,6 +171,34 @@ function UsersPage() {
     }
   }
 
+  const handleResetPassword = async (item) => {
+    if (!canAssignRoles) {
+      setFeedback('No tienes permisos para enviar correos de recuperacion de contrasena.')
+      return
+    }
+
+    const targetEmail = String(item?.correo || '').trim().toLowerCase()
+    if (!targetEmail || targetEmail === '-') {
+      setFeedback('El usuario no tiene correo registrado.')
+      return
+    }
+
+    try {
+      setResettingUserId(item.id)
+      const result = await resetPassword(targetEmail)
+      const copiedTo = Array.isArray(result?.copiedTo) ? result.copiedTo : []
+      if (copiedTo.length > 0) {
+        setFeedback(`Correo de recuperacion enviado a ${targetEmail}. Copia: ${copiedTo.join(', ')}`)
+      } else {
+        setFeedback(`Correo de recuperacion enviado a ${targetEmail}.`)
+      }
+    } catch {
+      setFeedback('No fue posible enviar el correo de recuperacion.')
+    } finally {
+      setResettingUserId('')
+    }
+  }
+
   const handleRoleChange = (item, newRoleValue) => {
     const oldRole = String(editableRoles[item.id] || '').trim().toLowerCase()
     
@@ -235,7 +265,7 @@ function UsersPage() {
   }
 
   const handleAssignStateConfirm = async () => {
-    if (!canAssignRoles || !stateChangeConfirm) {
+    if (!canChangeUserState || !stateChangeConfirm) {
       setFeedback('No tienes permisos para cambiar el estado del usuario o la sesion expiro.')
       setStateChangeConfirm(null)
       return
@@ -302,7 +332,7 @@ function UsersPage() {
                   <th>Fecha de creacion</th>
                   <th>Fecha de acceso</th>
                   <th>Estado</th>
-                  <th>Eliminar</th>
+                  <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -341,9 +371,9 @@ function UsersPage() {
                       className="role-select-box"
                       value={editableStates[item.id] || 'activo'}
                       onChange={(event) => handleStateChange(item, event.target.value)}
-                      disabled={!canAssignRoles || updatingStateUserId === item.id}
+                      disabled={!canChangeUserState || updatingStateUserId === item.id}
                       aria-label="Cambiar estado del usuario"
-                      title={canAssignRoles ? 'Cambiar estado' : 'Sin permiso para cambiar estado'}
+                      title={canChangeUserState ? 'Cambiar estado' : 'Sin permiso para cambiar estado'}
                     >
                       <option value="activo">Activo</option>
                       <option value="inactivo">Inactivo</option>
@@ -358,7 +388,19 @@ function UsersPage() {
                       })()}
                     </select>
                   </td>
-                  <td className="student-actions" data-label="Eliminar">
+                  <td className="student-actions" data-label="Acciones">
+                    <button
+                      type="button"
+                      className="button small secondary icon-action-button"
+                      onClick={() => handleResetPassword(item)}
+                      disabled={!canAssignRoles || resettingUserId === item.id || item.correo === '-'}
+                      aria-label="Enviar correo de recuperacion"
+                      title={canAssignRoles ? 'Enviar correo de recuperacion' : 'Sin permiso para recuperar contrasena'}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 12.7 2 6.5V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6.5l-10 6.2ZM12 11 2 4h20l-10 7Z" />
+                      </svg>
+                    </button>
                     <button
                       type="button"
                       className="button small danger icon-action-button"

@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { collection, getDocs } from 'firebase/firestore'
 import { useAuth } from '../hooks/useAuth'
 import { db } from '../firebase'
+import PasswordField from './PasswordField'
 
 /**
  * ✅ CORRECCIÓN: Rate Limiting contra fuerza bruta
@@ -238,17 +239,14 @@ function SecurityCollectionRoute({ children, collectionName = 'seguridad', redir
               disabled={verifying || isBlocked}
             />
           </label>
-          <label htmlFor="seguridad-clave">
-            Clave
-            <input
-              id="seguridad-clave"
-              type="password"
-              value={form.clave}
-              onChange={(event) => setForm((prev) => ({ ...prev, clave: event.target.value }))}
-              autoComplete="current-password"
-              disabled={verifying || isBlocked}
-            />
-          </label>
+          <PasswordField
+            id="seguridad-clave"
+            label="Clave"
+            value={form.clave}
+            onChange={(event) => setForm((prev) => ({ ...prev, clave: event.target.value }))}
+            autoComplete="current-password"
+            disabled={verifying || isBlocked}
+          />
 
           {/* ✅ CORRECCIÓN: Mostrar intentos restantes */}
           {!isBlocked && data.count > 0 && (

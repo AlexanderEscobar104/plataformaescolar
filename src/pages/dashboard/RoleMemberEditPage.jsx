@@ -8,7 +8,7 @@ import { uploadBytesTracked } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
-import { PERMISSION_KEYS } from '../../utils/permissions'
+import { buildDynamicMemberPermissionKey } from '../../utils/permissions'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 const normalizeRoleValue = (name) => String(name || '').toLowerCase().trim()
@@ -17,7 +17,9 @@ function RoleMemberEditPage() {
   const navigate = useNavigate()
   const { roleId, memberId } = useParams()
   const { hasPermission, userNitRut } = useAuth()
-  const canEdit = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canViewMember = hasPermission(buildDynamicMemberPermissionKey(roleId, 'view'))
+  const canEdit = hasPermission(buildDynamicMemberPermissionKey(roleId, 'edit'))
+  const canAccessMember = canViewMember || canEdit
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -46,6 +48,12 @@ function RoleMemberEditPage() {
   const backTo = `/dashboard/crear-rol/${roleId}`
 
   useEffect(() => {
+    if (!canAccessMember) {
+      setErrorModalMessage('No tienes permiso para ver este modulo.')
+      setShowErrorModal(true)
+      setLoading(false)
+      return
+    }
     const loadRoleAndMember = async () => {
       setLoading(true)
       try {
@@ -94,7 +102,7 @@ function RoleMemberEditPage() {
 
     if (!roleId || !memberId) return
     loadRoleAndMember()
-  }, [memberId, roleId, userNitRut])
+  }, [canAccessMember, memberId, roleId, userNitRut])
 
   const handleFotoChange = (event) => {
     const pickedFile = event.target.files?.[0] || null
@@ -309,4 +317,3 @@ function RoleMemberEditPage() {
 }
 
 export default RoleMemberEditPage
-

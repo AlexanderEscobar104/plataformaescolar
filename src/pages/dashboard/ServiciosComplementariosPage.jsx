@@ -38,11 +38,13 @@ function ServiciosComplementariosPage() {
   const [exportingAll, setExportingAll] = useState(false)
 
   const { hasPermission, userNitRut } = useAuth()
-  const canManageServicios = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canManageServicios = hasPermission(PERMISSION_KEYS.PAYMENTS_SERVICIOS_COMPLEMENTARIOS_MANAGE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
 
   const [servicios, setServicios] = useState([])
   const [allUsers, setAllUsers] = useState([])
+  const [impuestos, setImpuestos] = useState([])
+  const [loadingImpuestos, setLoadingImpuestos] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -56,13 +58,14 @@ function ServiciosComplementariosPage() {
   const [form, setForm] = useState({
     servicio: '',
     valor: '',
+    impuestoId: '',
     estado: 'activo',
     fechaVencimiento: '',
     usuariosAsignados: [],
   })
 
   const resetForm = () => {
-    setForm({ servicio: '', valor: '', estado: 'activo', fechaVencimiento: '', usuariosAsignados: [] })
+    setForm({ servicio: '', valor: '', impuestoId: '', estado: 'activo', fechaVencimiento: '', usuariosAsignados: [] })
     setEditingId(null)
     setFeedback('')
     setUserSearch('')
@@ -70,10 +73,12 @@ function ServiciosComplementariosPage() {
 
   const loadServicios = useCallback(async () => {
     setLoading(true)
+    setLoadingImpuestos(true)
     try {
-      const [serviciosSnap, usersSnap] = await Promise.all([
+      const [serviciosSnap, usersSnap, impuestosSnap] = await Promise.all([
         getDocs(query(collection(db, 'servicios_complementarios'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut))),
+        getDocs(query(collection(db, 'impuestos'), where('nitRut', '==', userNitRut))),
       ])
       const mappedServicios = serviciosSnap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
@@ -84,7 +89,13 @@ function ServiciosComplementariosPage() {
         .map((d) => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       setAllUsers(mappedUsers)
+
+      const mappedImpuestos = impuestosSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => String(a.tipoImpuesto || '').localeCompare(String(b.tipoImpuesto || '')))
+      setImpuestos(mappedImpuestos)
     } finally {
+      setLoadingImpuestos(false)
       setLoading(false)
     }
   }, [userNitRut])
@@ -99,9 +110,56 @@ function ServiciosComplementariosPage() {
     return (
       (s.servicio || '').toLowerCase().includes(q) ||
       String(s.valor || '').includes(q) ||
+      String(s.impuestoNombre || '').toLowerCase().includes(q) ||
       (s.estado || '').toLowerCase().includes(q)
     )
   })
+
+  const exportRows = useMemo(() => {
+    return filteredServicios.flatMap((item) => {
+      const userIds = Array.isArray(item.usuariosAsignados) ? item.usuariosAsignados : []
+      const impuestoLabel = item.impuestoNombre
+        ? `${item.impuestoNombre}${Number.isFinite(item.impuestoPorcentaje) ? ` (${item.impuestoPorcentaje}%)` : ''}`
+        : '-'
+
+      if (userIds.length === 0) {
+        return [{
+          NumeroDocumento: '-',
+          NombresApellidos: '-',
+          ServicioComplementario: item.servicio || '-',
+          Valor: item.valor ?? '',
+          Impuesto: impuestoLabel,
+          Estado: item.estado || '-',
+        }]
+      }
+
+      const users = userIds.map((id) => allUsers.find((u) => u.id === id)).filter(Boolean)
+      if (users.length === 0) {
+        return [{
+          NumeroDocumento: '-',
+          NombresApellidos: '-',
+          ServicioComplementario: item.servicio || '-',
+          Valor: item.valor ?? '',
+          Impuesto: impuestoLabel,
+          Estado: item.estado || '-',
+        }]
+      }
+
+      return users.map((u) => {
+        const docNum = u.documentNumber || u.numeroDocumento || u.profile?.numeroDocumento || '-'
+        const { nombres, apellidos } = resolveUserNames(u)
+        const fullName = `${nombres} ${apellidos}`.replace(/-|- /g, '').trim() || 'Sin nombre'
+        return {
+          NumeroDocumento: docNum,
+          NombresApellidos: fullName,
+          ServicioComplementario: item.servicio || '-',
+          Valor: item.valor ?? '',
+          Impuesto: impuestoLabel,
+          Estado: item.estado || '-',
+        }
+      })
+    })
+  }, [allUsers, filteredServicios])
 
   const visibleUsers = useMemo(() => {
     if (editingId) {
@@ -149,6 +207,7 @@ function ServiciosComplementariosPage() {
     setForm({
       servicio: item.servicio || '',
       valor: item.valor !== undefined ? String(item.valor) : '',
+      impuestoId: String(item.impuestoId || ''),
       estado: item.estado || 'activo',
       fechaVencimiento: item.fechaVencimiento || '',
       usuariosAsignados: Array.isArray(item.usuariosAsignados) ? item.usuariosAsignados : [],
@@ -223,9 +282,13 @@ function ServiciosComplementariosPage() {
     try {
       setSaving(true)
 
+      const selectedImpuesto = impuestos.find((imp) => imp.id === form.impuestoId) || null
       const basePayload = {
         servicio: trimmedServicio,
         valor: parsedValor,
+        impuestoId: selectedImpuesto ? selectedImpuesto.id : '',
+        impuestoNombre: selectedImpuesto ? String(selectedImpuesto.tipoImpuesto || '').trim() : '',
+        impuestoPorcentaje: selectedImpuesto && Number.isFinite(selectedImpuesto.porcentaje) ? selectedImpuesto.porcentaje : null,
         estado: form.estado,
         fechaVencimiento: form.fechaVencimiento,
         nitRut: userNitRut,
@@ -340,6 +403,24 @@ function ServiciosComplementariosPage() {
                 placeholder="0"
               />
             </label>
+            <label htmlFor="servicio-impuesto">
+              Impuesto
+              <select
+                id="servicio-impuesto"
+                value={form.impuestoId}
+                onChange={(e) => setForm((prev) => ({ ...prev, impuestoId: e.target.value }))}
+                disabled={loadingImpuestos}
+              >
+                <option value="">{loadingImpuestos ? 'Cargando impuestos...' : 'Sin impuesto'}</option>
+                {impuestos
+                  .filter((imp) => String(imp.estado || 'activo').toLowerCase() !== 'inactivo')
+                  .map((imp) => (
+                    <option key={imp.id} value={imp.id}>
+                      {String(imp.tipoImpuesto || 'Impuesto').trim() || 'Impuesto'}{Number.isFinite(imp.porcentaje) ? ` (${imp.porcentaje}%)` : ''}
+                    </option>
+                  ))}
+              </select>
+            </label>
             <label htmlFor="servicio-fecha">
               Fecha de vencimiento
               <input
@@ -450,78 +531,88 @@ function ServiciosComplementariosPage() {
           <table className="students-table">
             <thead>
               <tr>
-                <th>Servicio complementario</th>
-                <th>Valor</th>
-                <th>Estado</th>
                 <th>N. Documento</th>
                 <th>Nombres Y Apellidos</th>
+                <th>Servicio complementario</th>
+                <th>Valor</th>
+                <th>Impuesto</th>
+                <th>Estado</th>
                 {canManageServicios && <th>Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {filteredServicios.length === 0 && (
                 <tr>
-                  <td colSpan={canManageServicios ? 6 : 5}>No hay servicios registrados.</td>
+                  <td colSpan={canManageServicios ? 7 : 6}>No hay servicios registrados.</td>
                 </tr>
               )}
-              {(exportingAll ? filteredServicios : filteredServicios.slice((currentPage - 1) * 10, currentPage * 10)).map((item) => {
-                const assignedUsers = Array.isArray(item.usuariosAsignados)
-                  ? item.usuariosAsignados.map(id => allUsers.find(u => u.id === id)).filter(Boolean)
-                  : []
+              {(() => {
+                const pageItems = exportingAll
+                  ? filteredServicios
+                  : filteredServicios.slice((currentPage - 1) * 10, currentPage * 10)
 
-                return (
-                  <tr key={item.id}>
-                    <td data-label="Servicio complementario">{item.servicio || '-'}</td>
-                    <td data-label="Valor">{formatValor(item.valor)}</td>
-                    <td data-label="Estado">{item.estado || '-'}</td>
-                    <td data-label="N. Documento">
-                      {assignedUsers.length > 0 ? (
-                        <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '0.9em' }}>
-                          {assignedUsers.map(u => (
-                            <li key={u.id}>{u.documentNumber || u.numeroDocumento || u.profile?.numeroDocumento || '-'}</li>
-                          ))}
-                        </ul>
-                      ) : '-'}
-                    </td>
-                    <td data-label="Nombres Y Apellidos">
-                      {assignedUsers.length > 0 ? (
-                        <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '0.9em' }}>
-                          {assignedUsers.map(u => {
-                            const { nombres, apellidos } = resolveUserNames(u)
-                            return <li key={u.id}>{`${nombres} ${apellidos}`.replace(/-|- /g, '').trim() || 'Sin nombre'}</li>
-                          })}
-                        </ul>
-                      ) : '-'}
-                    </td>
-                    {canManageServicios && (
-                      <td data-label="Acciones" className="student-actions">
-                        <button
-                          type="button"
-                          className="button small icon-action-button"
-                          onClick={() => handleEdit(item)}
-                          title="Editar"
-                          aria-label="Editar servicio"
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="m3 17.3 10.9-10.9 2.7 2.7L5.7 20H3v-2.7Zm17.7-10.1a1 1 0 0 0 0-1.4L18.2 3.3a1 1 0 0 0-1.4 0l-1.4 1.4 4.1 4.1 1.2-1.6Z" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          className="button small danger icon-action-button"
-                          onClick={() => setServicioToDelete(item)}
-                          title="Eliminar"
-                          aria-label="Eliminar servicio"
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M7 21a2 2 0 0 1-2-2V7h14v12a2 2 0 0 1-2 2H7Zm3-3h2V10h-2v8Zm4 0h2V10h-2v8ZM9 4h6l1 1h4v2H4V5h4l1-1Z" />
-                          </svg>
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
+                const expanded = pageItems.flatMap((item) => {
+                  const userIds = Array.isArray(item.usuariosAsignados) ? item.usuariosAsignados : []
+                  if (userIds.length === 0) {
+                    return [{ item, user: null }]
+                  }
+                  const users = userIds.map((id) => allUsers.find((u) => u.id === id)).filter(Boolean)
+                  return users.length > 0 ? users.map((user) => ({ item, user })) : [{ item, user: null }]
+                })
+
+                if (expanded.length === 0) return null
+
+                return expanded.map(({ item, user }, idx) => {
+                  const docNum = user ? (user.documentNumber || user.numeroDocumento || user.profile?.numeroDocumento || '-') : '-'
+                  const fullName = user
+                    ? (() => {
+                        const { nombres, apellidos } = resolveUserNames(user)
+                        return `${nombres} ${apellidos}`.replace(/-|- /g, '').trim() || 'Sin nombre'
+                      })()
+                    : '-'
+
+                  const impuestoLabel = item.impuestoNombre
+                    ? `${item.impuestoNombre}${Number.isFinite(item.impuestoPorcentaje) ? ` (${item.impuestoPorcentaje}%)` : ''}`
+                    : '-'
+
+                  return (
+                    <tr key={`${item.id}-${user?.id || 'none'}-${idx}`}>
+                      <td data-label="N. Documento">{docNum}</td>
+                      <td data-label="Nombres Y Apellidos">{fullName}</td>
+                      <td data-label="Servicio complementario">{item.servicio || '-'}</td>
+                      <td data-label="Valor">{formatValor(item.valor)}</td>
+                      <td data-label="Impuesto">{impuestoLabel}</td>
+                      <td data-label="Estado">{item.estado || '-'}</td>
+                      {canManageServicios && (
+                        <td data-label="Acciones" className="student-actions">
+                          <button
+                            type="button"
+                            className="button small icon-action-button"
+                            onClick={() => handleEdit(item)}
+                            title="Editar"
+                            aria-label="Editar servicio"
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="m3 17.3 10.9-10.9 2.7 2.7L5.7 20H3v-2.7Zm17.7-10.1a1 1 0 0 0 0-1.4L18.2 3.3a1 1 0 0 0-1.4 0l-1.4 1.4 4.1 4.1 1.2-1.6Z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="button small danger icon-action-button"
+                            onClick={() => setServicioToDelete(item)}
+                            title="Eliminar"
+                            aria-label="Eliminar servicio"
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M7 21a2 2 0 0 1-2-2V7h14v12a2 2 0 0 1-2 2H7Zm3-3h2V10h-2v8Zm4 0h2V10h-2v8ZM9 4h6l1 1h4v2H4V5h4l1-1Z" />
+                            </svg>
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })
+              })()}
             </tbody>
           </table>
       <PaginationControls 
@@ -533,7 +624,7 @@ function ServiciosComplementariosPage() {
       {canExportExcel && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
           <ExportExcelButton 
-              data={filteredServicios} 
+              data={exportRows} 
               filename="ServiciosComplementariosPage" 
               onExportStart={() => setExportingAll(true)}
               onExportEnd={() => setExportingAll(false)}

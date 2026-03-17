@@ -4,7 +4,7 @@ import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'fire
 import { useAuth } from '../hooks/useAuth'
 import { db } from '../firebase'
 import logoFallback from '../assets/logo-plataforma.svg'
-import { PERMISSION_KEYS } from '../utils/permissions'
+import { buildDynamicMemberPermissionKey, PERMISSION_KEYS } from '../utils/permissions'
 import FloatingChatWidget from './FloatingChatWidget'
 
 function BellIcon() {
@@ -143,18 +143,10 @@ function ChevronIcon() {
   )
 }
 
-const memberItemsBase = [
-  { label: 'Crear estudiantes', to: '/dashboard/crear-estudiantes', Icon: StudentsIcon },
-  { label: 'Crear profesores', to: '/dashboard/crear-profesores', Icon: TeachersIcon },
-  { label: 'Crear aspirantes', to: '/dashboard/crear-aspirantes', Icon: StudentsIcon },
-  { label: 'Crear directivos', to: '/dashboard/crear-directivos', Icon: DirectorsIcon },
-]
-
 const mainItems = [
   { label: 'Inicio', to: '/dashboard', Icon: HomeIcon },
-  { label: 'Pagos', to: '/dashboard/pagos', Icon: PaymentsIcon },
 ]
-const reportItems = [
+const reportItemsBase = [
   { label: 'Reportes', to: '/dashboard/reportes', Icon: ReportsIcon },
 ]
 function DashboardLayout() {
@@ -167,6 +159,7 @@ function DashboardLayout() {
     inactivityCountdownSeconds,
     continueActiveSession,
     hasPermission,
+    userPermissions,
     userNitRut,
   } = useAuth()
   const [userName, setUserName] = useState('')
@@ -180,6 +173,7 @@ function DashboardLayout() {
   const [academicMenuOpen, setAcademicMenuOpen] = useState(false)
   const [reportMenuOpen, setReportMenuOpen] = useState(false)
   const [memberMenuOpen, setMemberMenuOpen] = useState(false)
+  const [paymentsMenuOpen, setPaymentsMenuOpen] = useState(false)
   const [configMenuOpen, setConfigMenuOpen] = useState(false)
 
   // Exclusive accordion: opening one group closes all others
@@ -187,14 +181,54 @@ function DashboardLayout() {
     setAcademicMenuOpen(group === 'academic' ? (prev) => !prev : false)
     setReportMenuOpen(group === 'report' ? (prev) => !prev : false)
     setMemberMenuOpen(group === 'member' ? (prev) => !prev : false)
+    setPaymentsMenuOpen(group === 'payments' ? (prev) => !prev : false)
     setConfigMenuOpen(group === 'config' ? (prev) => !prev : false)
   }
   const [brandLogo, setBrandLogo] = useState('/logo_plataforma_digital.png')
   const canViewUsersMenu = hasPermission(PERMISSION_KEYS.USERS_VIEW)
-  const canManageMembers = hasPermission(PERMISSION_KEYS.MEMBERS_MANAGE)
+  const canViewStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_VIEW)
+  const canCreateStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_CREATE)
+  const canEditStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_EDIT)
+  const canDeleteStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_DELETE)
+  const canAccessStudentsModule = canViewStudents || canCreateStudents || canEditStudents || canDeleteStudents
+  const canViewTeachers = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_VIEW)
+  const canCreateTeachers = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_CREATE)
+  const canEditTeachers = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_EDIT)
+  const canDeleteTeachers = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_DELETE)
+  const canAccessTeachersModule = canViewTeachers || canCreateTeachers || canEditTeachers || canDeleteTeachers
+  const canViewDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_VIEW)
+  const canCreateDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_CREATE)
+  const canEditDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_EDIT)
+  const canDeleteDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_DELETE)
+  const canAccessDirectivosModule = canViewDirectivos || canCreateDirectivos || canEditDirectivos || canDeleteDirectivos
+  const canViewAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_VIEW)
+  const canCreateAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_CREATE)
+  const canEditAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_EDIT)
+  const canDeleteAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_DELETE)
+  const canAccessAspirantesModule = canViewAspirantes || canCreateAspirantes || canEditAspirantes || canDeleteAspirantes
+  const canViewEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_VIEW)
+  const canCreateEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_CREATE)
+  const canEditEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_EDIT)
+  const canDeleteEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_DELETE)
+  const canAccessEmployeesModule = canViewEmployees || canCreateEmployees || canEditEmployees || canDeleteEmployees
   const canManageAcademicSetup = hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
+  const canManageEvents = hasPermission(PERMISSION_KEYS.EVENTS_MANAGE) || canManageAcademicSetup
+  const canManageCirculars = hasPermission(PERMISSION_KEYS.CIRCULARS_MANAGE) || canManageAcademicSetup
+  const canManageSubjects = hasPermission(PERMISSION_KEYS.SUBJECTS_MANAGE) || canManageAcademicSetup
   const canViewPlantelData = hasPermission(PERMISSION_KEYS.PLANTEL_VIEW)
   const canManagePermissions = hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
+  const canManageChatSettings = hasPermission(PERMISSION_KEYS.CONFIG_CHAT_MANAGE) || canManagePermissions
+  const canManageMessageSettings = hasPermission(PERMISSION_KEYS.CONFIG_MESSAGES_MANAGE) || canManagePermissions
+  const canManageNotificationSettings =
+    hasPermission(PERMISSION_KEYS.CONFIG_NOTIFICATIONS_MANAGE) || canManagePermissions
+  const canManageReportTypeSettings =
+    hasPermission(PERMISSION_KEYS.CONFIG_REPORT_TYPES_MANAGE) || canManagePermissions
+  const canManageTipoPermisos =
+    hasPermission(PERMISSION_KEYS.CONFIG_TIPO_PERMISOS_MANAGE) || canManagePermissions
+  const canManageTipoInasistencias =
+    hasPermission(PERMISSION_KEYS.CONFIG_TIPO_INASISTENCIAS_MANAGE) || canManagePermissions
+  const canManageTipoCertificado =
+    hasPermission(PERMISSION_KEYS.CONFIG_TIPO_CERTIFICADO_MANAGE) || canManagePermissions
   const canManageRoles = hasPermission(PERMISSION_KEYS.ROLES_MANAGE)
   const canBulkUpload = hasPermission(PERMISSION_KEYS.BULK_UPLOAD_MANAGE)
   const canViewTasks = hasPermission(PERMISSION_KEYS.TASKS_VIEW)
@@ -202,12 +236,25 @@ function DashboardLayout() {
   const canViewInasistencias = hasPermission(PERMISSION_KEYS.INASISTENCIAS_VIEW)
   const canViewAsistencia = hasPermission(PERMISSION_KEYS.ASISTENCIA_VIEW) || canViewInasistencias
   const canViewPermisos = hasPermission(PERMISSION_KEYS.PERMISOS_VIEW)
+  const canViewReports = hasPermission(PERMISSION_KEYS.REPORTS_VIEW)
+  const canViewPayments = hasPermission(PERMISSION_KEYS.PAYMENTS_VIEW)
+  const canManagePaymentsImpuestos = hasPermission(PERMISSION_KEYS.PAYMENTS_IMPUESTOS_MANAGE)
+  const canManagePaymentsResoluciones = hasPermission(PERMISSION_KEYS.PAYMENTS_RESOLUCIONES_MANAGE)
+  const canManagePaymentsCaja = hasPermission(PERMISSION_KEYS.PAYMENTS_CAJA_MANAGE)
+  const canManagePaymentsDatosCobro = hasPermission(PERMISSION_KEYS.PAYMENTS_DATOS_COBRO_MANAGE)
+  const canManagePaymentsItemCobro = hasPermission(PERMISSION_KEYS.PAYMENTS_ITEM_COBRO_MANAGE)
+  const canManagePaymentsServiciosComplementarios = hasPermission(PERMISSION_KEYS.PAYMENTS_SERVICIOS_COMPLEMENTARIOS_MANAGE)
+  const canViewSchedule = hasPermission(PERMISSION_KEYS.SCHEDULE_VIEW) || hasPermission(PERMISSION_KEYS.SCHEDULE_EDIT)
+  const canViewCertificados = hasPermission(PERMISSION_KEYS.CERTIFICADOS_VIEW)
   const canManageStorage = hasPermission(PERMISSION_KEYS.STORAGE_MANAGE)
-  const showFloatingChat = location.pathname.startsWith('/dashboard')
+  const showFloatingChat = location.pathname.startsWith('/dashboard') && hasPermission(PERMISSION_KEYS.CHAT_ONLINE_VIEW)
   const [customMemberRoles, setCustomMemberRoles] = useState([])
+  const hasAnyDynamicMemberPermission = (userPermissions || []).some((key) =>
+    String(key || '').startsWith('members_dynamic_role_'),
+  )
 
   useEffect(() => {
-    if (!canManageMembers || !userNitRut) {
+    if (!hasAnyDynamicMemberPermission || !userNitRut) {
       setCustomMemberRoles([])
       return undefined
     }
@@ -228,7 +275,7 @@ function DashboardLayout() {
     })
 
     return () => unsub()
-  }, [canManageMembers, userNitRut])
+  }, [hasAnyDynamicMemberPermission, userNitRut])
 
   const academicItems = useMemo(() => {
     const items = []
@@ -238,7 +285,9 @@ function DashboardLayout() {
     if (canViewEvaluations) {
       items.push({ label: 'Evaluaciones', to: '/dashboard/evaluaciones', Icon: EvaluationsIcon })
     }
-    items.push({ label: 'Horario', to: '/dashboard/horario', Icon: ScheduleIcon })
+    if (canViewSchedule) {
+      items.push({ label: 'Horario', to: '/dashboard/horario', Icon: ScheduleIcon })
+    }
     
     if (canViewPermisos) {
       items.push({ label: 'Solicitar permiso', to: '/dashboard/solicitar-permiso', Icon: AbsencesIcon })
@@ -250,34 +299,98 @@ function DashboardLayout() {
       items.push({ label: 'Asistencia', to: '/dashboard/asistencia', Icon: AbsencesIcon })
     }
     
-    items.push({ label: 'Reconocimientos', to: '/dashboard/reconocimientos', Icon: ReportsIcon })
+    if (canViewCertificados) {
+      items.push({ label: 'Certificados', to: '/dashboard/reconocimientos', Icon: ReportsIcon })
+    }
     return items
-  }, [canViewTasks, canViewEvaluations, canViewPermisos, canViewInasistencias, canViewAsistencia])
+  }, [canViewTasks, canViewEvaluations, canViewPermisos, canViewInasistencias, canViewAsistencia, canViewSchedule, canViewCertificados])
+
+  const paymentsItems = useMemo(() => {
+    if (!canViewPayments) return []
+
+    const items = [{ label: 'Pagos', to: '/dashboard/pagos', Icon: PaymentsIcon }]
+    if (canManagePaymentsImpuestos) items.push({ label: 'Impuestos', to: '/dashboard/impuestos', Icon: PaymentsIcon })
+    if (canManagePaymentsResoluciones) items.push({ label: 'Resoluciones', to: '/dashboard/resoluciones', Icon: PaymentsIcon })
+    if (canManagePaymentsCaja) items.push({ label: 'Caja', to: '/dashboard/caja', Icon: PaymentsIcon })
+    if (canManagePaymentsDatosCobro) items.push({ label: 'Datos de cobro', to: '/dashboard/datos-cobro', Icon: GearIcon })
+    if (canManagePaymentsItemCobro) items.push({ label: 'Item de cobro', to: '/dashboard/item-cobro', Icon: PaymentsIcon })
+    if (canManagePaymentsServiciosComplementarios) {
+      items.push({ label: 'Servicios complementarios', to: '/dashboard/servicios-complementarios', Icon: GearIcon })
+    }
+    return items
+  }, [
+    canViewPayments,
+    canManagePaymentsImpuestos,
+    canManagePaymentsResoluciones,
+    canManagePaymentsCaja,
+    canManagePaymentsDatosCobro,
+    canManagePaymentsItemCobro,
+    canManagePaymentsServiciosComplementarios,
+  ])
 
   const memberItems = useMemo(() => {
     if (userRole === 'estudiante') {
-      return [
-        { label: 'Datos estudiante', to: '/dashboard/crear-estudiantes', Icon: StudentsIcon },
-      ]
+      return canAccessStudentsModule
+        ? [{ label: 'Datos estudiante', to: '/dashboard/crear-estudiantes', Icon: StudentsIcon }]
+        : []
     }
     if (userRole === 'profesor') {
-      return [
-        { label: 'Ver Estudiantes', to: '/dashboard/crear-estudiantes', Icon: StudentsIcon },
-        { label: 'Datos Profesor', to: '/dashboard/crear-profesores', Icon: TeachersIcon },
-      ]
+      const items = []
+      if (canAccessTeachersModule) {
+        items.push({ label: 'Datos Profesor', to: '/dashboard/crear-profesores', Icon: TeachersIcon })
+      }
+      if (canAccessStudentsModule) {
+        items.unshift({ label: 'Ver Estudiantes', to: '/dashboard/crear-estudiantes', Icon: StudentsIcon })
+      }
+      return items
     }
 
-    if (!canManageMembers) {
+    if (
+      !hasAnyDynamicMemberPermission &&
+      !canAccessEmployeesModule &&
+      !canAccessStudentsModule &&
+      !canAccessTeachersModule &&
+      !canAccessDirectivosModule &&
+      !canAccessAspirantesModule
+    ) {
       return []
     }
 
-    const dynamic = customMemberRoles.map((r) => ({
-      label: `Crear ${r.name}`,
-      to: `/dashboard/crear-rol/${r.id}`,
-      Icon: DirectorsIcon,
-    }))
-    return [...memberItemsBase, ...dynamic]
-  }, [canManageMembers, customMemberRoles, userRole])
+    const items = []
+    if (canAccessStudentsModule) items.push({ label: 'Estudiantes', to: '/dashboard/crear-estudiantes', Icon: StudentsIcon })
+    if (canAccessTeachersModule) items.push({ label: 'Profesores', to: '/dashboard/crear-profesores', Icon: TeachersIcon })
+    if (canAccessAspirantesModule) items.push({ label: 'Aspirantes', to: '/dashboard/crear-aspirantes', Icon: StudentsIcon })
+    if (canAccessDirectivosModule) items.push({ label: 'Directivos', to: '/dashboard/crear-directivos', Icon: DirectorsIcon })
+
+    items.push(
+      ...customMemberRoles
+        .filter((r) => hasPermission(buildDynamicMemberPermissionKey(r.id, 'view')))
+        .map((r) => ({
+          label: `Crear ${r.name}`,
+          to: `/dashboard/crear-rol/${r.id}`,
+          Icon: DirectorsIcon,
+        })),
+    )
+
+    if (canAccessEmployeesModule) {
+      items.push({ label: 'Empleados', to: '/dashboard/empleados', Icon: UserIcon })
+    }
+
+    return items
+  }, [
+    canAccessDirectivosModule,
+    canAccessEmployeesModule,
+    canAccessStudentsModule,
+    canAccessTeachersModule,
+    customMemberRoles,
+    hasAnyDynamicMemberPermission,
+    userRole,
+    hasPermission,
+  ])
+
+  const reportItems = useMemo(() => {
+    return canViewReports ? reportItemsBase : []
+  }, [canViewReports])
   const configItems = useMemo(() => {
     const items = [{ label: 'Cambiar clave', to: '/dashboard/cambiar-clave', Icon: GearIcon }]
 
@@ -286,31 +399,51 @@ function DashboardLayout() {
     }
 
     if (canManageAcademicSetup) {
-      items.push(
-        { label: 'Eventos', to: '/dashboard/eventos', Icon: EvaluationsIcon },
-        { label: 'Circulares', to: '/dashboard/circulares', Icon: ReportsIcon },
-        { label: 'Crear asignaturas', to: '/dashboard/crear-asignaturas', Icon: ReportsIcon },
-        { label: 'Camaras de asistencia', to: '/dashboard/camaras-asistencia', Icon: MessageIcon },
-      )
+      items.push({ label: 'Camaras de asistencia', to: '/dashboard/camaras-asistencia', Icon: MessageIcon })
+    }
+
+    if (canManageTipoCertificado || canManageAcademicSetup) {
+      items.push({ label: 'Tipo de certificado', to: '/dashboard/tipo-certificado', Icon: ReportsIcon })
+    }
+
+    if (canManageEvents) {
+      items.push({ label: 'Eventos', to: '/dashboard/eventos', Icon: EvaluationsIcon })
+    }
+    if (canManageCirculars) {
+      items.push({ label: 'Circulares', to: '/dashboard/circulares', Icon: ReportsIcon })
+    }
+    if (canManageSubjects) {
+      items.push({ label: 'Crear asignaturas', to: '/dashboard/crear-asignaturas', Icon: ReportsIcon })
     }
 
     if (canBulkUpload) {
       items.push({ label: 'Cargue masivo', to: '/dashboard/cargue-masivo', Icon: TasksIcon })
     }
 
-    if (canViewInasistencias) {
+    if (canManageTipoInasistencias || canViewInasistencias) {
       items.push({ label: 'Tipos de inasistencia', to: '/dashboard/tipo-inasistencias', Icon: AbsencesIcon })
     }
-    if (canViewPermisos) {
+    if (canManageTipoPermisos || canViewPermisos) {
       items.push({ label: 'Tipos de permiso', to: '/dashboard/tipo-permisos', Icon: AbsencesIcon })
     }
 
     if (canManagePermissions) {
       items.push({ label: 'Permisos', to: '/dashboard/permisos', Icon: UserIcon })
+    }
+
+    if (canManageChatSettings) {
       items.push({ label: 'Configuracion de chat', to: '/dashboard/configuracion-chat', Icon: MessageIcon })
+    }
+    if (canManageMessageSettings) {
       items.push({ label: 'Configuracion de mensajes', to: '/dashboard/configuracion-mensajes', Icon: MessageIcon })
+    }
+    if (canManageNotificationSettings) {
       items.push({ label: 'Configuracion de notificaciones', to: '/dashboard/configuracion-notificaciones', Icon: BellIcon })
+    }
+    if (hasPermission(PERMISSION_KEYS.ASISTENCIA_CONFIG_MANAGE) || canManagePermissions) {
       items.push({ label: 'Configuracion de asistencia', to: '/dashboard/configuracion-asistencia', Icon: AbsencesIcon })
+    }
+    if (canManageReportTypeSettings) {
       items.push({ label: 'Configuracion tipos de reporte', to: '/dashboard/configuracion-tipos-reporte', Icon: ReportsIcon })
     }
 
@@ -318,11 +451,8 @@ function DashboardLayout() {
       items.push({ label: 'Roles', to: '/dashboard/roles', Icon: GearIcon })
     }
 
-    if (canManageMembers) {
-      items.push({ label: 'Empleados', to: '/dashboard/empleados', Icon: UserIcon })
+    if (hasPermission(PERMISSION_KEYS.CONFIG_TIPO_EMPLEADO_MANAGE)) {
       items.push({ label: 'Tipo empleado', to: '/dashboard/tipo-empleado', Icon: UserIcon })
-      items.push({ label: 'Datos de cobro', to: '/dashboard/datos-cobro', Icon: GearIcon })
-      items.push({ label: 'Servicios complementarios', to: '/dashboard/servicios-complementarios', Icon: GearIcon })
     }
 
     if (canManageStorage) {
@@ -330,10 +460,33 @@ function DashboardLayout() {
     }
 
     return items
-  }, [canBulkUpload, canManageAcademicSetup, canManageMembers, canManagePermissions, canManageRoles, canViewPlantelData, canViewInasistencias, canViewPermisos, canManageStorage])
-  const allItems = [...mainItems, ...academicItems, ...reportItems, ...memberItems, ...configItems]
+  }, [
+    canBulkUpload,
+    canManageAcademicSetup,
+    canManageCirculars,
+    canManageChatSettings,
+    canManageEvents,
+    canManageMessageSettings,
+    canManageNotificationSettings,
+    canManagePermissions,
+    canManageReportTypeSettings,
+    canManageRoles,
+    canManageSubjects,
+    canManageTipoCertificado,
+    canManageTipoInasistencias,
+    canManageTipoPermisos,
+    canViewPlantelData,
+    canViewInasistencias,
+    canViewPermisos,
+    canManageStorage,
+    hasPermission,
+  ])
+  const allItems = [...mainItems, ...paymentsItems, ...academicItems, ...reportItems, ...memberItems, ...configItems]
   const unreadInitializedRef = useRef(false)
   const todayEventsToastShownRef = useRef(false)
+  const paymentsRouteActive = paymentsItems.some((item) =>
+    location.pathname.startsWith(item.to),
+  )
   const academicRouteActive = academicItems.some((item) =>
     location.pathname.startsWith(item.to),
   )
@@ -348,10 +501,21 @@ function DashboardLayout() {
   )
 
   useEffect(() => {
+    if (paymentsRouteActive) {
+      setPaymentsMenuOpen(true)
+      setAcademicMenuOpen(false)
+      setReportMenuOpen(false)
+      setMemberMenuOpen(false)
+      setConfigMenuOpen(false)
+    }
+  }, [paymentsRouteActive])
+
+  useEffect(() => {
     if (academicRouteActive) {
       setAcademicMenuOpen(true)
       setReportMenuOpen(false)
       setMemberMenuOpen(false)
+      setPaymentsMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [academicRouteActive])
@@ -361,6 +525,7 @@ function DashboardLayout() {
       setReportMenuOpen(true)
       setAcademicMenuOpen(false)
       setMemberMenuOpen(false)
+      setPaymentsMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [reportRouteActive])
@@ -370,6 +535,7 @@ function DashboardLayout() {
       setMemberMenuOpen(true)
       setAcademicMenuOpen(false)
       setReportMenuOpen(false)
+      setPaymentsMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [memberRouteActive])
@@ -380,6 +546,7 @@ function DashboardLayout() {
       setAcademicMenuOpen(false)
       setReportMenuOpen(false)
       setMemberMenuOpen(false)
+      setPaymentsMenuOpen(false)
     }
   }, [configRouteActive])
 
@@ -546,24 +713,24 @@ function DashboardLayout() {
           />
         </div>
         <nav className="sidebar-nav">
-          {mainItems.map((item) => (
-            <NavLink
-              key={item.to}
-              className={({ isActive }) =>
-                `sidebar-link${isActive ? ' active' : ''}`
-              }
-              to={item.to}
-              end={item.to === '/dashboard'}
-              onClick={() => setMenuOpen(false)}
-            >
-              <item.Icon />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-          <div className="sidebar-group">
-            <button
-              type="button"
-              className={`sidebar-group-toggle${academicMenuOpen ? ' open' : ''}`}
+           {mainItems.map((item) => (
+             <NavLink
+               key={item.to}
+               className={({ isActive }) =>
+                 `sidebar-link${isActive ? ' active' : ''}`
+               }
+               to={item.to}
+               end={item.to === '/dashboard'}
+               onClick={() => setMenuOpen(false)}
+             >
+               <item.Icon />
+               <span>{item.label}</span>
+             </NavLink>
+           ))}
+           <div className="sidebar-group">
+             <button
+               type="button"
+               className={`sidebar-group-toggle${academicMenuOpen ? ' open' : ''}`}
               onClick={() => openSidebarGroup('academic')}
               aria-expanded={academicMenuOpen}
             >
@@ -583,67 +750,93 @@ function DashboardLayout() {
                   <item.Icon />
                   <span>{item.label}</span>
                 </NavLink>
-              ))}
-            </div>
-          </div>
-          <div className="sidebar-group">
-            <button
-              type="button"
-              className={`sidebar-group-toggle${reportMenuOpen ? ' open' : ''}`}
-              onClick={() => openSidebarGroup('report')}
-              aria-expanded={reportMenuOpen}
-            >
-              <span className="sidebar-group-title">Reportes</span>
-              <ChevronIcon />
-            </button>
-            <div className={`sidebar-submenu${reportMenuOpen ? ' open' : ''}`}>
-              {reportItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  className={({ isActive }) =>
-                    `sidebar-link${isActive ? ' active' : ''}`
-                  }
-                  to={item.to}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <item.Icon />
-                  <span>{item.label}</span>
-                </NavLink>
-              ))}
-            </div>
-          </div>
-          {memberItems.length > 0 && (
-            <div className="sidebar-group">
-              <button
-                type="button"
-                className={`sidebar-group-toggle${memberMenuOpen ? ' open' : ''}`}
-                onClick={() => openSidebarGroup('member')}
-                aria-expanded={memberMenuOpen}
-              >
-                <span className="sidebar-group-title">Gestion de Miembros</span>
-                <ChevronIcon />
-              </button>
-              <div className={`sidebar-submenu${memberMenuOpen ? ' open' : ''}`}>
-                {memberItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    className={({ isActive }) =>
-                      `sidebar-link${isActive ? ' active' : ''}`
-                    }
-                    to={item.to}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    <item.Icon />
-                    <span>{item.label}</span>
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="sidebar-group">
-            <button
-              type="button"
-              className={`sidebar-group-toggle${configMenuOpen ? ' open' : ''}`}
+               ))}
+             </div>
+           </div>
+           {memberItems.length > 0 && (
+             <div className="sidebar-group">
+               <button
+                 type="button"
+                 className={`sidebar-group-toggle${memberMenuOpen ? ' open' : ''}`}
+                 onClick={() => openSidebarGroup('member')}
+                 aria-expanded={memberMenuOpen}
+               >
+                 <span className="sidebar-group-title">Gestion de Miembros</span>
+                 <ChevronIcon />
+               </button>
+               <div className={`sidebar-submenu${memberMenuOpen ? ' open' : ''}`}>
+                 {memberItems.map((item) => (
+                   <NavLink
+                     key={item.to}
+                     className={({ isActive }) =>
+                       `sidebar-link${isActive ? ' active' : ''}`
+                     }
+                     to={item.to}
+                     onClick={() => setMenuOpen(false)}
+                   >
+                     <item.Icon />
+                     <span>{item.label}</span>
+                   </NavLink>
+                 ))}
+               </div>
+             </div>
+           )}
+           <div className="sidebar-group">
+             <button
+               type="button"
+               className={`sidebar-group-toggle${paymentsMenuOpen ? ' open' : ''}`}
+               onClick={() => openSidebarGroup('payments')}
+               aria-expanded={paymentsMenuOpen}
+             >
+               <span className="sidebar-group-title">PAGOS</span>
+               <ChevronIcon />
+             </button>
+             <div className={`sidebar-submenu${paymentsMenuOpen ? ' open' : ''}`}>
+               {paymentsItems.map((item) => (
+                 <NavLink
+                   key={item.to}
+                   className={({ isActive }) =>
+                     `sidebar-link${isActive ? ' active' : ''}`
+                   }
+                   to={item.to}
+                   onClick={() => setMenuOpen(false)}
+                 >
+                   <item.Icon />
+                   <span>{item.label}</span>
+                 </NavLink>
+               ))}
+             </div>
+           </div>
+           <div className="sidebar-group">
+             <button
+               type="button"
+               className={`sidebar-group-toggle${reportMenuOpen ? ' open' : ''}`}
+               onClick={() => openSidebarGroup('report')}
+               aria-expanded={reportMenuOpen}
+             >
+               <span className="sidebar-group-title">Reportes</span>
+               <ChevronIcon />
+             </button>
+             <div className={`sidebar-submenu${reportMenuOpen ? ' open' : ''}`}>
+               {reportItems.map((item) => (
+                 <NavLink
+                   key={item.to}
+                   className={({ isActive }) =>
+                     `sidebar-link${isActive ? ' active' : ''}`
+                   }
+                   to={item.to}
+                   onClick={() => setMenuOpen(false)}
+                 >
+                   <item.Icon />
+                   <span>{item.label}</span>
+                 </NavLink>
+               ))}
+             </div>
+           </div>
+           <div className="sidebar-group">
+             <button
+               type="button"
+               className={`sidebar-group-toggle${configMenuOpen ? ' open' : ''}`}
               onClick={() => openSidebarGroup('config')}
               aria-expanded={configMenuOpen}
             >
