@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth'
 import OperationStatusModal from '../../components/OperationStatusModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import { fileToDataUrl, guessImageFormat } from '../../utils/pdfImages'
+import { savePdfDocument } from '../../utils/nativeLinks'
 
 function formatHumanDate(dateStr) {
   const raw = String(dateStr || '').trim()
@@ -421,7 +422,7 @@ function CertificadosPage() {
       }
 
       const fileName = `${(selectedTipo?.nombre || 'certificado').toLowerCase().replace(/\s+/g, '_')}_${(selectedStudent?.nombreCompleto || 'estudiante').toLowerCase().replace(/\s+/g, '_')}.pdf`
-      pdf.save(fileName)
+      await savePdfDocument(pdf, fileName, 'Certificado generado')
       openModal('success', 'PDF generado correctamente.')
     } catch (error) {
       const message = error?.message || 'No fue posible generar el PDF.'
@@ -536,3 +537,4 @@ function CertificadosPage() {
 }
 
 export default CertificadosPage
+

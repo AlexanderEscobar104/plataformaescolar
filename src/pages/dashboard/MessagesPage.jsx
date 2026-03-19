@@ -129,7 +129,7 @@ function MessagesPage() {
           uid: docSnapshot.id,
           name: docSnapshot.data().name || docSnapshot.data().email || 'Usuario',
           email: docSnapshot.data().email || '',
-          role: docSnapshot.data().role || '',
+          role: docSnapshot.data().role || docSnapshot.data().profile?.role || '',
           profile: docSnapshot.data().profile || {},
         }))
         .sort((a, b) => a.name.localeCompare(b.name))
@@ -217,6 +217,7 @@ function MessagesPage() {
     }
   }, [user, userNitRut])
 
+
   const isUserActive = useCallback((availableUser) => {
     const estado =
       availableUser?.profile?.informacionComplementaria?.estado ||
@@ -225,7 +226,6 @@ function MessagesPage() {
 
     return String(estado).toLowerCase() !== 'inactivo'
   }, [])
-
   const allowedTargetRoles = useMemo(() => {
     if (!roleMatrixReady) return []
     const sourceRole = normalizeRole(userRole)
@@ -252,7 +252,6 @@ function MessagesPage() {
     roleValues.forEach((rv) => { grouped[rv] = [] })
     users.forEach((u) => {
       if (u.uid === user?.uid) return
-      if (!isUserActive(u)) return
       const role = normalizeRole(u.role)
       if (!grouped[role]) return
 
@@ -484,9 +483,12 @@ function MessagesPage() {
     const recipientsMap = new Map()
 
     if (targetRoles.includes('estudiante')) {
-      selectedStudentUids
-        .filter((uid) => selectedStudentGroupUids.has(uid))
-        .forEach((uid) => recipientsMap.set(uid, true))
+      const selectedGroups = studentGroups.filter((groupItem) => selectedStudentGroupKeys.includes(groupItem.key))
+      selectedGroups.forEach((groupItem) => {
+        groupItem.uids.forEach((uid) => {
+          recipientsMap.set(uid, true)
+        })
+      })
     }
 
     if (targetRoles.includes('profesor')) {
@@ -1117,3 +1119,8 @@ function MessagesPage() {
 }
 
 export default MessagesPage
+
+
+
+
+

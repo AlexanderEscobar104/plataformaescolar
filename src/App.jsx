@@ -1,7 +1,12 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import DashboardLayout from './components/DashboardLayout'
 import { ProtectedRoute, PublicOnlyRoute, SecurityCollectionRoute } from './components/RouteGuards'
+import { useAuth } from './hooks/useAuth'
+import { isNativeApp, registerNativeLocalNotificationActionHandler, updateAppBadgeCount } from './utils/nativeLinks'
+import { isNativePushSupported } from './utils/pushNotifications'
+import { PushNotifications } from '@capacitor/push-notifications'
 import ChangePasswordPage from './pages/dashboard/ChangePasswordPage'
 import CircularsPage from './pages/dashboard/CircularsPage'
 import SubjectsPage from './pages/dashboard/SubjectsPage'
@@ -68,10 +73,102 @@ import CertificadosTemplatesPage from './pages/dashboard/CertificadosTemplatesPa
 import BoletinesPage from './pages/dashboard/BoletinesPage'
 import BoletinesStructurePage from './pages/dashboard/BoletinesStructurePage'
 
+const PENDING_NATIVE_ROUTE_KEY = 'pending_native_route'
+
+function savePendingNativeRoute(route) {
+  const safeRoute = String(route || '').trim()
+  if (!safeRoute) return
+
+  try {
+    sessionStorage.setItem(PENDING_NATIVE_ROUTE_KEY, safeRoute)
+  } catch {
+    // Ignorar errores de almacenamiento en el WebView.
+  }
+}
+
+function consumePendingNativeRoute() {
+  try {
+    const route = String(sessionStorage.getItem(PENDING_NATIVE_ROUTE_KEY) || '').trim()
+    if (!route) return ''
+    sessionStorage.removeItem(PENDING_NATIVE_ROUTE_KEY)
+    return route
+  } catch {
+    return ''
+  }
+}
+
+function NativeNotificationBridge() {
+  const navigate = useNavigate()
+  const { user, loading } = useAuth()
+
+  useEffect(() => {
+    if (!isNativeApp()) {
+      return undefined
+    }
+
+    let pushCleanup = async () => {}
+    let localCleanup = async () => {}
+
+    const handleRoute = (route) => {
+      const safeRoute = String(route || '').trim()
+      if (!safeRoute) return
+
+      savePendingNativeRoute(safeRoute)
+
+      if (!loading && user) {
+        navigate(safeRoute, { replace: true })
+      }
+    }
+
+    if (isNativePushSupported()) {
+      PushNotifications.addListener('pushNotificationActionPerformed', (event) => {
+        const totalUnread = Number(event?.notification?.data?.totalUnread || 0)
+        if (Number.isFinite(totalUnread)) {
+          updateAppBadgeCount(totalUnread).catch(() => {})
+        }
+        handleRoute(event?.notification?.data?.route)
+      })
+        .then((listener) => {
+          pushCleanup = async () => {
+            await listener.remove().catch(() => {})
+          }
+        })
+        .catch(() => {})
+    }
+
+    registerNativeLocalNotificationActionHandler((event) => {
+      handleRoute(event?.notification?.extra?.route)
+    })
+      .then((cleanup) => {
+        localCleanup = typeof cleanup === 'function' ? cleanup : localCleanup
+      })
+      .catch(() => {})
+
+    return () => {
+      pushCleanup().catch(() => {})
+      localCleanup().catch(() => {})
+    }
+  }, [loading, navigate, user?.uid])
+
+  useEffect(() => {
+    if (loading || !user) {
+      return
+    }
+
+    const pendingRoute = consumePendingNativeRoute()
+    if (pendingRoute) {
+      navigate(pendingRoute, { replace: true })
+    }
+  }, [loading, navigate, user?.uid])
+
+  return null
+}
+
 function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+      <NativeNotificationBridge />
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route

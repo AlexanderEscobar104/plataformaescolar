@@ -46,6 +46,7 @@ function buildCalendarCells(anchorDate) {
 
 function DashboardHomePage() {
   const { user, userNitRut } = useAuth()
+  const tenantNitRut = String(userNitRut || '').trim()
   const canRespondAttendance = Boolean(user?.uid)
   const [events, setEvents] = useState([])
   const [circulars, setCirculars] = useState([])
@@ -63,14 +64,25 @@ function DashboardHomePage() {
   const today = toIsoDate(new Date())
 
   useEffect(() => {
+    if (!tenantNitRut) {
+      setEvents([])
+      setCirculars([])
+      setMisServicios([])
+      setEventAttendanceByEventId({})
+      setPendingEvaluations(null)
+      setPendingTasks(null)
+      setLoading(false)
+      return undefined
+    }
+
     const loadData = async () => {
       setLoading(true)
       try {
         const queries = [
-          getDocs(query(collection(db, 'eventos'), where('nitRut', '==', userNitRut))),
-          getDocs(query(collection(db, 'circulares'), where('nitRut', '==', userNitRut))),
-          getDocs(query(collection(db, 'tareas'), where('nitRut', '==', userNitRut))),
-          getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', userNitRut))),
+          getDocs(query(collection(db, 'eventos'), where('nitRut', '==', tenantNitRut))),
+          getDocs(query(collection(db, 'circulares'), where('nitRut', '==', tenantNitRut))),
+          getDocs(query(collection(db, 'tareas'), where('nitRut', '==', tenantNitRut))),
+          getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', tenantNitRut))),
         ]
         if (canRespondAttendance && user?.uid) {
           queries.push(
@@ -78,14 +90,14 @@ function DashboardHomePage() {
               query(
                 collection(db, 'event_respuestas'),
                 where('userUid', '==', user.uid),
-                where('nitRut', '==', userNitRut),
+                where('nitRut', '==', tenantNitRut),
               ),
             ),
           )
           queries.push(getDocs(query(collection(db, 'examen_intentos'), where('uid', '==', user.uid))))
           queries.push(
             getDocs(
-              query(collection(db, 'servicios_complementarios'), where('usuariosAsignados', 'array-contains', user.uid), where('nitRut', '==', userNitRut),
+              query(collection(db, 'servicios_complementarios'), where('usuariosAsignados', 'array-contains', user.uid), where('nitRut', '==', tenantNitRut),
                 where('estado', '==', 'activo')
               )
             )
@@ -123,14 +135,13 @@ function DashboardHomePage() {
         const mappedCirculars = circularsSnapshot.docs
           .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
           .filter((item) => {
-            // Requisito: si la fecha de vencimiento es mayor a hoy, no se muestra en el inicio.
-            // Guardamos `fechaVencimiento` como YYYY-MM-DD; si no existe, se muestra.
+            // Mostrar circulares vigentes del tenant actual. Si no tienen fecha de vencimiento, se muestran.
             if (!item.fechaVencimiento) return true
-            if (typeof item.fechaVencimiento === 'string') return item.fechaVencimiento <= today
+            if (typeof item.fechaVencimiento === 'string') return item.fechaVencimiento >= today
             if (typeof item.fechaVencimiento?.toDate === 'function') {
               const d = item.fechaVencimiento.toDate()
               const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-              return iso <= today
+              return iso >= today
             }
             return true
           })
@@ -177,7 +188,8 @@ function DashboardHomePage() {
     }
 
     loadData()
-  }, [canRespondAttendance, user?.uid, userNitRut, today])
+    return undefined
+  }, [canRespondAttendance, tenantNitRut, user?.uid, today])
 
   const eventsByDay = useMemo(() => {
     const map = new Map()

@@ -1,11 +1,13 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore'
 import { useAuth } from '../hooks/useAuth'
 import { db } from '../firebase'
 import logoFallback from '../assets/logo-plataforma.svg'
 import { buildDynamicMemberPermissionKey, PERMISSION_KEYS } from '../utils/permissions'
 import FloatingChatWidget from './FloatingChatWidget'
+import { ensureNativeNotificationPermissions, isNativeApp, openExternalDocument, pushNativeAlert, updateAppBadgeCount } from '../utils/nativeLinks'
+import { registerNativePushHandlers } from '../utils/pushNotifications'
 
 function BellIcon() {
   return (
@@ -506,6 +508,8 @@ function DashboardLayout() {
   const allItems = [...mainItems, ...paymentsItems, ...academicItems, ...reportItems, ...memberItems, ...configItems]
   const unreadInitializedRef = useRef(false)
   const todayEventsToastShownRef = useRef(false)
+  const previousUnreadCountRef = useRef(0)
+  const previousUnreadNotificationCountRef = useRef(0)
   const paymentsRouteActive = paymentsItems.some((item) =>
     location.pathname.startsWith(item.to),
   )
@@ -636,6 +640,47 @@ function DashboardLayout() {
   }, [user])
 
   useEffect(() => {
+    if (!user?.uid || !userNitRut || !isNativeApp()) {
+      return undefined
+    }
+
+    let disposed = false
+    let cleanup = async () => {}
+
+    registerNativePushHandlers({
+      onToken: async (token) => {
+        const tokenValue = String(token?.value || '').trim()
+        if (!tokenValue || disposed) return
+
+        await setDoc(
+          doc(db, 'users', user.uid, 'pushTokens', tokenValue),
+          {
+            token: tokenValue,
+            platform: 'android',
+            nitRut: userNitRut,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        )
+      },
+      onNotification: async (notification) => {
+        const totalUnread = Number(notification?.data?.totalUnread || 0)
+        if (Number.isFinite(totalUnread)) {
+          updateAppBadgeCount(totalUnread).catch(() => {})
+        }
+      },
+    })
+      .then((registeredCleanup) => {
+        cleanup = typeof registeredCleanup === 'function' ? registeredCleanup : cleanup
+      })
+      .catch(() => {})
+
+    return () => {
+      disposed = true
+      cleanup().catch(() => {})
+    }
+  }, [navigate, user?.uid, userNitRut])
+  useEffect(() => {
     if (!user?.uid) return undefined
 
     const notificationsQuery = query(
@@ -712,6 +757,80 @@ function DashboardLayout() {
       : location.pathname.startsWith('/dashboard/notificaciones')
         ? 'Notificaciones'
         : 'Dashboard')
+
+  useEffect(() => {
+    if (!isNativeApp()) {
+      return undefined
+    }
+
+    ensureNativeNotificationPermissions().catch(() => {})
+
+    const handleNativePdfLink = (event) => {
+      const trigger = event.target instanceof Element ? event.target.closest('a.pdf-download-icon') : null
+      const url = trigger?.getAttribute('href')
+
+      if (!url || url === '#') {
+        return
+      }
+
+      event.preventDefault()
+      openExternalDocument(url).catch(() => {})
+    }
+
+    document.addEventListener('click', handleNativePdfLink)
+    return () => document.removeEventListener('click', handleNativePdfLink)
+  }, [])
+
+  useEffect(() => {
+    const totalUnread = user?.uid ? unreadCount + unreadNotificationCount : 0
+    updateAppBadgeCount(totalUnread).catch(() => {})
+
+    if (!user?.uid) {
+      previousUnreadCountRef.current = 0
+      previousUnreadNotificationCountRef.current = 0
+    }
+
+    return undefined
+  }, [unreadCount, unreadNotificationCount, user?.uid])
+
+  useEffect(() => {
+    if (!user?.uid || !isNativeApp()) {
+      return undefined
+    }
+
+    if (previousUnreadCountRef.current > 0 && unreadCount > previousUnreadCountRef.current) {
+      pushNativeAlert({
+        id: 2101,
+        title: 'Nuevos mensajes',
+        body: 'Tienes ' + unreadCount + ' mensaje' + (unreadCount === 1 ? '' : 's') + ' sin leer.',
+        route: '/dashboard/mensajes',
+      }).catch(() => {})
+    }
+
+    previousUnreadCountRef.current = unreadCount
+    return undefined
+  }, [unreadCount, user?.uid])
+
+  useEffect(() => {
+    if (!user?.uid || !isNativeApp()) {
+      return undefined
+    }
+
+    if (
+      previousUnreadNotificationCountRef.current > 0 &&
+      unreadNotificationCount > previousUnreadNotificationCountRef.current
+    ) {
+      pushNativeAlert({
+        id: 2102,
+        title: 'Nuevas notificaciones',
+        body: 'Tienes ' + unreadNotificationCount + ' notificacion' + (unreadNotificationCount === 1 ? '' : 'es') + ' sin leer.',
+        route: '/dashboard/notificaciones',
+      }).catch(() => {})
+    }
+
+    previousUnreadNotificationCountRef.current = unreadNotificationCount
+    return undefined
+  }, [unreadNotificationCount, user?.uid])
 
   const handleLogout = async () => {
     try {
@@ -985,3 +1104,7 @@ function DashboardLayout() {
 }
 
 export default DashboardLayout
+
+
+
+

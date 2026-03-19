@@ -93,6 +93,15 @@ function NotificationsPage() {
     return unsubscribe
   }, [user?.uid, userNitRut])
 
+  const isUserActive = useCallback((availableUser) => {
+    const estado =
+      availableUser?.profile?.informacionComplementaria?.estado ||
+      availableUser?.profile?.estado ||
+      'activo'
+
+    return String(estado).toLowerCase() !== 'inactivo'
+  }, [])
+
   useEffect(() => {
     if (!user?.uid) return undefined
 
@@ -158,7 +167,7 @@ function NotificationsPage() {
     }
 
     loadReceivers()
-  }, [allRoleValues, canCreateNotifications, user?.uid, userNitRut])
+  }, [allRoleValues, canCreateNotifications, isUserActive, user?.uid, userNitRut])
 
   useEffect(() => {
     const loadRoleMatrix = async () => {
@@ -205,6 +214,7 @@ function NotificationsPage() {
 
     loadRoleMatrix()
   }, [userNitRut])
+
 
   const unreadCount = useMemo(
     () => notifications.filter((item) => item.read !== true).length,
@@ -796,3 +806,6 @@ function NotificationsPage() {
 }
 
 export default NotificationsPage
+
+
+

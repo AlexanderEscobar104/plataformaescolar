@@ -7,6 +7,7 @@ import { setDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
 import OperationStatusModal from '../../components/OperationStatusModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
+import { savePdfDocument } from '../../utils/nativeLinks'
 
 const DAYS = [
   { key: 'lunes', label: 'Lunes' },
@@ -357,7 +358,7 @@ function SchedulePage() {
     setSaveConfirmOpen(false)
   }
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!selectedGroupKey) {
       setFeedback('Selecciona un grado y grupo para descargar el horario.')
       return
@@ -390,7 +391,7 @@ function SchedulePage() {
       margin: { left: 24, right: 24 },
     })
 
-    pdf.save(`${title.toLowerCase().replace(/\s+/g, '_')}.pdf`)
+    await savePdfDocument(pdf, `${title.toLowerCase().replace(/\s+/g, '_')}.pdf`, 'Horario generado')
   }
 
   if (loading) {
@@ -607,3 +608,4 @@ function SchedulePage() {
 }
 
 export default SchedulePage
+

@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth'
 import OperationStatusModal from '../../components/OperationStatusModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import { fileToDataUrl, guessImageFormat } from '../../utils/pdfImages'
+import { savePdfDocument } from '../../utils/nativeLinks'
 
 const PERIODS = [
   { key: '1', label: 'Periodo 1' },
@@ -879,7 +880,7 @@ function BoletinesPage() {
       await drawSignatureBlock(rightX, firma2Nombre, firma2Cargo, firma2File)
 
       const fileName = `${sanitizeFileName('boletin')}_${sanitizeFileName(studentName)}_${sanitizeFileName(`${anio}_${tipo === 'final' ? 'final' : `p${periodo}`}`)}.pdf`
-      pdf.save(fileName)
+      await savePdfDocument(pdf, fileName, 'Boletin generado')
       openModal('success', 'Boletin generado correctamente.')
     } catch (error) {
       openModal('error', error?.message || 'No fue posible generar el boletin.')
@@ -1145,3 +1146,4 @@ function BoletinesPage() {
 }
 
 export default BoletinesPage
+

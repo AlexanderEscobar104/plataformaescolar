@@ -15,6 +15,7 @@ import OperationStatusModal from '../../components/OperationStatusModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
+import { savePdfDocument } from '../../utils/nativeLinks'
 
 const ALLOWED_EXTENSIONS = ['.xlsx', '.xls', '.csv']
 const TEMPLATE_HEADERS = [
@@ -160,7 +161,7 @@ function parseQuestionsFromFile(file, extension) {
   })
 }
 
-function downloadExamPdfByEvaluation({ evaluation, studentsForEvaluation }) {
+async function downloadExamPdfByEvaluation({ evaluation, studentsForEvaluation }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
 
   studentsForEvaluation.forEach((student, index) => {
@@ -301,7 +302,7 @@ function downloadExamPdfByEvaluation({ evaluation, studentsForEvaluation }) {
   })
 
   const fileNameSafeSubject = sanitizePdfText(evaluation.subject || 'evaluacion').replace(/\s+/g, '_')
-  doc.save(`evaluacion_${fileNameSafeSubject}_grupo_${evaluation.grade || ''}${evaluation.group || ''}.pdf`)
+  await savePdfDocument(doc, `evaluacion_${fileNameSafeSubject}_grupo_${evaluation.grade || ''}${evaluation.group || ''}.pdf`, 'Evaluacion generada')
 }
 
 function normalizeHeader(value) {
@@ -840,7 +841,7 @@ function EvaluationsPage() {
     setEvaluationForPdf(evaluation)
   }
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!evaluationForPdf) return
     if (!Array.isArray(evaluationForPdf.questions) || evaluationForPdf.questions.length === 0) {
       setFeedback('Esta evaluacion no tiene preguntas cargadas para generar el PDF.')
@@ -853,7 +854,7 @@ function EvaluationsPage() {
       return
     }
 
-    downloadExamPdfByEvaluation({ evaluation: evaluationForPdf, studentsForEvaluation: studentsForPdf })
+    await downloadExamPdfByEvaluation({ evaluation: evaluationForPdf, studentsForEvaluation: studentsForPdf })
     setEvaluationForPdf(null)
   }
 
@@ -1447,3 +1448,4 @@ function EvaluationsPage() {
 }
 
 export default EvaluationsPage
+
