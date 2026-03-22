@@ -97,11 +97,23 @@ function ReportTypeSettingsPage() {
   }
 
   return (
-    <section>
-      <div className="students-header">
-        <div>
+    <section className="dashboard-module-shell settings-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Configuracion</span>
           <h2>Configuracion de tipos de reporte</h2>
           <p>Define que roles pueden ver cada tipo de reporte en el modulo de reportes.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{reportTypes.length}</strong>
+          <span>Tipos de reporte</span>
+          <small>{roleOptions.length} roles disponibles para asignacion</small>
+        </div>
+      </div>
+      <div className="students-header member-module-header">
+        <div className="member-module-header-copy">
+          <h3>Visibilidad de reportes</h3>
+          <p>Determina que roles pueden consultar cada tipo de reporte activo.</p>
         </div>
         <button type="button" className="button" onClick={saveSettings} disabled={!canManage || saving || loading}>
           {saving ? 'Guardando...' : 'Guardar configuracion'}

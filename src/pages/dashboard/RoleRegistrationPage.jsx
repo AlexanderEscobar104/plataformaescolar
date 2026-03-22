@@ -595,35 +595,42 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
   }
 
   return (
-    <section>
-      {isStudentForm ? (
-        <div className="students-header">
+    <section className="dashboard-module-shell member-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Gestion de Miembros</span>
           <h2>{title}</h2>
-          <Link className="button button-link secondary" to={backTo || '/dashboard/crear-estudiantes'}>
+          <p>
+            Crea credenciales de acceso. El usuario se guardara con rol
+            <strong> {role}</strong>.
+          </p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{isStudentForm ? 'Estudiante' : isTeacherForm ? 'Profesor' : isDirectivoForm ? 'Directivo' : 'Rol'}</strong>
+          <span>Formulario de registro</span>
+          <small>Campos, archivos y estado del miembro</small>
+        </div>
+      </div>
+      <div className="students-header member-module-header">
+        <div className="member-module-header-copy">
+          <h3>Captura de informacion</h3>
+          <p>Verifica los datos antes de guardar el nuevo registro.</p>
+        </div>
+        {(isStudentForm || isTeacherForm || isDirectivoForm) && (
+          <Link
+            className="button button-link secondary"
+            to={
+              isStudentForm
+                ? (backTo || '/dashboard/crear-estudiantes')
+                : isTeacherForm
+                  ? (backTo || '/dashboard/crear-profesores')
+                  : (backTo || '/dashboard/crear-directivos')
+            }
+          >
             Volver al listado
           </Link>
-        </div>
-      ) : isTeacherForm ? (
-        <div className="students-header">
-          <h2>{title}</h2>
-          <Link className="button button-link secondary" to={backTo || '/dashboard/crear-profesores'}>
-            Volver al listado
-          </Link>
-        </div>
-      ) : isDirectivoForm ? (
-        <div className="students-header">
-          <h2>{title}</h2>
-          <Link className="button button-link secondary" to={backTo || '/dashboard/crear-directivos'}>
-            Volver al listado
-          </Link>
-        </div>
-      ) : (
-        <h2>{title}</h2>
-      )}
-      <p>
-        Crea credenciales de acceso. El usuario se guardara con rol
-        <strong> {role}</strong>.
-      </p>
+        )}
+      </div>
       {isStudentForm && !canCreateStudents && (
         <p className="feedback error">
           Tu rol no tiene permisos para crear registros de estudiantes.

@@ -1,17 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { collection, doc, getDocs, serverTimestamp, query, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
-import { db, storage } from '../../firebase'
-import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { collection, doc, getDocs, query, where } from 'firebase/firestore'
+import { db } from '../../firebase'
+import { deleteDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
-import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
-
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
 function formatDate(dateValue) {
 
@@ -26,24 +22,20 @@ function CircularsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [exportingAll, setExportingAll] = useState(false)
 
-  const { user, hasPermission, userNitRut } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { hasPermission, userNitRut } = useAuth()
   const canManageCirculars =
     hasPermission(PERMISSION_KEYS.CIRCULARS_MANAGE) || hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const canViewOnlyCirculars = !canManageCirculars
-  const [subject, setSubject] = useState('')
-  const [fechaVencimiento, setFechaVencimiento] = useState('')
-  const [pdfFile, setPdfFile] = useState(null)
   const [search, setSearch] = useState('')
-  const [editingCircular, setEditingCircular] = useState(null)
-  const [showFormModal, setShowFormModal] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorModalMessage, setErrorModalMessage] = useState('')
   const [circularToDelete, setCircularToDelete] = useState(null)
   const [feedback, setFeedback] = useState('')
-  const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [loading, setLoading] = useState(true)
   const [circulars, setCirculars] = useState([])
@@ -69,112 +61,13 @@ function CircularsPage() {
     loadCirculars()
   }, [loadCirculars])
 
-  const handlePdfChange = (event) => {
-    const file = event.target.files?.[0] || null
-    if (!file) {
-      setPdfFile(null)
-      return
-    }
-    if (file.type !== 'application/pdf') {
-      setFeedback('Solo se permite archivo PDF.')
-      event.target.value = ''
-      return
-    }
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setFeedback(`El archivo "${file.name}" supera el limite de 25MB.`)
-      event.target.value = ''
-      return
-    }
-    setPdfFile(file)
-  }
-
-  const uploadPdf = async () => {
-    if (!pdfFile) return null
-    const filePath = `circulares/${Date.now()}-${pdfFile.name}`
-    const fileRef = ref(storage, filePath)
-    await uploadBytesTracked(fileRef, pdfFile)
-    return {
-      name: pdfFile.name,
-      size: pdfFile.size,
-      path: filePath,
-      url: await getDownloadURL(fileRef),
-      type: pdfFile.type || 'application/pdf',
-    }
-  }
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    setFeedback('')
-
-    if (!canManageCirculars) {
-      setFeedback('No tienes permisos para crear circulares.')
-      return
-    }
-    if (!subject.trim()) {
-      setFeedback('Debes completar el asunto.')
-      return
-    }
-    if (!editingCircular && !pdfFile) {
-      setFeedback('Debes cargar un PDF.')
-      return
-    }
-
-    try {
-      setSaving(true)
-      const uploadedPdf = await uploadPdf()
-      if (editingCircular?.id) {
-        await updateDocTracked(doc(db, 'circulares', editingCircular.id), {
-          subject: subject.trim(),
-          fechaVencimiento: String(fechaVencimiento || '').trim(),
-          pdf: uploadedPdf || editingCircular.pdf || null,
-          nitRut: userNitRut,
-          updatedAt: serverTimestamp(),
-        })
-        setSuccessMessage('Circular actualizada correctamente.')
-      } else {
-        await addDocTracked(collection(db, 'circulares'), {
-          subject: subject.trim(),
-          fechaVencimiento: String(fechaVencimiento || '').trim(),
-          pdf: uploadedPdf,
-          nitRut: userNitRut,
-          createdByUid: user?.uid || '',
-          createdByName: user?.displayName || user?.email || '',
-          createdAt: serverTimestamp(),
-        })
-        setSuccessMessage('Circular guardada correctamente.')
-      }
-      setSubject('')
-      setFechaVencimiento('')
-      setPdfFile(null)
-      setEditingCircular(null)
-      setShowFormModal(false)
-      setShowSuccessModal(true)
-      await loadCirculars()
-    } catch {
-      setErrorModalMessage(`No fue posible ${editingCircular?.id ? 'actualizar' : 'crear'} la circular.`)
-      setShowErrorModal(true)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const openNewCircularModal = () => {
-    setEditingCircular(null)
-    setSubject('')
-    setFechaVencimiento('')
-    setPdfFile(null)
-    setFeedback('')
-    setShowFormModal(true)
-  }
-
-  const openEditCircularModal = (item) => {
-    setEditingCircular(item)
-    setSubject(item.subject || '')
-    setFechaVencimiento(item.fechaVencimiento || '')
-    setPdfFile(null)
-    setFeedback('')
-    setShowFormModal(true)
-  }
+  useEffect(() => {
+    const successMessageFromState = location.state?.circularSuccessMessage
+    if (!successMessageFromState) return
+    setSuccessMessage(successMessageFromState)
+    setShowSuccessModal(true)
+    navigate(location.pathname, { replace: true, state: {} })
+  }, [location.pathname, location.state, navigate])
 
   const handleDeleteCircular = async () => {
     if (!canManageCirculars || !circularToDelete?.id) return
@@ -203,22 +96,28 @@ function CircularsPage() {
   }, [search, circulars])
 
   return (
-    <section>
-      <div className="students-header">
-        <h2>Circulares</h2>
+    <section className="circulars-page-shell">
+      <div className="circulars-page-hero">
+        <div className="circulars-page-hero-copy">
+          <span className="circulars-page-eyebrow">Comunicacion institucional</span>
+          <h2>Circulares</h2>
+          <p>Gestiona circulares institucionales en formato PDF con fechas de vencimiento y acceso rapido al archivo.</p>
+        </div>
+        <div className="circulars-page-hero-actions">
         {canManageCirculars && (
-          <button type="button" className="button" onClick={openNewCircularModal}>
+          <button type="button" className="button" onClick={() => navigate('/dashboard/circulares/nueva')}>
             Nueva circular
           </button>
         )}
+        </div>
       </div>
-      <p>Gestiona circulares institucionales en formato PDF.</p>
       {(canViewOnlyCirculars || !canManageCirculars) && (
         <p className="feedback">Vista solo lectura para este modulo.</p>
       )}
 
       {feedback && <p className="feedback">{feedback}</p>}
-      <div className="students-toolbar">
+      <div className="circulars-list-card">
+      <div className="students-toolbar circulars-toolbar">
 
         <input
           type="text"
@@ -269,7 +168,7 @@ function CircularsPage() {
                       <button
                         type="button"
                         className="button small icon-action-button"
-                        onClick={() => openEditCircularModal(item)}
+                        onClick={() => navigate(`/dashboard/circulares/editar/${item.id}`)}
                         aria-label="Editar circular"
                         title="Editar"
                       >
@@ -312,70 +211,7 @@ function CircularsPage() {
       )}
         </div>
       )}
-
-      {showFormModal && (
-        <div className="modal-overlay" role="presentation">
-          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Formulario circular">
-            <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={() => setShowFormModal(false)}>
-              x
-            </button>
-            <h3>{editingCircular ? 'Editar circular' : 'Nueva circular'}</h3>
-            <form className="form" onSubmit={handleSubmit}>
-              <fieldset className="form-fieldset" disabled={!canManageCirculars}>
-                <label htmlFor="circular-subject">
-                  Asunto
-                  <input
-                    id="circular-subject"
-                    type="text"
-                    value={subject}
-                    onChange={(event) => setSubject(event.target.value)}
-                  />
-                </label>
-                <label htmlFor="circular-expiration">
-                  Fecha de vencimiento
-                  <input
-                    id="circular-expiration"
-                    type="date"
-                    value={fechaVencimiento}
-                    onChange={(event) => setFechaVencimiento(event.target.value)}
-                  />
-                </label>
-                <div>
-                  <DragDropFileInput
-                    id="circular-pdf"
-                    label="Archivo PDF"
-                    accept="application/pdf"
-                    onChange={handlePdfChange}
-                    prompt="Arrastra el PDF aqui o haz clic para seleccionar."
-                  />
-                </div>
-                {editingCircular?.pdf?.url && (
-                  <p className="feedback">
-                    PDF actual:{' '}
-                    <a href={editingCircular.pdf.url} target="_blank" rel="noreferrer">
-                      {editingCircular.pdf.name || 'Descargar'}
-                    </a>
-                  </p>
-                )}
-                {pdfFile && <p className="feedback">Nuevo PDF: {pdfFile.name}</p>}
-                <div className="modal-actions">
-                  <button className="button" type="submit" disabled={saving}>
-                    {saving ? 'Guardando...' : editingCircular ? 'Actualizar' : 'Guardar'}
-                  </button>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    disabled={saving}
-                    onClick={() => setShowFormModal(false)}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </fieldset>
-            </form>
-          </div>
-        </div>
-      )}
+      </div>
 
       {circularToDelete && (
         <div className="modal-overlay" role="presentation">

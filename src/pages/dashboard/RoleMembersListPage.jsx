@@ -154,16 +154,30 @@ function RoleMembersListPage() {
   }
 
   return (
-    <section>
-      <div className="students-header">
-        <h2>{`Crear ${roleName || 'rol'}`}</h2>
+    <section className="dashboard-module-shell member-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Gestion de Miembros</span>
+          <h2>{`Crear ${roleName || 'rol'}`}</h2>
+          <p>Consulta, busca y administra registros creados para este rol.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{filteredMembers.length}</strong>
+          <span>Registros visibles</span>
+          <small>{roleName ? `Modulo activo: ${roleName}` : 'Rol personalizado'}</small>
+        </div>
+      </div>
+      <div className="students-header member-module-header">
+        <div className="member-module-header-copy">
+          <h3>Listado del rol</h3>
+          <p>Busca por documento, nombres, apellidos, cargo o estado.</p>
+        </div>
         {canCreateMembers && !roleError && (
           <Link className="button button-link" to={`/dashboard/crear-rol/${roleId}/nuevo`}>
             {`Agregar nuevo ${roleName || 'rol'}`}
           </Link>
         )}
       </div>
-      <p>Consulta, busca y administra registros creados para este rol.</p>
 
       {roleError && <p className="feedback error">{roleError}</p>}
 

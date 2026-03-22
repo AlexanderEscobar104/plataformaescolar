@@ -129,10 +129,25 @@ function EmpleadosPage() {
   }
 
   return (
-    <section>
-      <div className="students-header">
-        <h2>Empleados</h2>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+    <section className="dashboard-module-shell member-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Gestion de Miembros</span>
+          <h2>Empleados</h2>
+          <p>Gestiona el listado de empleados de la institucion.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{empleados.length}</strong>
+          <span>Empleados registrados</span>
+          <small>{tiposEmpleadoActivos.length} tipos de empleado activos</small>
+        </div>
+      </div>
+      <div className="students-header member-module-header">
+        <div className="member-module-header-copy">
+          <h3>Directorio interno</h3>
+          <p>Consulta cargos, datos de contacto y estado de cada empleado.</p>
+        </div>
+        <div className="member-module-actions">
           {canExportExcel && (
             <ExportExcelButton data={exportRows} filename="Empleados" />
           )}
@@ -143,9 +158,8 @@ function EmpleadosPage() {
           )}
         </div>
       </div>
-      <p>Gestiona el listado de empleados de la institucion.</p>
 
-      <div className="home-left-card evaluations-card" style={{ maxWidth: '900px' }}>
+      <div className="home-left-card evaluations-card member-module-card" style={{ maxWidth: '900px' }}>
         <h3>Tipos de empleado</h3>
         {loadingTipos ? (
           <p>Cargando tipos de empleado...</p>

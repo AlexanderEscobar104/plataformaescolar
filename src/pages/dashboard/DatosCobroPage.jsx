@@ -166,7 +166,7 @@ function DatosCobroPage() {
   }
 
   return (
-    <section>
+    <section className="payments-page-shell">
       <div className="students-header">
         <h2>Datos de cobro</h2>
       </div>
@@ -262,14 +262,14 @@ function DatosCobroPage() {
                 </label>
               </div>
 
-              <div style={{ marginTop: '22px' }}>
-                <h3 style={{ margin: 0 }}>Generar recibos</h3>
-                <p style={{ marginTop: '8px', marginBottom: '10px', color: 'var(--text-secondary)' }}>
+              <div className="datos-cobro-roles-panel">
+                <h3 className="datos-cobro-roles-title">Generar recibos</h3>
+                <p className="datos-cobro-roles-subtitle">
                   Selecciona uno o varios roles a los que se les generaran recibos.
                 </p>
-                <div className="teacher-checkbox-list">
+                <div className="datos-cobro-roles-list">
                   {roleOptions.map((role) => (
-                    <label key={role.id || role.value} className="teacher-checkbox-item">
+                    <label key={role.id || role.value} className="datos-cobro-role-item">
                       <input
                         type="checkbox"
                         checked={rolesParaRecibos.includes(String(role.value || '').toLowerCase())}
@@ -279,7 +279,7 @@ function DatosCobroPage() {
                     </label>
                   ))}
                 </div>
-                <small style={{ display: 'block', marginTop: '8px', color: 'var(--text-secondary)' }}>
+                <small className="datos-cobro-roles-count">
                   Roles seleccionados: {rolesParaRecibos.length}
                 </small>
               </div>

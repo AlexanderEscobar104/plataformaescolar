@@ -160,7 +160,7 @@ function CajaPage() {
   }
 
   return (
-    <section className="evaluations-page">
+    <section className="evaluations-page payments-page-shell">
       <div className="students-header">
         <div>
           <h2>Caja</h2>

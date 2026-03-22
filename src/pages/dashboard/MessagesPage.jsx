@@ -383,7 +383,7 @@ function MessagesPage() {
   }
 
   const handleReply = () => {
-    if (!selectedMessage) return
+    if (!selectedMessage || selectedTab !== 'inbox') return
 
     const replyRecipientUid =
       selectedTab === 'inbox' ? selectedMessage.senderUid : selectedMessage.recipientUid
@@ -626,9 +626,19 @@ function MessagesPage() {
   }
 
   return (
-    <section className="messages-page">
-      <h2>Mensajes</h2>
-      <p>Envia y recibe mensajes internos entre usuarios de la plataforma.</p>
+    <section className="messages-page dashboard-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Comunicacion interna</span>
+          <h2>Mensajes</h2>
+          <p>Envia y recibe mensajes internos entre usuarios de la plataforma.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{inbox.length}</strong>
+          <span>Mensajes recibidos</span>
+          <small>{sent.length} enviados</small>
+        </div>
+      </div>
 
       <div className="messages-grid">
         <form className="form messages-compose" onSubmit={sendMessage}>
@@ -985,16 +995,18 @@ function MessagesPage() {
                         <EyeIcon />
                       </button>
                     )}
-                    <button
-                      type="button"
-                      className="icon-action-btn"
-                      onClick={handleReply}
-                      title="Responder"
-                      aria-label="Responder mensaje"
-                      disabled={!canReplyMessages}
-                    >
-                      <ReplyIcon />
-                    </button>
+                    {selectedTab === 'inbox' && (
+                      <button
+                        type="button"
+                        className="icon-action-btn"
+                        onClick={handleReply}
+                        title="Responder"
+                        aria-label="Responder mensaje"
+                        disabled={!canReplyMessages}
+                      >
+                        <ReplyIcon />
+                      </button>
+                    )}
                     {canDeleteMessages && (
                       <button
                         type="button"

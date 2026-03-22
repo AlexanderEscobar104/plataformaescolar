@@ -233,7 +233,7 @@ function ItemCobroPage() {
   }
 
   return (
-    <section className="evaluations-page">
+    <section className="evaluations-page payments-page-shell">
       <div className="students-header">
         <div>
           <h2>Item de cobro</h2>
@@ -313,21 +313,26 @@ function ItemCobroPage() {
                 </select>
               </label>
 
-              <div className="evaluation-field-full" style={{ marginTop: '2px' }}>
-                <strong>Roles a los que aplica ({form.rolesAplican.length} seleccionados)</strong>
-                <div className="teacher-checkbox-list" style={{ marginTop: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+              <div className="evaluation-field-full datos-cobro-roles-panel" style={{ marginTop: '2px' }}>
+                <h4 className="datos-cobro-roles-title">Roles a los que aplica</h4>
+                <p className="datos-cobro-roles-subtitle">
+                  Selecciona uno o varios roles para definir a quienes aplica este item de cobro.
+                </p>
+                <div className="datos-cobro-roles-list" style={{ maxHeight: '280px' }}>
                   {roleOptions.map((role) => (
-                    <label key={role.id || role.value} className="teacher-checkbox-item">
+                    <label key={role.id || role.value} className="datos-cobro-role-item">
                       <input
                         type="checkbox"
-                        style={{ width: '16px', minWidth: '16px', height: '16px' }}
                         checked={form.rolesAplican.includes(String(role.value || '').toLowerCase())}
                         onChange={() => toggleRol(role.value)}
                       />
-                      <span style={{ flex: 1 }}>{role.name}</span>
+                      <span>{role.name}</span>
                     </label>
                   ))}
                 </div>
+                <small className="datos-cobro-roles-count">
+                  Roles seleccionados: {form.rolesAplican.length}
+                </small>
               </div>
 
               <div className="modal-actions evaluation-field-full">

@@ -467,13 +467,21 @@ function NotificationsPage() {
   }
 
   return (
-    <section className="notifications-page">
-      <div className="students-header">
-        <h2>Notificaciones</h2>
+    <section className="notifications-page dashboard-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Avisos rapidos</span>
+          <h2>Notificaciones</h2>
+          <p>
+            Panel de notificaciones del usuario logueado. Pendientes: <strong>{unreadCount}</strong>
+          </p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{notifications.length}</strong>
+          <span>Recibidas</span>
+          <small>{sentNotifications.length} enviadas</small>
+        </div>
       </div>
-      <p>
-        Panel de notificaciones del usuario logueado. Pendientes: <strong>{unreadCount}</strong>
-      </p>
       {feedback && <p className="feedback">{feedback}</p>}
 
       <div className="home-grid notifications-grid">

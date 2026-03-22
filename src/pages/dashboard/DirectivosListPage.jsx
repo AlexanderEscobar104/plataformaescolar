@@ -115,16 +115,30 @@ function DirectivosListPage() {
   }
 
   return (
-    <section>
-      <div className="students-header">
-        <h2>Crear directivos</h2>
+    <section className="dashboard-module-shell member-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Gestion de Miembros</span>
+          <h2>Crear directivos</h2>
+          <p>Consulta, busca y administra directivos creados.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{filteredDirectivos.length}</strong>
+          <span>Directivos visibles</span>
+          <small>{canCreateDirectivos ? 'Centraliza cargos y responsables' : 'Consulta el equipo directivo'}</small>
+        </div>
+      </div>
+      <div className="students-header member-module-header">
+        <div className="member-module-header-copy">
+          <h3>Listado directivo</h3>
+          <p>Busca por documento, nombres, apellidos, cargo o estado.</p>
+        </div>
         {canCreateDirectivos && (
           <Link className="button button-link" to="/dashboard/crear-directivos/nuevo">
             Agregar nuevo directivo
           </Link>
         )}
       </div>
-      <p>Consulta, busca y administra directivos creados.</p>
 
       <div className="students-toolbar">
 

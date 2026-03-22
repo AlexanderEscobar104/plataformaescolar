@@ -2,8 +2,10 @@ import { Capacitor } from '@capacitor/core'
 import { Browser } from '@capacitor/browser'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { Directory, Filesystem } from '@capacitor/filesystem'
+import { httpsCallable } from 'firebase/functions'
 import { Share } from '@capacitor/share'
 import { Badge } from '@capawesome/capacitor-badge'
+import { functions } from '../firebase'
 
 export function isNativeApp() {
   return Capacitor.isNativePlatform()
@@ -80,6 +82,30 @@ export async function savePdfDocument(pdf, fileName, title = 'PDF generado') {
     text: resolvedFileName,
     url: savedFile.uri,
     dialogTitle: title,
+  })
+
+  return true
+}
+
+export async function sendPdfByEmail(pdf, fileName, {
+  to = '',
+  subject = 'Documento PDF',
+  body = 'Adjunto encontraras el documento generado.',
+} = {}) {
+  const resolvedFileName = sanitizeNativeFileName(fileName)
+  const recipient = String(to || '').trim()
+  const safeSubject = String(subject || 'Documento PDF').trim()
+  const safeBody = String(body || '').trim()
+  const sendDocumentEmail = httpsCallable(functions, 'sendDocumentEmail')
+  const base64Data = extractBase64FromPdf(pdf)
+
+  await sendDocumentEmail({
+    to: recipient,
+    subject: safeSubject,
+    body: safeBody,
+    fileName: resolvedFileName,
+    contentType: 'application/pdf',
+    base64Data,
   })
 
   return true

@@ -1,10 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, documentId, getDoc, getDocs, orderBy, query, where } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { db, storage } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
+import OperationStatusModal from '../../components/OperationStatusModal'
+import EmailDeliveryConfirmModal from '../../components/EmailDeliveryConfirmModal'
 import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
+import { sendPdfByEmail } from '../../utils/nativeLinks'
+import {
+  buildBoletinPdfDocument,
+  BOLETIN_PERIODS,
+  computeBoletinDesempeno,
+  flattenBoletinStructure,
+  isBoletinReady,
+  toBoletinFixed1,
+} from '../../utils/boletinesPdf'
 
 const OPERACION_OPTIONS = [
   { value: '', label: 'Todas las operaciones' },
@@ -31,6 +42,7 @@ function normalizeReportTypeKey(tipo) {
 
 function resolveReportKind(tipo) {
   const key = normalizeReportTypeKey(tipo)
+  if (key === 'boletines' || key === 'reporte_boletines') return 'boletines'
   if (key === 'asistencia' || key === 'asistencias') return 'asistencias'
   if (key === 'inasistencias' || key === 'reporte_inasistencias') return 'inasistencias'
   if (key === 'permisos_solicitados' || key === 'permisos_solicitado' || key === 'permisos') return 'permisos'
@@ -113,7 +125,7 @@ function normalizeSoporteUrls(record) {
 
 function serializeValue(val) {
   if (val === null || val === undefined) return '-'
-  if (typeof val === 'boolean') return val ? 'Sí' : 'No'
+  if (typeof val === 'boolean') return val ? 'SÃ­' : 'No'
   if (typeof val === 'object' && val?.toDate) return val.toDate().toLocaleString('es-CO')
   
   let parsedVal = val
@@ -122,7 +134,7 @@ function serializeValue(val) {
   }
 
   if (Array.isArray(parsedVal)) {
-    if (parsedVal.length === 0) return 'Vacío'
+    if (parsedVal.length === 0) return 'VacÃ­o'
     return parsedVal.map(item => {
       if (!item) return '-'
       if (typeof item === 'object') {
@@ -137,7 +149,7 @@ function serializeValue(val) {
         if (values.length > 0) return values.join(' ')
       }
       return String(item)
-    }).join(' • ')
+    }).join(' â€¢ ')
   }
 
   if (typeof parsedVal === 'object') {
@@ -154,7 +166,7 @@ const DIFF_SKIP = new Set([
 
 /**
  * Returns true if `val` is a plain nested object (not a Firestore Timestamp,
- * not an Array — arrays are treated as leaves to avoid exploding them).
+ * not an Array â€” arrays are treated as leaves to avoid exploding them).
  */
 function isPlainObject(val) {
   return (
@@ -210,8 +222,8 @@ function ValuesCell({ values }) {
 function toReadableLabel(key) {
   if (key === 'name') return 'Nombre'
   return key
-    .replace(/([A-Z])/g, ' $1')   // camelCase → spaces before caps
-    .replace(/_/g, ' ')            // snake_case → spaces
+    .replace(/([A-Z])/g, ' $1')   // camelCase â†’ spaces before caps
+    .replace(/_/g, ' ')            // snake_case â†’ spaces
     .replace(/^\s*/, '')           // trim leading space
     .replace(/\b\w/g, (c) => c.toUpperCase()) // capitalize each word
 }
@@ -244,7 +256,7 @@ function JsonNode({ value, depth = 0, changedPaths = new Set(), currentPath = ''
   }
 
   if (typeof value === 'boolean') {
-    return <span style={{ color: '#ea580c', fontWeight: 600 }}>{value ? 'Sí' : 'No'}</span>
+    return <span style={{ color: '#ea580c', fontWeight: 600 }}>{value ? 'SÃ­' : 'No'}</span>
   }
 
   if (typeof value === 'number') {
@@ -252,7 +264,7 @@ function JsonNode({ value, depth = 0, changedPaths = new Set(), currentPath = ''
   }
 
   if (typeof value === 'string') {
-    if (!value.trim()) return <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Vacío</span>
+    if (!value.trim()) return <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>VacÃ­o</span>
     if (value.startsWith('http://') || value.startsWith('https://')) {
       const isImg = /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(value)
       if (isImg) {
@@ -274,7 +286,7 @@ function JsonNode({ value, depth = 0, changedPaths = new Set(), currentPath = ''
   }
 
   if (Array.isArray(value)) {
-    if (value.length === 0) return <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Lista vacía</span>
+    if (value.length === 0) return <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Lista vacÃ­a</span>
     return (
       <ol style={{ margin: 0, paddingLeft: '18px' }}>
         {value.map((item, i) => (
@@ -399,9 +411,9 @@ function DetailModal({ record, onClose }) {
         <h3 style={{ marginBottom: '4px' }}>Detalle del registro</h3>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
           {[
-            { label: 'Módulo', val: record.coleccion },
+            { label: 'MÃ³dulo', val: record.coleccion },
             { label: 'Documento ID', val: record.documentoId },
-            { label: 'Operación', val: record.operacion },
+            { label: 'OperaciÃ³n', val: record.operacion },
             { label: 'Usuario', val: record.usuarioNombre || record.usuarioUid },
             { label: 'Fecha', val: formatTimestamp(record.fechaModificacion) },
           ].map(({ label, val }) => val ? (
@@ -468,6 +480,23 @@ function ReportesPage() {
   const [tareasGroupFilter, setTareasGroupFilter] = useState('')
   const [tareasStatusFilter, setTareasStatusFilter] = useState('')
 
+  const currentYear = new Date().getFullYear()
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const [boletinesReport, setBoletinesReport] = useState([])
+  const [loadingBoletines, setLoadingBoletines] = useState(false)
+  const [boletinesFeedback, setBoletinesFeedback] = useState('')
+  const [boletinesYearFilter, setBoletinesYearFilter] = useState(String(currentYear))
+  const [boletinesGradeFilter, setBoletinesGradeFilter] = useState('')
+  const [boletinesGroupFilter, setBoletinesGroupFilter] = useState('')
+  const [boletinesTypeFilter, setBoletinesTypeFilter] = useState('parcial')
+  const [boletinesPeriodFilter, setBoletinesPeriodFilter] = useState('1')
+  const [boletinesStatusFilter, setBoletinesStatusFilter] = useState('')
+  const [boletinesBulkLoading, setBoletinesBulkLoading] = useState(false)
+  const [boletinesEmailConfirmOpen, setBoletinesEmailConfirmOpen] = useState(false)
+  const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [statusModalType, setStatusModalType] = useState('success')
+  const [statusModalMessage, setStatusModalMessage] = useState('')
+
   const [customRoles, setCustomRoles] = useState([])
   const [asistenciaRoleFilter, setAsistenciaRoleFilter] = useState('')
   const [asistenciaTipoMarcacionFilter, setAsistenciaTipoMarcacionFilter] = useState('')
@@ -480,7 +509,7 @@ function ReportesPage() {
   const [loadingTypes, setLoadingTypes] = useState(false)
   const [hasReportTypeAccess, setHasReportTypeAccess] = useState(true)
 
-  // Filters — default to today so only today's records load initially.
+  // Filters â€” default to today so only today's records load initially.
   const [searchText, setSearchText] = useState('')
   const [filterColeccion, setFilterColeccion] = useState('')
   const [filterOperacion, setFilterOperacion] = useState('')
@@ -488,7 +517,7 @@ function ReportesPage() {
   const [filterFechaDesde, setFilterFechaDesde] = useState(() => new Date().toISOString().split('T')[0])
   const [filterFechaHasta, setFilterFechaHasta] = useState(() => new Date().toISOString().split('T')[0])
 
-  // ── Load all active report types from Firestore ────────────────────────────
+  // â”€â”€ Load all active report types from Firestore â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const reportKind = useMemo(() => resolveReportKind(selectedTipo), [selectedTipo])
   const roleOptions = useMemo(() => buildAllRoleOptions(customRoles), [customRoles])
   const inasistenciasTipoOptions = useMemo(() => {
@@ -555,6 +584,28 @@ function ReportesPage() {
     )
     return [...set].sort()
   }, [tareasReport])
+  const boletinesGradeOptions = useMemo(() => {
+    const set = new Set(
+      boletinesReport
+        .map((r) => String(r.grado || '').trim())
+        .filter(Boolean),
+    )
+    return [...set].sort()
+  }, [boletinesReport])
+  const boletinesGroupOptions = useMemo(() => {
+    const set = new Set(
+      boletinesReport
+        .map((r) => String(r.grupo || '').trim())
+        .filter(Boolean),
+    )
+    return [...set].sort()
+  }, [boletinesReport])
+
+  const openStatusModal = useCallback((type, message) => {
+    setStatusModalType(type)
+    setStatusModalMessage(message)
+    setStatusModalOpen(true)
+  }, [])
 
   useEffect(() => {
     if (!userNitRut) return
@@ -618,7 +669,7 @@ function ReportesPage() {
     }
   }, [selectedTipo, tipoReportesOptions])
 
-  // ── Load historial when the selected type is the built-in historial ─────────
+  // â”€â”€ Load historial when the selected type is the built-in historial â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadHistorial = useCallback(async () => {
     if (!userNitRut) return
     setLoading(true)
@@ -687,7 +738,7 @@ function ReportesPage() {
     }
   }, [reportKind, loadHistorial])
 
-  // ── Handle combobox change ─────────────────────────────────────────────────
+  // â”€â”€ Handle combobox change â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadAsistencias = useCallback(async () => {
     if (!userNitRut) return
     setLoadingAsistencias(true)
@@ -1074,19 +1125,219 @@ function ReportesPage() {
     }
   }, [loadTareas, reportKind])
 
+  const loadBoletines = useCallback(async () => {
+    if (!userNitRut) return
+    setLoadingBoletines(true)
+    setBoletinesFeedback('')
+    try {
+      const year = String(boletinesYearFilter || '').trim()
+      if (!year) {
+        setBoletinesReport([])
+        setBoletinesFeedback('Debes indicar un año lectivo.')
+        return
+      }
+
+      const [studentsSnap, structuresSnap, subjectsSnap, notasSnap, plantelSnapRaw, fallbackPlantelSnap] = await Promise.all([
+        getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante'), where('nitRut', '==', userNitRut))),
+        getDocs(query(collection(db, 'boletin_estructuras'), where('nitRut', '==', userNitRut))),
+        getDocs(query(collection(db, 'asignaturas'), where('nitRut', '==', userNitRut))),
+        getDocs(query(collection(db, 'boletin_notas'), where('nitRut', '==', userNitRut), where('anio', '==', year))),
+        getDoc(doc(db, 'configuracion', `datosPlantel_${String(userNitRut).trim()}`)),
+        getDoc(doc(db, 'configuracion', 'datosPlantel')),
+      ])
+
+      const plantel = plantelSnapRaw.exists() ? plantelSnapRaw.data() : (fallbackPlantelSnap.exists() ? fallbackPlantelSnap.data() : null)
+      const subjectsById = {}
+      subjectsSnap.docs
+        .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+        .filter((subject) => String(subject.status || 'activo').trim().toLowerCase() !== 'inactivo')
+        .forEach((subject) => {
+          subjectsById[subject.id] = { id: subject.id, name: subject.name || '' }
+        })
+
+      const structuresById = {}
+      structuresSnap.docs.forEach((docSnapshot) => {
+        structuresById[docSnapshot.id] = docSnapshot.data() || {}
+      })
+
+      const notasByDocId = {}
+      notasSnap.docs.forEach((docSnapshot) => {
+        notasByDocId[docSnapshot.id] = docSnapshot.data() || {}
+      })
+
+      const mappedStudents = studentsSnap.docs
+        .map((docSnapshot) => {
+          const data = docSnapshot.data() || {}
+          const profile = data.profile || {}
+          const infoComplementaria = profile.informacionComplementaria || {}
+          const fullName = `${profile.primerNombre || ''} ${profile.segundoNombre || ''} ${profile.primerApellido || ''} ${profile.segundoApellido || ''}`
+            .replace(/\s+/g, ' ')
+            .trim()
+          return {
+            id: docSnapshot.id,
+            numeroDocumento: profile.numeroDocumento || '',
+            nombreCompleto: fullName || data.name || '',
+            grado: String(profile.grado || '').trim(),
+            grupo: String(profile.grupo || '').trim().toUpperCase(),
+            email: String(infoComplementaria.email || data.email || '').trim(),
+            autorizaEnvioCorreos: infoComplementaria.autorizaEnvioCorreos !== false,
+          }
+        })
+        .sort((a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto))
+
+      const rows = mappedStudents.map((student) => {
+        const grade = String(student.grado || '').trim()
+        const group = String(student.grupo || '').trim().toUpperCase()
+        const structureDocId = `${String(userNitRut).trim()}__${grade}__${group}`
+        const estructura = structuresById[structureDocId] || { grupos: [] }
+        const flatRows = flattenBoletinStructure(estructura.grupos || [])
+        const resolveItemName = (item) => {
+          const explicit = String(item?.nombre || '').trim()
+          if (explicit) return explicit
+          const subjectId = String(item?.asignaturaId || '').trim()
+          return String(subjectsById[subjectId]?.name || '').trim()
+        }
+
+        let resolvedNotas = {}
+        let observacion = ''
+
+        if (boletinesTypeFilter === 'final') {
+          const sums = {}
+          const counts = {}
+          ;['1', '2', '3', '4'].forEach((periodKey) => {
+            const docId = `${String(userNitRut).trim()}__${student.id}__${year}__p${periodKey}`
+            const data = notasByDocId[docId] || {}
+            const notasMap = data.notasByItemId && typeof data.notasByItemId === 'object' ? data.notasByItemId : {}
+            Object.entries(notasMap).forEach(([itemId, entry]) => {
+              const value = Number(entry?.promedio)
+              if (Number.isNaN(value)) return
+              sums[itemId] = (sums[itemId] || 0) + value
+              counts[itemId] = (counts[itemId] || 0) + 1
+            })
+          })
+
+          Object.keys(sums).forEach((itemId) => {
+            const avg = sums[itemId] / Math.max(1, counts[itemId] || 1)
+            resolvedNotas[itemId] = {
+              promedio: Math.round(avg * 10) / 10,
+              desempeno: computeBoletinDesempeno(avg),
+            }
+          })
+        } else {
+          const docId = `${String(userNitRut).trim()}__${student.id}__${year}__p${String(boletinesPeriodFilter).trim()}`
+          const data = notasByDocId[docId] || {}
+          resolvedNotas = data.notasByItemId && typeof data.notasByItemId === 'object' ? data.notasByItemId : {}
+          observacion = String(data.observacion || '').trim()
+        }
+
+        const ready = isBoletinReady({
+          flatRows,
+          resolvedNotas,
+          estructura,
+          selectedStudentId: student.id,
+        })
+
+        const promedioGeneral = (() => {
+          const values = flatRows
+            .filter((row) => row.type === 'item')
+            .map((row) => Number(resolvedNotas[row.id]?.promedio))
+            .filter((value) => !Number.isNaN(value))
+          if (values.length === 0) return ''
+          return toBoletinFixed1(values.reduce((sum, value) => sum + value, 0) / values.length)
+        })()
+
+        return {
+          id: `${student.id}_${boletinesTypeFilter}_${boletinesTypeFilter === 'final' ? 'final' : boletinesPeriodFilter}`,
+          studentId: student.id,
+          numeroDocumento: student.numeroDocumento || '-',
+          estudianteNombre: student.nombreCompleto || '-',
+          grado: grade || '-',
+          grupo: group || '-',
+          anio: year,
+          tipo: boletinesTypeFilter,
+          periodo: boletinesTypeFilter === 'final' ? '-' : String(boletinesPeriodFilter),
+          estadoCalificacion: ready ? 'calificado' : 'no_calificado',
+          promedioGeneral: promedioGeneral || '-',
+          email: student.email || '',
+          autorizaEnvioCorreos: student.autorizaEnvioCorreos !== false,
+          plantelData: plantel,
+          structureDocId,
+          estructura,
+          flatRows,
+          resolvedNotas,
+          observacion,
+          selectedStudent: student,
+          students: mappedStudents,
+          resolvedGrade: grade,
+          resolvedGroup: group,
+          resolveItemName,
+        }
+      })
+
+      setBoletinesReport(rows)
+    } catch (err) {
+      console.error('Error loading boletines:', err)
+      setBoletinesReport([])
+      setBoletinesFeedback('No fue posible cargar el reporte de boletines.')
+    } finally {
+      setLoadingBoletines(false)
+    }
+  }, [boletinesPeriodFilter, boletinesTypeFilter, boletinesYearFilter, userNitRut])
+
+  useEffect(() => {
+    if (reportKind === 'boletines') {
+      loadBoletines()
+    } else {
+      setBoletinesReport([])
+    }
+  }, [loadBoletines, reportKind])
+
   const handleReportTypeChange = (e) => {
     const val = e.target.value
     setCurrentPage(1)
     setSelectedTipo(tipoReportesOptions.find((t) => t.id === val) || null)
   }
 
-  // ── Unique collection names for filter dropdown ────────────────────────────
+  const buildPdfForBoletinRow = useCallback(async (row) => {
+    let finalObservation = row.observacion || ''
+    if (row.tipo === 'final') {
+      try {
+        const observationDocId = `${String(userNitRut).trim()}__${row.studentId}__${row.anio}__final`
+        const observationSnap = await getDoc(doc(db, 'boletin_observaciones', observationDocId))
+        finalObservation = observationSnap.exists() ? String(observationSnap.data()?.observacion || '').trim() : ''
+      } catch {
+        finalObservation = ''
+      }
+    }
+
+    return buildBoletinPdfDocument({
+      db,
+      storage,
+      nitRut: userNitRut,
+      students: row.students,
+      selectedStudent: row.selectedStudent,
+      resolvedGrade: row.resolvedGrade,
+      resolvedGroup: row.resolvedGroup,
+      estructura: row.estructura,
+      flatRows: row.flatRows,
+      resolvedNotas: row.resolvedNotas,
+      observacion: finalObservation,
+      tipo: row.tipo,
+      periodo: row.periodo === '-' ? '' : row.periodo,
+      effectiveYear: row.anio,
+      plantelData: row.plantelData,
+      todayIso,
+      resolveItemName: row.resolveItemName,
+    })
+  }, [todayIso, userNitRut])
+
+  // â”€â”€ Unique collection names for filter dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const collectionOptions = useMemo(() => {
     const unique = [...new Set(records.map((r) => r.coleccion).filter(Boolean))]
     return unique.sort()
   }, [records])
 
-  // ── Unique campo (leaf field) names across all records' diffs ──────────────
+  // â”€â”€ Unique campo (leaf field) names across all records' diffs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const campoOptions = useMemo(() => {
     const all = new Set()
     records.forEach((r) => {
@@ -1140,22 +1391,108 @@ function ReportesPage() {
     [filteredRecords]
   )
 
+  const filteredBoletines = useMemo(() => {
+    return boletinesReport.filter((row) => {
+      if (boletinesGradeFilter && String(row.grado || '').trim() !== boletinesGradeFilter) return false
+      if (boletinesGroupFilter && String(row.grupo || '').trim() !== boletinesGroupFilter) return false
+      if (boletinesStatusFilter && String(row.estadoCalificacion || '').trim() !== boletinesStatusFilter) return false
+      return true
+    })
+  }, [boletinesGradeFilter, boletinesGroupFilter, boletinesReport, boletinesStatusFilter])
+
+  const displayedBoletines = useMemo(() => {
+    if (exportingAll) return filteredBoletines
+    return filteredBoletines.slice((currentPage - 1) * 10, currentPage * 10)
+  }, [currentPage, exportingAll, filteredBoletines])
+
+  const boletinesExportRows = useMemo(() => (
+    filteredBoletines.map((row) => ({
+      Documento: row.numeroDocumento || '-',
+      Estudiante: row.estudianteNombre || '-',
+      Grado: row.grado || '-',
+      Grupo: row.grupo || '-',
+      'Año lectivo': row.anio || '-',
+      Tipo: row.tipo === 'final' ? 'Final' : 'Parcial',
+      Periodo: row.periodo || '-',
+      Estado: row.estadoCalificacion === 'calificado' ? 'Calificado' : 'No calificado',
+      'Promedio general': row.promedioGeneral || '-',
+      Email: row.email || '-',
+    }))
+  ), [filteredBoletines])
+
+  const boletinesReadyRows = useMemo(
+    () => filteredBoletines.filter((row) => row.estadoCalificacion === 'calificado'),
+    [filteredBoletines],
+  )
+
+  const handleBulkBoletinesDownload = useCallback(async () => {
+    if (boletinesReadyRows.length === 0) {
+      openStatusModal('error', 'No hay boletines calificados para descargar.')
+      return
+    }
+
+    try {
+      setBoletinesBulkLoading(true)
+      for (const row of boletinesReadyRows) {
+        const { pdf, fileName } = await buildPdfForBoletinRow(row)
+        pdf.save(fileName)
+      }
+      openStatusModal('success', `Se generaron ${boletinesReadyRows.length} boletines calificados para descarga.`)
+    } catch (error) {
+      openStatusModal('error', error?.message || 'No fue posible descargar los boletines.')
+    } finally {
+      setBoletinesBulkLoading(false)
+    }
+  }, [boletinesReadyRows, buildPdfForBoletinRow, openStatusModal])
+
+  const handleBulkBoletinesEmail = useCallback(async () => {
+    if (boletinesReadyRows.length === 0) {
+      openStatusModal('error', 'No hay boletines calificados para enviar.')
+      return
+    }
+
+    const sendableRows = boletinesReadyRows.filter((row) => row.email && row.autorizaEnvioCorreos !== false)
+    if (sendableRows.length === 0) {
+      openStatusModal('error', 'No hay correos autorizados dentro de los boletines calificados.')
+      return
+    }
+
+    try {
+      setBoletinesBulkLoading(true)
+      for (const row of sendableRows) {
+        const { pdf, fileName } = await buildPdfForBoletinRow(row)
+        await sendPdfByEmail(pdf, fileName, {
+          to: row.email,
+          subject: `Boletin ${row.tipo === 'final' ? 'final' : `periodo ${row.periodo}`} - ${row.estudianteNombre || 'Estudiante'}`,
+          body: `Adjunto encontraras el boletin ${row.tipo === 'final' ? 'final' : `del periodo ${row.periodo}`} generado para ${row.estudianteNombre || 'el estudiante'}.`,
+        })
+      }
+      openStatusModal('success', `Se enviaron ${sendableRows.length} boletines calificados al correo registrado.`)
+    } catch (error) {
+      openStatusModal('error', error?.message || 'No fue posible enviar los boletines por email.')
+    } finally {
+      setBoletinesBulkLoading(false)
+      setBoletinesEmailConfirmOpen(false)
+    }
+  }, [boletinesReadyRows, buildPdfForBoletinRow, openStatusModal])
+
   const isHistorial = reportKind === 'historial_modificaciones'
+  const isBoletines = reportKind === 'boletines'
   const isAsistencias = reportKind === 'asistencias'
   const isInasistencias = reportKind === 'inasistencias'
   const isPermisos = reportKind === 'permisos'
   const isEvaluaciones = reportKind === 'evaluaciones'
   const isTareas = reportKind === 'tareas'
-  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isAsistencias && !isInasistencias && !isPermisos && !isEvaluaciones && !isTareas
+  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isBoletines && !isAsistencias && !isInasistencias && !isPermisos && !isEvaluaciones && !isTareas
 
   return (
-    <section>
+    <section className="reports-page">
       <div className="students-header">
         <h2>Reportes</h2>
       </div>
       <p>Genera y revisa reportes del sistema.</p>
 
-      {/* ── Report type selector ── */}
+      {/* â”€â”€ Report type selector â”€â”€ */}
       <div className="students-toolbar" style={{ marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <label htmlFor="report-type-select" style={{ display: 'block', marginBottom: '4px', fontWeight: 600, fontSize: '0.9em' }}>
@@ -1187,14 +1524,141 @@ function ReportesPage() {
         </div>
       </div>
 
-      {/* ── Historial de modificaciones ── */}
+      {/* â”€â”€ Historial de modificaciones â”€â”€ */}
+      {isBoletines && (
+        <>
+          <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <select className="role-select-box" value={boletinesGradeFilter} onChange={(e) => { setBoletinesGradeFilter(e.target.value); setCurrentPage(1) }}>
+              <option value="">Todos los grados</option>
+              {boletinesGradeOptions.map((grade) => (
+                <option key={grade} value={grade}>{grade}</option>
+              ))}
+            </select>
+            <select className="role-select-box" value={boletinesGroupFilter} onChange={(e) => { setBoletinesGroupFilter(e.target.value); setCurrentPage(1) }}>
+              <option value="">Todos los grupos</option>
+              {boletinesGroupOptions.map((group) => (
+                <option key={group} value={group}>{group}</option>
+              ))}
+            </select>
+            <label style={{ fontSize: '0.88em' }}>
+              Año lectivo
+              <input
+                type="text"
+                value={boletinesYearFilter}
+                onChange={(e) => { setBoletinesYearFilter(String(e.target.value || '').replace(/[^\d]/g, '').slice(0, 4)); setCurrentPage(1) }}
+                style={{ marginLeft: '6px', width: '110px' }}
+              />
+            </label>
+            <select className="role-select-box" value={boletinesTypeFilter} onChange={(e) => { setBoletinesTypeFilter(e.target.value); setCurrentPage(1) }}>
+              <option value="parcial">Parcial</option>
+              <option value="final">Final</option>
+            </select>
+            {boletinesTypeFilter === 'parcial' && (
+              <select className="role-select-box" value={boletinesPeriodFilter} onChange={(e) => { setBoletinesPeriodFilter(e.target.value); setCurrentPage(1) }}>
+                {BOLETIN_PERIODS.map((period) => (
+                  <option key={period.key} value={period.key}>{period.label}</option>
+                ))}
+              </select>
+            )}
+            <select className="role-select-box" value={boletinesStatusFilter} onChange={(e) => { setBoletinesStatusFilter(e.target.value); setCurrentPage(1) }}>
+              <option value="">Todos</option>
+              <option value="calificado">Calificados</option>
+              <option value="no_calificado">No calificados</option>
+            </select>
+            <button type="button" className="button secondary small" onClick={loadBoletines} disabled={loadingBoletines || boletinesBulkLoading}>
+              Refrescar
+            </button>
+          </div>
+
+          {boletinesFeedback && <p className="feedback error">{boletinesFeedback}</p>}
+
+          {!loadingBoletines && (
+            <div className="students-toolbar" style={{ gap: '12px', marginBottom: '16px', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                Calificados: <strong>{boletinesReadyRows.length}</strong> de <strong>{filteredBoletines.length}</strong>
+              </p>
+              <div className="certificados-actions">
+                <button type="button" className="button" onClick={handleBulkBoletinesDownload} disabled={boletinesBulkLoading || boletinesReadyRows.length === 0}>
+                  {boletinesBulkLoading ? 'Procesando...' : 'Descargar PDFs masivos'}
+                </button>
+                <button type="button" className="button secondary" onClick={() => setBoletinesEmailConfirmOpen(true)} disabled={boletinesBulkLoading || boletinesReadyRows.length === 0}>
+                  {boletinesBulkLoading ? 'Procesando...' : 'Enviar emails masivos'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {loadingBoletines ? (
+            <p>Cargando boletines...</p>
+          ) : (
+            <>
+              <div className="students-table-wrap">
+                <table className="students-table">
+                  <thead>
+                    <tr>
+                      <th>Documento</th>
+                      <th>Estudiante</th>
+                      <th>Grado</th>
+                      <th>Grupo</th>
+                      <th>Año lectivo</th>
+                      <th>Tipo</th>
+                      <th>Periodo</th>
+                      <th>Estado</th>
+                      <th>Promedio</th>
+                      <th>Email</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredBoletines.length === 0 && (
+                      <tr>
+                        <td colSpan="10">No hay boletines para los filtros seleccionados.</td>
+                      </tr>
+                    )}
+                    {displayedBoletines.map((row) => (
+                      <tr key={row.id}>
+                        <td data-label="Documento">{row.numeroDocumento || '-'}</td>
+                        <td data-label="Estudiante">{row.estudianteNombre || '-'}</td>
+                        <td data-label="Grado">{row.grado || '-'}</td>
+                        <td data-label="Grupo">{row.grupo || '-'}</td>
+                        <td data-label="Año lectivo">{row.anio || '-'}</td>
+                        <td data-label="Tipo">{row.tipo === 'final' ? 'Final' : 'Parcial'}</td>
+                        <td data-label="Periodo">{row.periodo || '-'}</td>
+                        <td data-label="Estado">{row.estadoCalificacion === 'calificado' ? 'Calificado' : 'No calificado'}</td>
+                        <td data-label="Promedio">{row.promedioGeneral || '-'}</td>
+                        <td data-label="Email">{row.email || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <PaginationControls
+                currentPage={currentPage}
+                totalItems={filteredBoletines.length}
+                itemsPerPage={10}
+                onPageChange={setCurrentPage}
+              />
+              {canExportExcel && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                  <ExportExcelButton
+                    data={boletinesExportRows}
+                    filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'Boletines'}
+                    onExportStart={() => setExportingAll(true)}
+                    onExportEnd={() => setExportingAll(false)}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
       {isHistorial && (
         <>
           {/* Filters */}
           <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
             <input
               type="text"
-              placeholder="Buscar por módulo, documento, operación o usuario..."
+              placeholder="Buscar por mÃ³dulo, documento, operaciÃ³n o usuario..."
               value={searchText}
               onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1) }}
               style={{ flex: '1 1 240px' }}
@@ -1204,7 +1668,7 @@ function ReportesPage() {
               value={filterColeccion}
               onChange={(e) => { setFilterColeccion(e.target.value); setCurrentPage(1) }}
             >
-              <option value="">Todos los módulos</option>
+              <option value="">Todos los mÃ³dulos</option>
               {collectionOptions.map((c) => (<option key={c} value={c}>{c}</option>))}
             </select>
             <select
@@ -1243,7 +1707,7 @@ function ReportesPage() {
                   <thead>
                     <tr>
                       <th>Fecha</th>
-                      <th>Operación</th>
+                      <th>OperaciÃ³n</th>
                       <th>Campo</th>
                       <th style={{ minWidth: '180px' }}>Dato anterior</th>
                       <th style={{ minWidth: '180px' }}>Dato nuevo</th>
@@ -1260,7 +1724,7 @@ function ReportesPage() {
                     {displayedRecords.map((r) => (
                       <tr key={r.id} style={{ verticalAlign: 'top' }}>
                         <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{formatTimestamp(r.fechaModificacion)}</td>
-                        <td data-label="Operación">
+                        <td data-label="OperaciÃ³n">
                           <span style={{
                             padding: '2px 8px',
                             borderRadius: '12px',
@@ -1330,7 +1794,7 @@ function ReportesPage() {
         </>
       )}
 
-      {/* ── Custom report type — placeholder ── */}
+      {/* â”€â”€ Custom report type â€” placeholder â”€â”€ */}
       {/* Asistencias */}
       {isAsistencias && (
         <>
@@ -2091,10 +2555,29 @@ function ReportesPage() {
         </p>
       )}
 
-      {/* ── Detail modal ── */}
+      {/* â”€â”€ Detail modal â”€â”€ */}
+      <OperationStatusModal
+        isOpen={statusModalOpen}
+        onClose={() => setStatusModalOpen(false)}
+        type={statusModalType}
+        message={statusModalMessage}
+      />
+      <EmailDeliveryConfirmModal
+        open={boletinesEmailConfirmOpen}
+        recipient={`${boletinesReadyRows.filter((row) => row.email && row.autorizaEnvioCorreos !== false).length} correos válidos`}
+        documentLabel="boletines calificados"
+        loading={boletinesBulkLoading}
+        onCancel={() => setBoletinesEmailConfirmOpen(false)}
+        onConfirm={() => {
+          void handleBulkBoletinesEmail()
+        }}
+      />
       <DetailModal record={viewRecord} onClose={() => setViewRecord(null)} />
     </section>
   )
 }
 
 export default ReportesPage
+
+
+

@@ -357,10 +357,20 @@ function EventsPage() {
   }
 
   return (
-    <section className="events-page">
-      <h2>Eventos</h2>
-      <p>Crea y consulta eventos del calendario institucional.</p>
-      {!canManageEvents && <p className="feedback">Vista solo lectura para este modulo.</p>}
+    <section className="events-page dashboard-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Agenda institucional</span>
+          <h2>Eventos</h2>
+          <p>Crea y consulta eventos del calendario institucional.</p>
+          {!canManageEvents && <p className="feedback">Vista solo lectura para este modulo.</p>}
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{events.length}</strong>
+          <span>Eventos cargados</span>
+          <small>{monthTitle(anchorDate)}</small>
+        </div>
+      </div>
 
       <div className="events-layout">
         <form className="form events-form" onSubmit={handleCreateEvent}>

@@ -240,6 +240,14 @@ function TipoReportesPage() {
           type="button"
           className="button secondary small"
           disabled={saving}
+          onClick={() => createSuggestedType({ nombre: 'Boletines', clave: 'boletines' })}
+        >
+          Crear tipo Boletines
+        </button>
+        <button
+          type="button"
+          className="button secondary small"
+          disabled={saving}
           onClick={() => createSuggestedType({ nombre: 'Asistencias', clave: 'asistencias' })}
         >
           Crear tipo Asistencias

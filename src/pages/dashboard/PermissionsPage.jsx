@@ -215,11 +215,23 @@ function PermissionsPage() {
   }
 
   return (
-    <section>
-      <div className="students-header">
-        <div>
+    <section className="dashboard-module-shell settings-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Configuracion</span>
           <h2>Permisos</h2>
           <p>Configura los permisos por rol para controlar accesos y acciones dentro del sistema.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{orderedRoles.length}</strong>
+          <span>Roles configurables</span>
+          <small>{Object.keys(filteredGroupedPermissions).length} grupos de permisos visibles</small>
+        </div>
+      </div>
+      <div className="students-header member-module-header">
+        <div className="member-module-header-copy">
+          <h3>Matriz de accesos</h3>
+          <p>Activa o desactiva capacidades por rol y guarda los cambios cuando termines.</p>
         </div>
         <button type="button" className="button" disabled={!canManagePermissions || saving || loading} onClick={handleSave}>
           {saving ? 'Guardando...' : 'Guardar permisos'}

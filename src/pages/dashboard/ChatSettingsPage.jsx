@@ -5,8 +5,22 @@ import { useAuth } from '../../hooks/useAuth'
 import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 import { setDocTracked } from '../../services/firestoreProxy'
 
+const CHAT_LAUNCHER_POSITIONS = [
+  { value: 'bottom-right', label: 'Inferior derecha' },
+  { value: 'bottom-center', label: 'Inferior centro' },
+  { value: 'bottom-left', label: 'Inferior izquierda' },
+  { value: 'top-right', label: 'Superior derecha' },
+  { value: 'top-center', label: 'Superior centro' },
+  { value: 'top-left', label: 'Superior izquierda' },
+]
+
 function normalizeRole(roleValue) {
   return String(roleValue || '').trim().toLowerCase()
+}
+
+function normalizeChatLauncherPosition(value) {
+  const normalized = String(value || '').trim()
+  return CHAT_LAUNCHER_POSITIONS.some((item) => item.value === normalized) ? normalized : 'bottom-right'
 }
 
 function ChatSettingsPage() {
@@ -17,6 +31,8 @@ function ChatSettingsPage() {
   const [roleMatrix, setRoleMatrix] = useState({})
   const [studentGroups, setStudentGroups] = useState([])
   const [studentGroupMatrix, setStudentGroupMatrix] = useState({})
+  const [showChatLauncher, setShowChatLauncher] = useState(true)
+  const [chatLauncherPosition, setChatLauncherPosition] = useState('bottom-right')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -37,6 +53,8 @@ function ChatSettingsPage() {
 
         const savedMatrix = settingsSnapshot?.data()?.roleMatrix || {}
         const savedStudentGroupMatrix = settingsSnapshot?.data()?.studentGroupMatrix || {}
+        const savedShowChatLauncher = settingsSnapshot?.data()?.showChatLauncher
+        const savedChatLauncherPosition = settingsSnapshot?.data()?.chatLauncherPosition
         const allRoleValues = buildAllRoleOptions(loadedRoles).map((role) => normalizeRole(role.value))
         const nextMatrix = {}
 
@@ -47,6 +65,8 @@ function ChatSettingsPage() {
 
         setRoleMatrix(nextMatrix)
         setStudentGroupMatrix(savedStudentGroupMatrix)
+        setShowChatLauncher(savedShowChatLauncher !== false)
+        setChatLauncherPosition(normalizeChatLauncherPosition(savedChatLauncherPosition))
 
         if (userNitRut) {
           const studentsSnap = await getDocs(
@@ -117,6 +137,8 @@ function ChatSettingsPage() {
         {
           roleMatrix,
           studentGroupMatrix,
+          showChatLauncher,
+          chatLauncherPosition: normalizeChatLauncherPosition(chatLauncherPosition),
           updatedAt: new Date().toISOString(),
         },
         { merge: true },
@@ -130,11 +152,23 @@ function ChatSettingsPage() {
   }
 
   return (
-    <section>
-      <div className="students-header">
-        <div>
+    <section className="dashboard-module-shell settings-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Configuracion</span>
           <h2>Configuracion de chat</h2>
           <p>Define que roles pueden conversar entre si en el chat en linea.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{roleOptions.length}</strong>
+          <span>Roles involucrados</span>
+          <small>{showChatLauncher ? 'Boton de chat visible' : 'Boton de chat oculto'}</small>
+        </div>
+      </div>
+      <div className="students-header member-module-header">
+        <div className="member-module-header-copy">
+          <h3>Reglas de conversacion</h3>
+          <p>Configura visibilidad del launcher y relaciones permitidas entre roles.</p>
         </div>
         <button type="button" className="button" onClick={saveSettings} disabled={!canManage || saving || loading}>
           {saving ? 'Guardando...' : 'Guardar configuracion'}
@@ -145,7 +179,34 @@ function ChatSettingsPage() {
       {loading && <p>Cargando configuracion...</p>}
 
       {!loading && canManage && (
-        <div className="chat-settings-grid">
+        <>
+          <div className="home-left-card evaluations-card settings-module-card" style={{ marginBottom: '16px' }}>
+            <h3>Visibilidad del boton</h3>
+            <label className="chat-settings-checkbox-item">
+              <input
+                type="checkbox"
+                checked={showChatLauncher}
+                onChange={(event) => setShowChatLauncher(event.target.checked)}
+              />
+              <span>Mostrar boton "Chat en linea"</span>
+            </label>
+            <label className="chat-launcher-position-field">
+              <span>Posicion del boton</span>
+              <select
+                className="chat-launcher-position-select"
+                value={chatLauncherPosition}
+                onChange={(event) => setChatLauncherPosition(normalizeChatLauncherPosition(event.target.value))}
+              >
+                {CHAT_LAUNCHER_POSITIONS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="chat-settings-grid">
           {roleOptions.map((sourceRole) => (
             <article key={sourceRole.value} className="chat-settings-card">
               <h3>{sourceRole.label}</h3>
@@ -195,7 +256,8 @@ function ChatSettingsPage() {
               </div>
             </article>
           ))}
-        </div>
+          </div>
+        </>
       )}
 
       {feedback && (

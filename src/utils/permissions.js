@@ -46,11 +46,13 @@ const PERMISSION_KEYS = {
   PAYMENTS_SERVICIOS_COMPLEMENTARIOS_MANAGE: 'payments_servicios_complementarios_manage',
   CERTIFICADOS_VIEW: 'certificados_view',
   CERTIFICADOS_GENERATE: 'certificados_generate',
+  CERTIFICADOS_ACADEMIC_YEAR_EDIT: 'certificados_academic_year_edit',
   BOLETINES_VIEW: 'boletines_view',
   BOLETINES_EDIT: 'boletines_edit',
   BOLETINES_GENERATE: 'boletines_generate',
   SCHEDULE_VIEW: 'schedule_view',
   CONFIG_CHAT_MANAGE: 'config_chat_manage',
+  CONFIG_MAIL_SERVER_MANAGE: 'config_mail_server_manage',
   CONFIG_MESSAGES_MANAGE: 'config_messages_manage',
   CONFIG_NOTIFICATIONS_MANAGE: 'config_notifications_manage',
   CONFIG_REPORT_TYPES_MANAGE: 'config_report_types_manage',
@@ -60,6 +62,8 @@ const PERMISSION_KEYS = {
   CONFIG_TIPO_INASISTENCIAS_MANAGE: 'config_tipo_inasistencias_manage',
   CONFIG_TIPO_CERTIFICADO_MANAGE: 'config_tipo_certificado_manage',
   CONFIG_TIPO_EMPLEADO_MANAGE: 'config_tipo_empleado_manage',
+  CONFIG_LINKED_DEVICES_VIEW: 'config_linked_devices_view',
+  ANNOUNCEMENTS_MANAGE: 'announcements_manage',
   NOTIFICATIONS_CREATE: 'notifications_create',
   MESSAGES_DELETE: 'messages_delete',
   MESSAGES_SEND: 'messages_send',
@@ -110,8 +114,24 @@ const ROLE_OPTIONS = [
 function buildAllRoleOptions(customRoles = []) {
   const custom = customRoles
     .filter((r) => r.status !== 'inactivo')
-    .map((r) => ({ value: r.name.toLowerCase().trim(), label: r.name }))
-  return [...ROLE_OPTIONS, ...custom]
+    .map((r) => {
+      const label = String(r.name || '').trim()
+      return {
+        value: label.toLowerCase(),
+        label,
+      }
+    })
+    .filter((role) => role.value && role.label)
+
+  const seen = new Set()
+  return [...ROLE_OPTIONS, ...custom].filter((role) => {
+    const normalizedValue = String(role.value || '').trim().toLowerCase()
+    if (!normalizedValue || seen.has(normalizedValue)) {
+      return false
+    }
+    seen.add(normalizedValue)
+    return true
+  })
 }
 
 const PERMISSIONS_CATALOG = [
@@ -362,6 +382,12 @@ const PERMISSIONS_CATALOG = [
     description: 'Permite generar y descargar diplomas/certificados en PDF.',
   },
   {
+    group: 'Certificados',
+    key: PERMISSION_KEYS.CERTIFICADOS_ACADEMIC_YEAR_EDIT,
+    label: 'Modificar año lectivo',
+    description: 'Permite cambiar manualmente el año lectivo al generar diplomas y certificados.',
+  },
+  {
     group: 'Boletines',
     key: PERMISSION_KEYS.BOLETINES_VIEW,
     label: 'Ver boletines',
@@ -507,6 +533,12 @@ const PERMISSIONS_CATALOG = [
   },
   {
     group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_MAIL_SERVER_MANAGE,
+    label: 'Datos del servidor de correo',
+    description: 'Permite configurar los datos del servidor SMTP para el envio interno de correos.',
+  },
+  {
+    group: 'Configuración',
     key: PERMISSION_KEYS.CONFIG_MESSAGES_MANAGE,
     label: 'Configuracion de mensajes',
     description: 'Permite configurar reglas de mensajeria por rol/grupo.',
@@ -546,6 +578,18 @@ const PERMISSIONS_CATALOG = [
     key: PERMISSION_KEYS.CONFIG_TIPO_EMPLEADO_MANAGE,
     label: 'Tipo empleado',
     description: 'Permite crear y administrar tipos de empleado.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_LINKED_DEVICES_VIEW,
+    label: 'Dispositivos vinculados',
+    description: 'Permite ver y administrar las sesiones y dispositivos vinculados de la cuenta.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.ANNOUNCEMENTS_MANAGE,
+    label: 'Gestionar anuncios',
+    description: 'Permite crear, editar y eliminar anuncios para mostrarlos en el inicio.',
   },
   {
     group: 'Configuración',

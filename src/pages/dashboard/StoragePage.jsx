@@ -193,29 +193,28 @@ function StoragePage() {
   }
 
   return (
-    <section>
-      <div className="students-header">
-        <h2>Gestor de Almacenamiento</h2>
+    <section className="storage-page-shell">
+      <div className="storage-page-hero">
+        <div className="storage-page-hero-copy">
+          <span className="storage-page-eyebrow">Archivos del plantel</span>
+          <h2>Gestor de Almacenamiento</h2>
+          <p>Administra los archivos subidos al sistema y controla el uso de espacio asociado al plantel.</p>
+        </div>
+        <div className="storage-page-hero-status">
+          <strong>{quotaGB} GB disponibles</strong>
+          <span>{formatBytes(totalUsedBytes)} usados</span>
+          <small>NIT: {plantelNit}</small>
+        </div>
       </div>
-      <p>Administra los archivos subidos al sistema correspondientes al NIT: <strong>{plantelNit}</strong></p>
 
-      <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+      <div className="storage-summary-card">
+        <div className="storage-summary-head">
           <h3>Capacidad de almacenamiento ({quotaGB} GB)</h3>
           <span>
             {formatBytes(totalUsedBytes)} usados ({usagePercentage.toFixed(1)}%)
           </span>
         </div>
-        <div 
-          style={{ 
-            height: '24px', 
-            width: '100%', 
-            backgroundColor: 'rgba(128, 128, 128, 0.2)', 
-            borderRadius: '12px', 
-            overflow: 'hidden',
-            border: '1px solid var(--border-color)' 
-          }}
-        >
+        <div className="storage-progress-track">
           <div 
             style={{ 
               height: '100%', 
@@ -228,16 +227,21 @@ function StoragePage() {
         </div>
       </div>
 
-      <h3>Archivos subidos ({files.length})</h3>
-      <div className="students-toolbar" style={{ marginBottom: '16px' }}>
-
-        <input
-          type="text"
-          placeholder="Buscar por nombre o tipo..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
+      <section className="storage-files-card">
+        <div className="storage-files-header">
+          <div>
+            <h3>Archivos subidos ({files.length})</h3>
+            <p>Busca, revisa y elimina archivos para liberar espacio cuando sea necesario.</p>
+          </div>
+        </div>
+        <div className="students-toolbar storage-toolbar" style={{ marginBottom: '16px' }}>
+          <input
+            type="text"
+            placeholder="Buscar por nombre o tipo..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
 
       <div className="students-table-wrap">
         <table className="students-table">
@@ -259,7 +263,7 @@ function StoragePage() {
                 (exportingAll ? filteredFiles : filteredFiles.slice((currentPage - 1) * 10, currentPage * 10)).map((f) => (
                   <tr key={f.id}>
                     <td data-label="Nombre del archivo" style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-color)', textDecoration: 'underline' }}>
+                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="storage-file-link">
                         {f.name || 'Archivo'}
                       </a>
                     </td>
@@ -299,6 +303,7 @@ function StoragePage() {
         </div>
       )}
         </div>
+      </section>
 
       <OperationStatusModal
         open={modalOpen}

@@ -8,14 +8,16 @@ import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   signOut,
   updateProfile,
   sendPasswordResetEmail,
 } from 'firebase/auth'
-import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { deleteApp, initializeApp } from 'firebase/app'
 import { auth, db, firebaseConfig } from '../firebase'
 import { AuthContext } from './auth-context'
+import { isNativeApp } from '../utils/nativeLinks'
 import {
   DEFAULT_ROLE_PERMISSIONS,
   hasRolePermission,
@@ -26,6 +28,151 @@ import {
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000
 const WARNING_BEFORE_LOGOUT_MS = 30 * 1000
 const PLAN_ACTIVE_STATUS = 'activo'
+const LINKED_DEVICE_SESSION_KEY = 'linked_device_session_id'
+const GEOLOCATION_TIMEOUT_MS = 8000
+const REVERSE_GEOCODE_TIMEOUT_MS = 6000
+
+function getLocalSessionId() {
+  if (typeof window === 'undefined') return ''
+
+  const storedId = String(localStorage.getItem(LINKED_DEVICE_SESSION_KEY) || '').trim()
+  if (storedId) return storedId
+
+  const generatedId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+  localStorage.setItem(LINKED_DEVICE_SESSION_KEY, generatedId)
+  return generatedId
+}
+
+function getPlatformType() {
+  return isNativeApp() ? 'mobile' : 'web'
+}
+
+function buildDeviceLabel() {
+  if (typeof navigator === 'undefined') {
+    return getPlatformType() === 'mobile' ? 'Aplicacion movil' : 'Navegador web'
+  }
+
+  const platform = String(navigator.platform || '').trim()
+  if (getPlatformType() === 'mobile') {
+    return platform ? `Movil (${platform})` : 'Aplicacion movil'
+  }
+
+  return platform ? `Web (${platform})` : 'Navegador web'
+}
+
+function formatCoordinate(value) {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return ''
+  return numericValue.toFixed(5)
+}
+
+async function resolveNearestCityFromCoordinates(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+  const timeoutId = controller
+    ? window.setTimeout(() => controller.abort(), REVERSE_GEOCODE_TIMEOUT_MS)
+    : null
+
+  try {
+    const response = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=es`,
+      {
+        method: 'GET',
+        signal: controller?.signal,
+      },
+    )
+
+    if (!response.ok) return null
+
+    const data = await response.json()
+    const city =
+      String(
+        data?.city ||
+        data?.locality ||
+        data?.principalSubdivisionCity ||
+        data?.localityInfo?.administrative?.[2]?.name ||
+        '',
+      ).trim()
+    const region = String(data?.principalSubdivision || '').trim()
+    const country = String(data?.countryName || '').trim()
+    const parts = [city, region, country].filter(Boolean)
+
+    if (parts.length === 0) return null
+
+    return {
+      locationCity: city,
+      locationRegion: region,
+      locationCountry: country,
+      locationResolvedLabel: parts.join(', '),
+    }
+  } catch {
+    return null
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId)
+  }
+}
+
+async function resolveSessionLocationData() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return { locationPermission: 'unavailable', locationLabel: 'Ubicacion no disponible' }
+  }
+
+  if (!navigator.geolocation || !window.isSecureContext) {
+    return { locationPermission: 'unavailable', locationLabel: 'Ubicacion no disponible' }
+  }
+
+  let permissionState = 'prompt'
+  if (navigator.permissions?.query) {
+    try {
+      const permissionStatus = await navigator.permissions.query({ name: 'geolocation' })
+      permissionState = String(permissionStatus?.state || 'prompt')
+    } catch {
+      permissionState = 'prompt'
+    }
+  }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = Number(position?.coords?.latitude)
+        const longitude = Number(position?.coords?.longitude)
+        const accuracyMeters = Number(position?.coords?.accuracy)
+
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          resolve({
+            locationPermission: 'unavailable',
+            locationLabel: 'Ubicacion no disponible',
+          })
+          return
+        }
+
+        resolve({
+          locationPermission: 'granted',
+          locationLatitude: Number(latitude.toFixed(6)),
+          locationLongitude: Number(longitude.toFixed(6)),
+          locationAccuracyMeters: Number.isFinite(accuracyMeters) ? Math.round(accuracyMeters) : null,
+          locationLabel: `${formatCoordinate(latitude)}, ${formatCoordinate(longitude)}`,
+        })
+      },
+      (error) => {
+        const denied = error?.code === 1 || permissionState === 'denied'
+        resolve({
+          locationPermission: denied ? 'denied' : permissionState || 'unavailable',
+          locationLabel: denied ? 'Permiso de ubicacion denegado' : 'Ubicacion no disponible',
+        })
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 5 * 60 * 1000,
+        timeout: GEOLOCATION_TIMEOUT_MS,
+      },
+    )
+  })
+}
 
 function resolveCurrentUserName(userData, firebaseUser) {
   const profile = userData?.profile || {}
@@ -71,22 +218,109 @@ function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [userRole, setUserRole] = useState('')
   const [userNitRut, setUserNitRut] = useState('')
+  const [userProfile, setUserProfile] = useState({})
   const [rolePermissions, setRolePermissions] = useState(DEFAULT_ROLE_PERMISSIONS)
   const [loading, setLoading] = useState(true)
   const [showInactivityWarning, setShowInactivityWarning] = useState(false)
   const [inactivityCountdownSeconds, setInactivityCountdownSeconds] = useState(30)
+  const [currentSessionId, setCurrentSessionId] = useState(() => getLocalSessionId())
   const warningTimerRef = useRef(null)
   const logoutTimerRef = useRef(null)
   const countdownIntervalRef = useRef(null)
+  const sessionWatcherRef = useRef(null)
+
+  const clearSessionWatcher = () => {
+    if (typeof sessionWatcherRef.current === 'function') {
+      sessionWatcherRef.current()
+    }
+    sessionWatcherRef.current = null
+  }
+
+  const getLinkedSessionRef = (uid, sessionId = currentSessionId) => {
+    return doc(db, 'users', uid, 'linkedDevices', sessionId)
+  }
+
+  const ensureLinkedDeviceSession = async (firebaseUser, userData = {}) => {
+    const sessionId = getLocalSessionId()
+    setCurrentSessionId(sessionId)
+    const sessionRef = getLinkedSessionRef(firebaseUser.uid, sessionId)
+
+    await setDoc(
+      sessionRef,
+      {
+        sessionId,
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        displayName: resolveCurrentUserName(userData, firebaseUser),
+        platformType: getPlatformType(),
+        deviceLabel: buildDeviceLabel(),
+        userAgent: typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '',
+        status: 'active',
+        current: true,
+        createdAt: serverTimestamp(),
+        lastSeenAt: serverTimestamp(),
+      },
+      { merge: true },
+    )
+
+    resolveSessionLocationData()
+      .then(async (locationData) => {
+        const reverseLocation =
+          locationData.locationPermission === 'granted'
+            ? await resolveNearestCityFromCoordinates(
+                Number(locationData.locationLatitude),
+                Number(locationData.locationLongitude),
+              )
+            : null
+
+        await setDoc(
+          sessionRef,
+          {
+            ...locationData,
+            ...(reverseLocation || {}),
+            locationCapturedAt: serverTimestamp(),
+          },
+          { merge: true },
+        )
+      })
+      .catch(() => {})
+
+    clearSessionWatcher()
+    sessionWatcherRef.current = onSnapshot(sessionRef, async (snapshot) => {
+      if (!snapshot.exists()) return
+
+      const sessionData = snapshot.data() || {}
+      if (String(sessionData.status || '') !== 'revoked') return
+
+      clearSessionWatcher()
+      window.__TENANT_ID__ = undefined
+      window.__CURRENT_USER__ = undefined
+      await signOut(auth).catch(() => {})
+    })
+  }
+
+  const markLinkedDeviceSessionSignedOut = async (firebaseUser, status = 'signed_out') => {
+    if (!firebaseUser?.uid) return
+
+    clearSessionWatcher()
+    await updateDoc(getLinkedSessionRef(firebaseUser.uid), {
+      status,
+      current: false,
+      closedAt: serverTimestamp(),
+      lastSeenAt: serverTimestamp(),
+    }).catch(() => {})
+  }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true)
 
       if (!firebaseUser) {
+        clearSessionWatcher()
         setUser(null)
         setUserRole('')
         setUserNitRut('')
+        setUserProfile({})
         window.__TENANT_ID__ = undefined
         window.__CURRENT_USER__ = undefined
         setLoading(false)
@@ -107,6 +341,7 @@ function AuthProvider({ children }) {
           setUser(null)
           setUserRole('')
           setUserNitRut('')
+          setUserProfile({})
           await signOut(auth).catch(() => {})
           return
         }
@@ -114,6 +349,8 @@ function AuthProvider({ children }) {
         setUser(firebaseUser)
         setUserRole(userData.role || '')
         setUserNitRut(userData.nitRut || '')
+        setUserProfile(profile)
+        await ensureLinkedDeviceSession(firebaseUser, userData)
 
         // Needed by firestoreProxy history logger (historial_modificaciones).
         // Keep the payload minimal: tenant id and current user identity fields only.
@@ -136,6 +373,8 @@ function AuthProvider({ children }) {
         setUser(null)
         setUserRole('')
         setUserNitRut('')
+        setUserProfile({})
+        clearSessionWatcher()
         window.__TENANT_ID__ = undefined
         window.__CURRENT_USER__ = undefined
       } finally {
@@ -143,7 +382,10 @@ function AuthProvider({ children }) {
       }
     })
 
-    return unsubscribe
+    return () => {
+      clearSessionWatcher()
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {
@@ -252,6 +494,12 @@ function AuthProvider({ children }) {
     return credentials
   }
 
+  const loginWithCustomToken = async (customToken) => {
+    const credentials = await signInWithCustomToken(auth, String(customToken || '').trim())
+    await registerAccessAudit(credentials.user, 'ingreso_qr')
+    return credentials
+  }
+
   const register = async (name, email, password) => {
     const credentials = await createUserWithEmailAndPassword(auth, email, password)
 
@@ -266,6 +514,7 @@ function AuthProvider({ children }) {
     const firebaseUser = auth.currentUser
     await registerAccessAudit(firebaseUser, 'salida')
     await markChatPresenceDisconnected(firebaseUser)
+    await markLinkedDeviceSessionSignedOut(firebaseUser)
     window.__TENANT_ID__ = undefined
     window.__CURRENT_USER__ = undefined
     return signOut(auth)
@@ -329,6 +578,7 @@ function AuthProvider({ children }) {
         const firebaseUser = auth.currentUser
         await registerAccessAudit(firebaseUser, 'salida_automatica_inactividad')
         await markChatPresenceDisconnected(firebaseUser)
+        await markLinkedDeviceSessionSignedOut(firebaseUser, 'expired')
         window.__TENANT_ID__ = undefined
         await signOut(auth)
       } catch {
@@ -403,6 +653,7 @@ function AuthProvider({ children }) {
             const firebaseUser = auth.currentUser
             await registerAccessAudit(firebaseUser, 'salida_automatica_inactividad')
             await markChatPresenceDisconnected(firebaseUser)
+            await markLinkedDeviceSessionSignedOut(firebaseUser, 'expired')
             window.__TENANT_ID__ = undefined
             await signOut(auth)
           } catch {
@@ -424,11 +675,14 @@ function AuthProvider({ children }) {
     user,
     userRole,
     userNitRut,
+    userProfile,
     rolePermissions,
     userPermissions,
     hasPermission,
     loading,
+    currentSessionId,
     login,
+    loginWithCustomToken,
     register,
     logout,
     resetPassword,

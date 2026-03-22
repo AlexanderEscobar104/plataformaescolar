@@ -9,6 +9,7 @@ import { isNativePushSupported } from './utils/pushNotifications'
 import { PushNotifications } from '@capacitor/push-notifications'
 import ChangePasswordPage from './pages/dashboard/ChangePasswordPage'
 import CircularsPage from './pages/dashboard/CircularsPage'
+import CircularFormPage from './pages/dashboard/CircularFormPage'
 import SubjectsPage from './pages/dashboard/SubjectsPage'
 import DashboardHomePage from './pages/dashboard/DashboardHomePage'
 import EvaluationGradingPage from './pages/dashboard/EvaluationGradingPage'
@@ -68,10 +69,13 @@ import ReportTypeSettingsPage from './pages/dashboard/ReportTypeSettingsPage'
 import PlanCreationPage from './pages/dashboard/PlanCreationPage'
 import CamarasAsistenciaPage from './pages/dashboard/CamarasAsistenciaPage'
 import AsistenciaPage from './pages/dashboard/AsistenciaPage'
+import LinkedDevicesPage from './pages/dashboard/LinkedDevicesPage'
+import MailServerSettingsPage from './pages/dashboard/MailServerSettingsPage'
 import CertificadosPage from './pages/dashboard/CertificadosPage'
 import CertificadosTemplatesPage from './pages/dashboard/CertificadosTemplatesPage'
 import BoletinesPage from './pages/dashboard/BoletinesPage'
 import BoletinesStructurePage from './pages/dashboard/BoletinesStructurePage'
+import AnnouncementsPage from './pages/dashboard/AnnouncementsPage'
 
 const PENDING_NATIVE_ROUTE_KEY = 'pending_native_route'
 
@@ -303,6 +307,8 @@ function App() {
           />
           <Route path="eventos" element={<EventsPage />} />
           <Route path="circulares" element={<CircularsPage />} />
+          <Route path="circulares/nueva" element={<CircularFormPage />} />
+          <Route path="circulares/editar/:circularId" element={<CircularFormPage />} />
           <Route
             path="datos-plantel"
             element={<PlantelDataPage />}
@@ -320,10 +326,12 @@ function App() {
           <Route path="tipo-inasistencias" element={<TipoInasistenciasPage />} />
           <Route path="tipo-permisos" element={<TipoPermisosPage />} />
           <Route path="configuracion-chat" element={<ChatSettingsPage />} />
+          <Route path="datos-servidor-correo" element={<MailServerSettingsPage />} />
           <Route path="configuracion-mensajes" element={<MessageSettingsPage />} />
           <Route path="configuracion-notificaciones" element={<NotificationSettingsPage />} />
           <Route path="configuracion-asistencia" element={<AttendanceSettingsPage />} />
           <Route path="configuracion-tipos-reporte" element={<ReportTypeSettingsPage />} />
+          <Route path="dispositivos-vinculados" element={<LinkedDevicesPage />} />
           <Route
             path="creacion-planes"
             element={(
@@ -345,6 +353,7 @@ function App() {
           <Route path="datos-cobro" element={<DatosCobroPage />} />
           <Route path="impuestos" element={<ImpuestosPage />} />
           <Route path="caja" element={<CajaPage />} />
+          <Route path="anuncios" element={<AnnouncementsPage />} />
           <Route path="resoluciones" element={<ResolucionesPage />} />
           <Route path="item-cobro" element={<ItemCobroPage />} />
           <Route path="servicios-complementarios" element={<ServiciosComplementariosPage />} />

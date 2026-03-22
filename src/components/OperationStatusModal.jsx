@@ -1,14 +1,25 @@
 function OperationStatusModal({
   open,
+  isOpen,
+  type = 'success',
   title = 'Operacion',
   message = '',
   onClose,
+  actions,
+  children,
 }) {
-  if (!open) return null
+  const visible = typeof open === 'boolean' ? open : Boolean(isOpen)
+  if (!visible) return null
+
+  const resolvedTitle = title !== 'Operacion'
+    ? title
+    : type === 'error'
+      ? 'Error'
+      : 'Operacion'
 
   return (
     <div className="modal-overlay" role="presentation">
-      <div className="modal-card" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="modal-card" role="dialog" aria-modal="true" aria-label={resolvedTitle}>
         <button
           type="button"
           className="modal-close-icon"
@@ -17,12 +28,15 @@ function OperationStatusModal({
         >
           x
         </button>
-        <h3>{title}</h3>
+        <h3>{resolvedTitle}</h3>
         <p>{message}</p>
+        {children}
         <div className="modal-actions">
-          <button type="button" className="button" onClick={onClose}>
-            Aceptar
-          </button>
+          {actions || (
+            <button type="button" className="button" onClick={onClose}>
+              Aceptar
+            </button>
+          )}
         </div>
       </div>
     </div>

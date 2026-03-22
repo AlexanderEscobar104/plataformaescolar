@@ -437,25 +437,30 @@ function TasksPage() {
   }
 
   return (
-    <section className="evaluations-page">
-      <div className="students-header">
-        <h2>Tareas</h2>
-        {canCreateTasks && (
-          <button
-            type="submit"
-            form="tasks-form"
-            className="button"
-            disabled={saving}
-          >
-            {saving ? 'Guardando...' : editingTask ? 'Guardar cambios' : 'Crear nueva tarea'}
-          </button>
-        )}
+    <section className="evaluations-page tasks-page-shell">
+      <div className="tasks-page-hero">
+        <div className="tasks-page-hero-copy">
+          <span className="tasks-page-eyebrow">Trabajo academico</span>
+          <h2>Tareas</h2>
+          <p>Gestiona tareas por grado y grupo, con archivos adjuntos, fechas de vencimiento y seguimiento de entregas.</p>
+        </div>
+        <div className="tasks-page-hero-actions">
+          {canCreateTasks && (
+            <button
+              type="submit"
+              form="tasks-form"
+              className="button"
+              disabled={saving}
+            >
+              {saving ? 'Guardando...' : editingTask ? 'Guardar cambios' : 'Crear nueva tarea'}
+            </button>
+          )}
+        </div>
       </div>
-      <p>Gestiona tareas por grado y grupo, con archivos adjuntos y fecha de vencimiento.</p>
       {feedback && <p className={`feedback ${feedbackType === 'error' ? 'error' : feedbackType === 'success' ? 'success' : ''}`}>{feedback}</p>}
 
       {(canCreateTasks || (canEditTasks && editingTask)) && (
-        <div className="home-left-card evaluations-card">
+        <div className="home-left-card evaluations-card tasks-form-card">
           <h3>{editingTask ? 'Editar tarea' : 'Crear tarea'}</h3>
         <form id="tasks-form" className="form evaluation-create-form" onSubmit={handleSubmit}>
           <fieldset className="form-fieldset" disabled={saving}>
@@ -614,9 +619,14 @@ function TasksPage() {
       </div>
       )}
 
-      <section>
-        <h3>Tareas creadas</h3>
-        <div className="students-toolbar">
+      <section className="tasks-list-card">
+        <div className="tasks-list-header">
+          <div>
+            <h3>Tareas creadas</h3>
+            <p>Consulta el historial, estado y acciones disponibles para cada tarea registrada.</p>
+          </div>
+        </div>
+        <div className="students-toolbar tasks-toolbar">
           <input
             type="text"
             value={search}

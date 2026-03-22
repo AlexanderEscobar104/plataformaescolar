@@ -360,7 +360,7 @@ function ServiciosComplementariosPage() {
   }
 
   return (
-    <section>
+    <section className="payments-page-shell">
       <div className="students-header">
         <h2>Servicios complementarios</h2>
       </div>

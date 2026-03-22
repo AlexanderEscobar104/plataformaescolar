@@ -263,173 +263,218 @@ function PlantelDataPage() {
   }
 
   return (
-    <section>
-      <h2>Datos del plantel</h2>
-      <p>Administra la informacion general del plantel educativo.</p>
+    <section className="plantel-settings-page">
+      <div className="plantel-settings-hero">
+        <div className="plantel-settings-hero-copy">
+          <span className="plantel-settings-eyebrow">Informacion institucional</span>
+          <h2>Datos del plantel</h2>
+          <p>Administra la informacion general del plantel educativo y su identidad corporativa.</p>
+        </div>
+        <div className="plantel-settings-status-card">
+          <strong>{razonSocial || nombreComercial || 'Plantel sin nombre configurado'}</strong>
+          <span>{correoCorporativo || 'Agrega un correo corporativo principal.'}</span>
+          <small>{tenantNit || nitRut || 'Sin NIT/RUT asociado'}</small>
+        </div>
+      </div>
       {!canManagePlantel && (
         <p className="feedback">Vista solo lectura. Tu rol no puede editar esta informacion.</p>
       )}
       {feedback && <p className="feedback">{feedback}</p>}
-      <form className="form role-form" onSubmit={handleSubmit}>
-        <fieldset className="form-fieldset" disabled={!canManagePlantel}>
-          <div>
-            <DragDropFileInput
-              id="plantel-logo"
-              label="Logo del plantel"
-              accept="image/*"
-              onChange={handleLogoChange}
-              prompt="Arrastra el logo aqui o haz clic para seleccionar."
-            />
-          </div>
-          {(logoPreview || logoActual?.url) && (
-            <div className="student-photo-preview-wrap">
-              <img
-                className="student-photo-preview"
-                src={logoPreview || logoActual?.dataUrl || logoActual?.url}
-                alt="Logo del plantel"
-              />
-            </div>
-          )}
-          <div className="form-grid-2">
-            <label htmlFor="plantel-razon-social">
-              Razon social
-              <input
-                id="plantel-razon-social"
-                type="text"
-                value={razonSocial}
-                onChange={(event) => setRazonSocial(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-nombre-comercial">
-              Nombre comercial
-              <input
-                id="plantel-nombre-comercial"
-                type="text"
-                value={nombreComercial}
-                onChange={(event) => setNombreComercial(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-nit-rut">
-              NIT o RUT
-              <input
-                id="plantel-nit-rut"
-                type="text"
-                value={nitRut}
-                disabled={nitSaved || !!tenantNit}
-                style={nitSaved || tenantNit ? { backgroundColor: 'var(--bg-secondary)', cursor: 'not-allowed' } : undefined}
-                onChange={(event) => setNitRut(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-fecha-constitucion">
-              Fecha de constitucion
-              <input
-                id="plantel-fecha-constitucion"
-                type="date"
-                max={new Date().toISOString().split('T')[0]}
-                value={fechaConstitucion}
-                onChange={(event) => setFechaConstitucion(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-representante-legal">
-              Representante legal
-              <input
-                id="plantel-representante-legal"
-                type="text"
-                value={representanteLegal}
-                onChange={(event) => setRepresentanteLegal(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-documento-representante">
-              Documento representante legal
-              <input
-                id="plantel-documento-representante"
-                type="text"
-                value={documentoRepresentanteLegal}
-                onChange={(event) => setDocumentoRepresentanteLegal(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-direccion">
-              Direccion
-              <input
-                id="plantel-direccion"
-                type="text"
-                value={direccion}
-                onChange={(event) => setDireccion(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-ciudad">
-              Ciudad
-              <input
-                id="plantel-ciudad"
-                type="text"
-                value={ciudad}
-                onChange={(event) => setCiudad(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-pais">
-              Pais
-              <input
-                id="plantel-pais"
-                type="text"
-                value={pais}
-                onChange={(event) => setPais(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-telefono">
-              Telefono
-              <input
-                id="plantel-telefono"
-                type="text"
-                value={telefono}
-                onChange={(event) => setTelefono(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-correo-corporativo">
-              Correo corporativo
-              <input
-                id="plantel-correo-corporativo"
-                type="email"
-                value={correoCorporativo}
-                onChange={(event) => setCorreoCorporativo(event.target.value)}
-              />
-            </label>
-            <label htmlFor="plantel-pagina-web">
-              Pagina web
-              <input
-                id="plantel-pagina-web"
-                type="url"
-                value={paginaWeb}
-                onChange={(event) => setPaginaWeb(event.target.value)}
-                placeholder="https://..."
-              />
-            </label>
-            <label htmlFor="plantel-eslogan">
-              Eslogan
-              <input
-                id="plantel-eslogan"
-                type="text"
-                value={eslogan}
-                onChange={(event) => setEslogan(event.target.value)}
-                placeholder='Ej: "FORMAMOS CIUDADANOS DEL MUNDO"'
-              />
-            </label>
-            <label htmlFor="plantel-plan-asociado">
-              Plan asociado
-              <input id="plantel-plan-asociado" type="text" value={planNombre || '-'} readOnly />
-            </label>
-            <label htmlFor="plantel-plan-vencimiento">
-              Fecha vencimiento plan
-              <input id="plantel-plan-vencimiento" type="text" value={planFechaVencimiento || '-'} readOnly />
-            </label>
-            <label htmlFor="plantel-plan-estado">
-              Estado del plan
-              <input id="plantel-plan-estado" type="text" value={planEstado || '-'} readOnly />
-            </label>
+      <form className="form role-form plantel-settings-form" onSubmit={handleSubmit}>
+        <fieldset className="form-fieldset plantel-settings-fieldset" disabled={!canManagePlantel}>
+          <div className="plantel-settings-grid">
+            <section className="plantel-settings-card plantel-settings-card--logo">
+              <div className="plantel-settings-card-head">
+                <h3>Identidad visual</h3>
+                <p>Personaliza la imagen principal que vera tu comunidad educativa.</p>
+              </div>
+              <div>
+                <DragDropFileInput
+                  id="plantel-logo"
+                  label="Logo del plantel"
+                  accept="image/*"
+                  onChange={handleLogoChange}
+                  prompt="Arrastra el logo aqui o haz clic para seleccionar."
+                />
+              </div>
+              {(logoPreview || logoActual?.url) && (
+                <div className="student-photo-preview-wrap plantel-logo-preview-wrap">
+                  <img
+                    className="student-photo-preview plantel-logo-preview"
+                    src={logoPreview || logoActual?.dataUrl || logoActual?.url}
+                    alt="Logo del plantel"
+                  />
+                </div>
+              )}
+            </section>
+
+            <section className="plantel-settings-card">
+              <div className="plantel-settings-card-head">
+                <h3>Datos generales</h3>
+                <p>Informacion base para identificar formalmente al plantel.</p>
+              </div>
+              <div className="form-grid-2 plantel-form-grid">
+                <label htmlFor="plantel-razon-social">
+                  Razon social
+                  <input
+                    id="plantel-razon-social"
+                    type="text"
+                    value={razonSocial}
+                    onChange={(event) => setRazonSocial(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-nombre-comercial">
+                  Nombre comercial
+                  <input
+                    id="plantel-nombre-comercial"
+                    type="text"
+                    value={nombreComercial}
+                    onChange={(event) => setNombreComercial(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-nit-rut">
+                  NIT o RUT
+                  <input
+                    id="plantel-nit-rut"
+                    type="text"
+                    value={nitRut}
+                    disabled={nitSaved || !!tenantNit}
+                    style={nitSaved || tenantNit ? { backgroundColor: 'var(--bg-secondary)', cursor: 'not-allowed' } : undefined}
+                    onChange={(event) => setNitRut(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-fecha-constitucion">
+                  Fecha de constitucion
+                  <input
+                    id="plantel-fecha-constitucion"
+                    type="date"
+                    max={new Date().toISOString().split('T')[0]}
+                    value={fechaConstitucion}
+                    onChange={(event) => setFechaConstitucion(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-representante-legal">
+                  Representante legal
+                  <input
+                    id="plantel-representante-legal"
+                    type="text"
+                    value={representanteLegal}
+                    onChange={(event) => setRepresentanteLegal(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-documento-representante">
+                  Documento representante legal
+                  <input
+                    id="plantel-documento-representante"
+                    type="text"
+                    value={documentoRepresentanteLegal}
+                    onChange={(event) => setDocumentoRepresentanteLegal(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-eslogan">
+                  Eslogan
+                  <input
+                    id="plantel-eslogan"
+                    type="text"
+                    value={eslogan}
+                    onChange={(event) => setEslogan(event.target.value)}
+                    placeholder='Ej: "FORMAMOS CIUDADANOS DEL MUNDO"'
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="plantel-settings-card">
+              <div className="plantel-settings-card-head">
+                <h3>Ubicacion y contacto</h3>
+                <p>Canales institucionales visibles para estudiantes, familias y personal.</p>
+              </div>
+              <div className="form-grid-2 plantel-form-grid">
+                <label htmlFor="plantel-direccion">
+                  Direccion
+                  <input
+                    id="plantel-direccion"
+                    type="text"
+                    value={direccion}
+                    onChange={(event) => setDireccion(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-ciudad">
+                  Ciudad
+                  <input
+                    id="plantel-ciudad"
+                    type="text"
+                    value={ciudad}
+                    onChange={(event) => setCiudad(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-pais">
+                  Pais
+                  <input
+                    id="plantel-pais"
+                    type="text"
+                    value={pais}
+                    onChange={(event) => setPais(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-telefono">
+                  Telefono
+                  <input
+                    id="plantel-telefono"
+                    type="text"
+                    value={telefono}
+                    onChange={(event) => setTelefono(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-correo-corporativo">
+                  Correo corporativo
+                  <input
+                    id="plantel-correo-corporativo"
+                    type="email"
+                    value={correoCorporativo}
+                    onChange={(event) => setCorreoCorporativo(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="plantel-pagina-web">
+                  Pagina web
+                  <input
+                    id="plantel-pagina-web"
+                    type="url"
+                    value={paginaWeb}
+                    onChange={(event) => setPaginaWeb(event.target.value)}
+                    placeholder="https://..."
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="plantel-settings-card plantel-settings-card--plan">
+              <div className="plantel-settings-card-head">
+                <h3>Plan asociado</h3>
+                <p>Resumen de la licencia o plan activo vinculado al plantel.</p>
+              </div>
+              <div className="form-grid-2 plantel-form-grid">
+                <label htmlFor="plantel-plan-asociado">
+                  Plan asociado
+                  <input id="plantel-plan-asociado" type="text" value={planNombre || '-'} readOnly />
+                </label>
+                <label htmlFor="plantel-plan-vencimiento">
+                  Fecha vencimiento plan
+                  <input id="plantel-plan-vencimiento" type="text" value={planFechaVencimiento || '-'} readOnly />
+                </label>
+                <label htmlFor="plantel-plan-estado">
+                  Estado del plan
+                  <input id="plantel-plan-estado" type="text" value={planEstado || '-'} readOnly />
+                </label>
+              </div>
+            </section>
           </div>
           {canManagePlantel && (
-            <button className="button" type="submit" disabled={saving}>
-              {saving ? 'Guardando...' : 'Guardar datos'}
-            </button>
+            <div className="plantel-settings-actions">
+              <button className="button" type="submit" disabled={saving}>
+                {saving ? 'Guardando...' : 'Guardar datos'}
+              </button>
+            </div>
           )}
         </fieldset>
       </form>

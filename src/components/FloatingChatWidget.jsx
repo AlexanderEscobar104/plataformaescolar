@@ -66,7 +66,13 @@ function formatMessageTime(dateValue) {
   return dateValue.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
 }
 
-function FloatingChatWidget() {
+function normalizeLauncherPosition(value) {
+  const normalized = String(value || '').trim()
+  const allowed = new Set(['bottom-right', 'bottom-center', 'bottom-left', 'top-right', 'top-center', 'top-left'])
+  return allowed.has(normalized) ? normalized : 'bottom-right'
+}
+
+function FloatingChatWidget({ launcherPosition = 'bottom-right' }) {
   const { user, userRole, userNitRut } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [users, setUsers] = useState([])
@@ -635,7 +641,7 @@ function FloatingChatWidget() {
   }
 
   return (
-    <div className="floating-chat-root">
+    <div className={`floating-chat-root floating-chat-root--${normalizeLauncherPosition(launcherPosition)}`}>
       {!isOpen && (
         <button type="button" className="floating-chat-launcher" onClick={() => setIsOpen(true)}>
           <span className={`chat-status-dot ${statusClass(selfStatusValue)}`} aria-hidden="true" />

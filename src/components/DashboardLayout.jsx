@@ -5,6 +5,8 @@ import { useAuth } from '../hooks/useAuth'
 import { db } from '../firebase'
 import logoFallback from '../assets/logo-plataforma.svg'
 import { buildDynamicMemberPermissionKey, PERMISSION_KEYS } from '../utils/permissions'
+import { getAnnouncementDisplaySize, matchesAnnouncementAudience } from '../utils/announcements'
+import AnnouncementDisplay from './AnnouncementDisplay'
 import FloatingChatWidget from './FloatingChatWidget'
 import { ensureNativeNotificationPermissions, isNativeApp, openExternalDocument, pushNativeAlert, updateAppBadgeCount } from '../utils/nativeLinks'
 import { registerNativePushHandlers } from '../utils/pushNotifications'
@@ -163,6 +165,8 @@ function DashboardLayout() {
     hasPermission,
     userPermissions,
     userNitRut,
+    userRole: authUserRole,
+    userProfile,
   } = useAuth()
   const [userName, setUserName] = useState('')
   const [userRole, setUserRole] = useState('')
@@ -177,6 +181,8 @@ function DashboardLayout() {
   const [memberMenuOpen, setMemberMenuOpen] = useState(false)
   const [paymentsMenuOpen, setPaymentsMenuOpen] = useState(false)
   const [configMenuOpen, setConfigMenuOpen] = useState(false)
+  const [modalAnnouncementsQueue, setModalAnnouncementsQueue] = useState([])
+  const [modalAnnouncementIndex, setModalAnnouncementIndex] = useState(0)
 
   // Exclusive accordion: opening one group closes all others
   const openSidebarGroup = (group) => {
@@ -220,11 +226,15 @@ function DashboardLayout() {
   const canViewPlantelData = hasPermission(PERMISSION_KEYS.PLANTEL_VIEW)
   const canManagePermissions = hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
   const canManageChatSettings = hasPermission(PERMISSION_KEYS.CONFIG_CHAT_MANAGE) || canManagePermissions
+  const canManageMailServerSettings =
+    hasPermission(PERMISSION_KEYS.CONFIG_MAIL_SERVER_MANAGE) || canManagePermissions
   const canManageMessageSettings = hasPermission(PERMISSION_KEYS.CONFIG_MESSAGES_MANAGE) || canManagePermissions
   const canManageNotificationSettings =
     hasPermission(PERMISSION_KEYS.CONFIG_NOTIFICATIONS_MANAGE) || canManagePermissions
   const canManageReportTypeSettings =
     hasPermission(PERMISSION_KEYS.CONFIG_REPORT_TYPES_MANAGE) || canManagePermissions
+  const canViewLinkedDevices =
+    hasPermission(PERMISSION_KEYS.CONFIG_LINKED_DEVICES_VIEW) || canManagePermissions
   const canManageTipoPermisos =
     hasPermission(PERMISSION_KEYS.CONFIG_TIPO_PERMISOS_MANAGE) || canManagePermissions
   const canManageTipoInasistencias =
@@ -232,6 +242,7 @@ function DashboardLayout() {
   const canManageTipoCertificado =
     hasPermission(PERMISSION_KEYS.CONFIG_TIPO_CERTIFICADO_MANAGE) || canManagePermissions
   const canManageRoles = hasPermission(PERMISSION_KEYS.ROLES_MANAGE)
+  const canManageAnnouncements = hasPermission(PERMISSION_KEYS.ANNOUNCEMENTS_MANAGE)
   const canBulkUpload = hasPermission(PERMISSION_KEYS.BULK_UPLOAD_MANAGE)
   const canViewTasks = hasPermission(PERMISSION_KEYS.TASKS_VIEW)
   const canViewEvaluations = hasPermission(PERMISSION_KEYS.EVALUATIONS_VIEW)
@@ -259,11 +270,37 @@ function DashboardLayout() {
   const canManageBoletinesStructure =
     hasPermission(PERMISSION_KEYS.CONFIG_BOLETINES_STRUCTURE_MANAGE) || canManageAcademicSetup || canManagePermissions
   const canManageStorage = hasPermission(PERMISSION_KEYS.STORAGE_MANAGE)
-  const showFloatingChat = location.pathname.startsWith('/dashboard') && hasPermission(PERMISSION_KEYS.CHAT_ONLINE_VIEW)
+  const [showChatLauncher, setShowChatLauncher] = useState(true)
+  const [chatLauncherPosition, setChatLauncherPosition] = useState('bottom-right')
+  const showFloatingChat =
+    location.pathname.startsWith('/dashboard') &&
+    hasPermission(PERMISSION_KEYS.CHAT_ONLINE_VIEW) &&
+    showChatLauncher
   const [customMemberRoles, setCustomMemberRoles] = useState([])
   const hasAnyDynamicMemberPermission = (userPermissions || []).some((key) =>
     String(key || '').startsWith('members_dynamic_role_'),
   )
+
+  useEffect(() => {
+    if (!userNitRut) {
+      setShowChatLauncher(true)
+      setChatLauncherPosition('bottom-right')
+      return undefined
+    }
+
+    const chatSettingsRef = doc(db, 'configuracion', `chat_roles_${userNitRut}`)
+    const unsubscribe = onSnapshot(chatSettingsRef, (snapshot) => {
+      const data = snapshot.data() || {}
+      setShowChatLauncher(data.showChatLauncher !== false)
+      setChatLauncherPosition(
+        ['bottom-right', 'bottom-center', 'bottom-left', 'top-right', 'top-center', 'top-left'].includes(data.chatLauncherPosition)
+          ? data.chatLauncherPosition
+          : 'bottom-right',
+      )
+    })
+
+    return unsubscribe
+  }, [userNitRut])
 
   useEffect(() => {
     if (!hasAnyDynamicMemberPermission || !userNitRut) {
@@ -456,6 +493,9 @@ function DashboardLayout() {
     if (canManageChatSettings) {
       items.push({ label: 'Configuracion de chat', to: '/dashboard/configuracion-chat', Icon: MessageIcon })
     }
+    if (canManageMailServerSettings) {
+      items.push({ label: 'Datos del servidor de correo', to: '/dashboard/datos-servidor-correo', Icon: MessageIcon })
+    }
     if (canManageMessageSettings) {
       items.push({ label: 'Configuracion de mensajes', to: '/dashboard/configuracion-mensajes', Icon: MessageIcon })
     }
@@ -468,9 +508,16 @@ function DashboardLayout() {
     if (canManageReportTypeSettings) {
       items.push({ label: 'Configuracion tipos de reporte', to: '/dashboard/configuracion-tipos-reporte', Icon: ReportsIcon })
     }
+    if (canViewLinkedDevices) {
+      items.push({ label: 'Dispositivos vinculados', to: '/dashboard/dispositivos-vinculados', Icon: UserIcon })
+    }
 
     if (canManageRoles) {
       items.push({ label: 'Roles', to: '/dashboard/roles', Icon: GearIcon })
+    }
+
+    if (canManageAnnouncements) {
+      items.push({ label: 'Anuncios', to: '/dashboard/anuncios', Icon: HomeIcon })
     }
 
     if (hasPermission(PERMISSION_KEYS.CONFIG_TIPO_EMPLEADO_MANAGE)) {
@@ -487,12 +534,14 @@ function DashboardLayout() {
     canManageAcademicSetup,
     canManageCirculars,
     canManageChatSettings,
+    canManageMailServerSettings,
     canManageEvents,
     canManageMessageSettings,
     canManageNotificationSettings,
     canManagePermissions,
     canManageReportTypeSettings,
     canManageRoles,
+    canManageAnnouncements,
     canManageSubjects,
     canManageTipoCertificado,
     canManageCertificadosTemplates,
@@ -500,6 +549,7 @@ function DashboardLayout() {
     canManageTipoInasistencias,
     canManageTipoPermisos,
     canViewPlantelData,
+    canViewLinkedDevices,
     canViewInasistencias,
     canViewPermisos,
     canManageStorage,
@@ -727,6 +777,44 @@ function DashboardLayout() {
   }, [user])
 
   useEffect(() => {
+    if (!user?.uid || !userNitRut) return undefined
+
+    const loadAnnouncement = async () => {
+      try {
+        const today = new Date()
+        const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+          today.getDate(),
+        ).padStart(2, '0')}`
+
+        const snapshot = await getDocs(
+          query(collection(db, 'anuncios'), where('nitRut', '==', userNitRut), where('showAsModal', '==', true), where('status', '==', 'activo'))
+        )
+        const validDocs = snapshot.docs
+          .map((d) => ({id: d.id, ...d.data()}))
+          .filter(
+            (docData) =>
+              (!docData.expirationDate || docData.expirationDate >= todayIso) &&
+              matchesAnnouncementAudience(docData, {
+                role: authUserRole,
+                grade: userProfile?.grado || '',
+                group: userProfile?.grupo || '',
+              }),
+          )
+
+        validDocs.sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+        setModalAnnouncementsQueue(validDocs)
+        setModalAnnouncementIndex(0)
+      } catch {
+        setModalAnnouncementsQueue([])
+        setModalAnnouncementIndex(0)
+      }
+    }
+
+    loadAnnouncement()
+    return undefined
+  }, [authUserRole, user?.uid, userNitRut, userProfile?.grado, userProfile?.grupo])
+
+  useEffect(() => {
     if (!unreadToast) return undefined
 
     const timeoutId = setTimeout(() => {
@@ -745,6 +833,18 @@ function DashboardLayout() {
 
     return () => clearTimeout(timeoutId)
   }, [todayEventsToast])
+
+  const modalAnnouncement = modalAnnouncementsQueue[modalAnnouncementIndex] || null
+
+  const handleCloseAnnouncementModal = () => {
+    if (modalAnnouncementIndex >= modalAnnouncementsQueue.length - 1) {
+      setModalAnnouncementsQueue([])
+      setModalAnnouncementIndex(0)
+      return
+    }
+
+    setModalAnnouncementIndex((previous) => previous + 1)
+  }
 
   const currentPathLabel =
     allItems.find((item) =>
@@ -868,22 +968,22 @@ function DashboardLayout() {
                <span>{item.label}</span>
              </NavLink>
            ))}
-           <div className="sidebar-group">
+           <div className="sidebar-group sidebar-group-members">
              <button
                type="button"
-               className={`sidebar-group-toggle${academicMenuOpen ? ' open' : ''}`}
+               className={`sidebar-group-toggle sidebar-group-toggle-members${academicMenuOpen ? ' open' : ''}`}
               onClick={() => openSidebarGroup('academic')}
               aria-expanded={academicMenuOpen}
             >
               <span className="sidebar-group-title">Academico</span>
               <ChevronIcon />
             </button>
-            <div className={`sidebar-submenu${academicMenuOpen ? ' open' : ''}`}>
+            <div className={`sidebar-submenu sidebar-submenu-members${academicMenuOpen ? ' open' : ''}`}>
               {academicItems.map((item) => (
                 <NavLink
                   key={item.to}
                   className={({ isActive }) =>
-                    `sidebar-link${isActive ? ' active' : ''}`
+                    `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
                   }
                   to={item.to}
                   onClick={() => setMenuOpen(false)}
@@ -895,22 +995,22 @@ function DashboardLayout() {
              </div>
            </div>
            {memberItems.length > 0 && (
-             <div className="sidebar-group">
+             <div className="sidebar-group sidebar-group-members">
                <button
                  type="button"
-                 className={`sidebar-group-toggle${memberMenuOpen ? ' open' : ''}`}
+                 className={`sidebar-group-toggle sidebar-group-toggle-members${memberMenuOpen ? ' open' : ''}`}
                  onClick={() => openSidebarGroup('member')}
                  aria-expanded={memberMenuOpen}
                >
                  <span className="sidebar-group-title">Gestion de Miembros</span>
                  <ChevronIcon />
                </button>
-               <div className={`sidebar-submenu${memberMenuOpen ? ' open' : ''}`}>
+               <div className={`sidebar-submenu sidebar-submenu-members${memberMenuOpen ? ' open' : ''}`}>
                  {memberItems.map((item) => (
                    <NavLink
                      key={item.to}
                      className={({ isActive }) =>
-                       `sidebar-link${isActive ? ' active' : ''}`
+                       `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
                      }
                      to={item.to}
                      onClick={() => setMenuOpen(false)}
@@ -922,22 +1022,22 @@ function DashboardLayout() {
                </div>
              </div>
            )}
-           <div className="sidebar-group">
+           <div className="sidebar-group sidebar-group-members">
              <button
                type="button"
-               className={`sidebar-group-toggle${paymentsMenuOpen ? ' open' : ''}`}
+               className={`sidebar-group-toggle sidebar-group-toggle-members${paymentsMenuOpen ? ' open' : ''}`}
                onClick={() => openSidebarGroup('payments')}
                aria-expanded={paymentsMenuOpen}
              >
                <span className="sidebar-group-title">PAGOS</span>
                <ChevronIcon />
              </button>
-             <div className={`sidebar-submenu${paymentsMenuOpen ? ' open' : ''}`}>
+             <div className={`sidebar-submenu sidebar-submenu-members${paymentsMenuOpen ? ' open' : ''}`}>
                {paymentsItems.map((item) => (
                  <NavLink
                    key={item.to}
                    className={({ isActive }) =>
-                     `sidebar-link${isActive ? ' active' : ''}`
+                     `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
                    }
                    to={item.to}
                    onClick={() => setMenuOpen(false)}
@@ -948,22 +1048,22 @@ function DashboardLayout() {
                ))}
              </div>
            </div>
-           <div className="sidebar-group">
+           <div className="sidebar-group sidebar-group-members">
              <button
                type="button"
-               className={`sidebar-group-toggle${reportMenuOpen ? ' open' : ''}`}
+               className={`sidebar-group-toggle sidebar-group-toggle-members${reportMenuOpen ? ' open' : ''}`}
                onClick={() => openSidebarGroup('report')}
                aria-expanded={reportMenuOpen}
              >
                <span className="sidebar-group-title">Reportes</span>
                <ChevronIcon />
              </button>
-             <div className={`sidebar-submenu${reportMenuOpen ? ' open' : ''}`}>
+             <div className={`sidebar-submenu sidebar-submenu-members${reportMenuOpen ? ' open' : ''}`}>
                {reportItems.map((item) => (
                  <NavLink
                    key={item.to}
                    className={({ isActive }) =>
-                     `sidebar-link${isActive ? ' active' : ''}`
+                     `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
                    }
                    to={item.to}
                    onClick={() => setMenuOpen(false)}
@@ -974,22 +1074,22 @@ function DashboardLayout() {
                ))}
              </div>
            </div>
-           <div className="sidebar-group">
+           <div className="sidebar-group sidebar-group-members">
              <button
                type="button"
-               className={`sidebar-group-toggle${configMenuOpen ? ' open' : ''}`}
+               className={`sidebar-group-toggle sidebar-group-toggle-members${configMenuOpen ? ' open' : ''}`}
               onClick={() => openSidebarGroup('config')}
               aria-expanded={configMenuOpen}
             >
               <span className="sidebar-group-title">Configuracion</span>
               <ChevronIcon />
             </button>
-            <div className={`sidebar-submenu${configMenuOpen ? ' open' : ''}`}>
+            <div className={`sidebar-submenu sidebar-submenu-members${configMenuOpen ? ' open' : ''}`}>
               {configItems.map((item) => (
                 <NavLink
                   key={item.to}
                   className={({ isActive }) =>
-                    `sidebar-link${isActive ? ' active' : ''}`
+                    `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
                   }
                   to={item.to}
                   onClick={() => setMenuOpen(false)}
@@ -1080,7 +1180,7 @@ function DashboardLayout() {
           <span>{todayEventsToast}</span>
         </div>
       )}
-      {showFloatingChat && <FloatingChatWidget />}
+      {showFloatingChat && <FloatingChatWidget launcherPosition={chatLauncherPosition} />}
       {showInactivityWarning && (
         <div className="modal-overlay" role="presentation">
           <div className="modal-card" role="dialog" aria-modal="true" aria-label="Sesion por inactividad">
@@ -1096,6 +1196,37 @@ function DashboardLayout() {
                 Continuar en el aplicativo
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {modalAnnouncement && (
+        <div className="modal-overlay" role="presentation">
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label={modalAnnouncement.title || 'Anuncio'}
+            style={{
+              width: `min(100%, ${Math.min(getAnnouncementDisplaySize(modalAnnouncement, 'modal').width + 56, 980)}px)`,
+              maxHeight: 'calc(100vh - 32px)',
+              overflowY: 'auto',
+            }}
+          >
+            <button
+              type="button"
+              className="modal-close-icon"
+              aria-label="Cerrar anuncio"
+              onClick={handleCloseAnnouncementModal}
+            >
+              x
+            </button>
+            <h3 style={{ marginBottom: '16px', color: 'var(--primary)' }}>{modalAnnouncement.title}</h3>
+            <AnnouncementDisplay
+              announcement={modalAnnouncement}
+              variant="modal"
+              onActivate={handleCloseAnnouncementModal}
+            />
           </div>
         </div>
       )}

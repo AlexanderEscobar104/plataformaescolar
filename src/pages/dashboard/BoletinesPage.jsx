@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import jsPDF from 'jspdf'
 import { db, storage } from '../../firebase'
 import { setDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
 import OperationStatusModal from '../../components/OperationStatusModal'
+import EmailDeliveryConfirmModal from '../../components/EmailDeliveryConfirmModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import { fileToDataUrl, guessImageFormat } from '../../utils/pdfImages'
-import { savePdfDocument } from '../../utils/nativeLinks'
+import { savePdfDocument, sendPdfByEmail } from '../../utils/nativeLinks'
 
 const PERIODS = [
   { key: '1', label: 'Periodo 1' },
@@ -122,6 +123,7 @@ function BoletinesPage() {
   const canView = hasPermission(PERMISSION_KEYS.BOLETINES_VIEW) || hasPermission(PERMISSION_KEYS.BOLETINES_GENERATE)
   const canEdit = hasPermission(PERMISSION_KEYS.BOLETINES_EDIT) || hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
   const canGenerate = hasPermission(PERMISSION_KEYS.BOLETINES_GENERATE) || hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
+  const canEditAcademicYear = hasPermission(PERMISSION_KEYS.CERTIFICADOS_ACADEMIC_YEAR_EDIT)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -145,6 +147,13 @@ function BoletinesPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState('success')
   const [modalMessage, setModalMessage] = useState('')
+  const [emailConfirmOpen, setEmailConfirmOpen] = useState(false)
+
+  useEffect(() => {
+    if (!canEditAcademicYear) {
+      setAnio(String(CURRENT_YEAR))
+    }
+  }, [canEditAcademicYear])
 
   const openModal = (typeMessage, message) => {
     setModalType(typeMessage)
@@ -170,15 +179,20 @@ function BoletinesPage() {
     return `${String(userNitRut).trim()}__${resolvedGrade}__${resolvedGroup}`
   }, [resolvedGrade, resolvedGroup, userNitRut])
 
+  const effectiveYear = useMemo(
+    () => (canEditAcademicYear ? String(anio || '').trim() : String(CURRENT_YEAR)),
+    [anio, canEditAcademicYear],
+  )
+
   const periodKey = useMemo(() => {
     if (tipo === 'final') return 'final'
     return `p${String(periodo || '1').trim()}`
   }, [periodo, tipo])
 
   const notasDocId = useMemo(() => {
-    if (!userNitRut || !selectedStudentId || !anio) return ''
-    return `${String(userNitRut).trim()}__${selectedStudentId}__${String(anio).trim()}__${periodKey}`
-  }, [anio, periodKey, selectedStudentId, userNitRut])
+    if (!userNitRut || !selectedStudentId || !effectiveYear) return ''
+    return `${String(userNitRut).trim()}__${selectedStudentId}__${effectiveYear}__${periodKey}`
+  }, [effectiveYear, periodKey, selectedStudentId, userNitRut])
 
   const resolveItemName = useCallback(
     (item) => {
@@ -211,6 +225,7 @@ function BoletinesPage() {
         .map((docSnapshot) => {
           const data = docSnapshot.data() || {}
           const profile = data.profile || {}
+          const infoComplementaria = profile.informacionComplementaria || {}
           const fullName = `${profile.primerNombre || ''} ${profile.segundoNombre || ''} ${profile.primerApellido || ''} ${profile.segundoApellido || ''}`
             .replace(/\s+/g, ' ')
             .trim()
@@ -220,6 +235,8 @@ function BoletinesPage() {
             nombreCompleto: fullName || data.name || '',
             grado: profile.grado || '',
             grupo: profile.grupo || '',
+            email: String(infoComplementaria.email || data.email || '').trim(),
+            autorizaEnvioCorreos: infoComplementaria.autorizaEnvioCorreos !== false,
           }
         })
         .sort((a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto))
@@ -301,13 +318,13 @@ function BoletinesPage() {
   }, [notasDocId, tipo])
 
   const loadFinalComputed = useCallback(async () => {
-    if (!userNitRut || !selectedStudentId || !anio || tipo !== 'final') {
+    if (!userNitRut || !selectedStudentId || !effectiveYear || tipo !== 'final') {
       setFinalComputed({})
       return
     }
 
     const ids = ['p1', 'p2', 'p3', 'p4'].map(
-      (p) => `${String(userNitRut).trim()}__${selectedStudentId}__${String(anio).trim()}__${p}`,
+      (p) => `${String(userNitRut).trim()}__${selectedStudentId}__${effectiveYear}__${p}`,
     )
     const snaps = await Promise.all(ids.map((id) => getDoc(doc(db, 'boletin_notas', id)).catch(() => null)))
     const notasDocs = snaps
@@ -335,7 +352,7 @@ function BoletinesPage() {
       }
     })
     setFinalComputed(computed)
-  }, [anio, selectedStudentId, tipo, userNitRut])
+  }, [effectiveYear, selectedStudentId, tipo, userNitRut])
 
   useEffect(() => {
     loadInitial()
@@ -362,6 +379,30 @@ function BoletinesPage() {
   const resolvedNotas = useMemo(() => {
     return tipo === 'final' ? finalComputed : notasByItemId
   }, [finalComputed, notasByItemId, tipo])
+
+  const gradableItems = useMemo(
+    () => flatRows.filter((row) => row.type === 'item'),
+    [flatRows],
+  )
+
+  const gradedItemsCount = useMemo(
+    () => gradableItems.reduce((count, row) => {
+      const promedio = Number(resolvedNotas[row.id]?.promedio)
+      return Number.isNaN(promedio) ? count : count + 1
+    }, 0),
+    [gradableItems, resolvedNotas],
+  )
+
+  const boletinReadyToExport = Boolean(
+    selectedStudentId &&
+    (estructura.grupos || []).length > 0 &&
+    gradableItems.length > 0 &&
+    gradedItemsCount === gradableItems.length,
+  )
+
+  const boletinBlockedMessage = selectedStudentId && !boletinReadyToExport
+    ? 'El boletin aun no esta completamente calificado. No se puede descargar ni enviar el PDF.'
+    : ''
 
   const updateNota = (itemId, patch) => {
     setNotasByItemId((prev) => ({
@@ -397,9 +438,9 @@ function BoletinesPage() {
       openModal('error', 'Selecciona estudiante, año y periodo.')
       return
     }
-    const parsedYear = Number(String(anio).trim())
+    const parsedYear = Number(effectiveYear)
     if (Number.isNaN(parsedYear) || parsedYear <= 0) {
-      openModal('error', 'El año lectivo no es valido.')
+      openModal('error', 'El año lectivo no es válido.')
       return
     }
     if (parsedYear > CURRENT_YEAR) {
@@ -429,7 +470,7 @@ function BoletinesPage() {
       await setDocTracked(doc(db, 'boletin_notas', notasDocId), {
         nitRut: String(userNitRut).trim(),
         studentId: selectedStudentId,
-        anio: String(anio).trim(),
+        anio: effectiveYear,
         periodo: String(periodo).trim(),
         grado: String(resolvedGrade || '').trim(),
         grupo: String(resolvedGroup || '').trim(),
@@ -461,9 +502,9 @@ function BoletinesPage() {
       openModal('error', 'Selecciona estudiante y año.')
       return
     }
-    const parsedYear = Number(String(anio).trim())
+    const parsedYear = Number(effectiveYear)
     if (Number.isNaN(parsedYear) || parsedYear <= 0) {
-      openModal('error', 'El año lectivo no es valido.')
+      openModal('error', 'El año lectivo no es válido.')
       return
     }
     if (parsedYear > CURRENT_YEAR) {
@@ -476,7 +517,7 @@ function BoletinesPage() {
       await setDocTracked(doc(db, 'boletin_observaciones', notasDocId), {
         nitRut: String(userNitRut).trim(),
         studentId: selectedStudentId,
-        anio: String(anio).trim(),
+        anio: effectiveYear,
         tipo: 'final',
         grado: String(resolvedGrade || '').trim(),
         grupo: String(resolvedGroup || '').trim(),
@@ -493,7 +534,28 @@ function BoletinesPage() {
     }
   }
 
-  const generatePdf = async () => {
+  const requestEmailConfirmation = () => {
+    if (!boletinReadyToExport) {
+      openModal('error', boletinBlockedMessage || 'El boletin aun no esta calificado.')
+      return
+    }
+    if (!selectedStudent) {
+      openModal('error', 'Selecciona un estudiante.')
+      return
+    }
+    if (!selectedStudent.email) {
+      openModal('error', 'El estudiante no tiene un correo registrado.')
+      return
+    }
+    if (selectedStudent.autorizaEnvioCorreos === false) {
+      openModal('error', 'El estudiante no autoriza el envio de correos.')
+      return
+    }
+    setEmailConfirmOpen(true)
+  }
+
+  const generatePdf = async (deliveryMode = 'download', options = {}) => {
+    const skipEmailConfirmation = options.skipEmailConfirmation === true
     if (!canGenerate) {
       openModal('error', 'No tienes permisos para generar boletines (PDF).')
       return
@@ -502,9 +564,27 @@ function BoletinesPage() {
       openModal('error', 'Selecciona un estudiante.')
       return
     }
-    const parsedYear = Number(String(anio).trim())
+    if (!boletinReadyToExport) {
+      openModal('error', boletinBlockedMessage || 'El boletin aun no esta calificado.')
+      return
+    }
+    if (deliveryMode === 'email') {
+      if (!selectedStudent.email) {
+        openModal('error', 'El estudiante no tiene un correo registrado.')
+        return
+      }
+      if (selectedStudent.autorizaEnvioCorreos === false) {
+        openModal('error', 'El estudiante no autoriza el envio de correos.')
+        return
+      }
+      if (!skipEmailConfirmation) {
+        setEmailConfirmOpen(true)
+        return
+      }
+    }
+    const parsedYear = Number(effectiveYear)
     if (Number.isNaN(parsedYear) || parsedYear <= 0) {
-      openModal('error', 'El año lectivo no es valido.')
+      openModal('error', 'El año lectivo no es válido.')
       return
     }
     if (parsedYear > CURRENT_YEAR) {
@@ -540,7 +620,7 @@ function BoletinesPage() {
               query(
                 collection(db, 'boletin_notas'),
                 where('nitRut', '==', String(userNitRut).trim()),
-                where('anio', '==', String(anio).trim()),
+                where('anio', '==', effectiveYear),
                 where('periodo', 'in', ['1', '2', '3', '4']),
               ),
             )
@@ -581,7 +661,7 @@ function BoletinesPage() {
               query(
                 collection(db, 'boletin_notas'),
                 where('nitRut', '==', String(userNitRut).trim()),
-                where('anio', '==', String(anio).trim()),
+                where('anio', '==', effectiveYear),
                 where('periodo', '==', String(periodo).trim()),
               ),
             )
@@ -672,8 +752,8 @@ function BoletinesPage() {
 
       // Title
       const titulo = tipo === 'final'
-        ? `BOLETIN FINAL AÑO ${String(anio).trim()}`
-        : `BOLETIN PARCIAL PERIODO ${String(periodo).trim()} DE ${String(anio).trim()}`
+        ? `BOLETIN FINAL AÑO ${effectiveYear}`
+        : `BOLETIN PARCIAL PERIODO ${String(periodo).trim()} DE ${effectiveYear}`
       pdf.setFont('helvetica', 'bold')
       pdf.setFontSize(10)
       pdf.text(titulo, pageWidth / 2, margin + 108, { align: 'center' })
@@ -756,7 +836,7 @@ function BoletinesPage() {
       pdf.setFont('helvetica', 'bold')
       pdf.setFontSize(9)
       pdf.text('ASIGNATURA', tableLeft + 6, y + 14)
-      pdf.text('DESEMPEÑO', tableLeft + colSubject + 6, y + 14)
+      pdf.text('DESEMPEÃ‘O', tableLeft + colSubject + 6, y + 14)
       pdf.text('PROMEDIO', tableLeft + colSubject + colPerf + 6, y + 14)
       y += rowHeight
 
@@ -879,9 +959,18 @@ function BoletinesPage() {
       await drawSignatureBlock(leftX, firma1Nombre, firma1Cargo, firma1File)
       await drawSignatureBlock(rightX, firma2Nombre, firma2Cargo, firma2File)
 
-      const fileName = `${sanitizeFileName('boletin')}_${sanitizeFileName(studentName)}_${sanitizeFileName(`${anio}_${tipo === 'final' ? 'final' : `p${periodo}`}`)}.pdf`
-      await savePdfDocument(pdf, fileName, 'Boletin generado')
-      openModal('success', 'Boletin generado correctamente.')
+      const fileName = `${sanitizeFileName('boletin')}_${sanitizeFileName(studentName)}_${sanitizeFileName(`${effectiveYear}_${tipo === 'final' ? 'final' : `p${periodo}`}`)}.pdf`
+      if (deliveryMode === 'email') {
+        await sendPdfByEmail(pdf, fileName, {
+          to: selectedStudent.email || '',
+          subject: `Boletin ${tipo === 'final' ? 'final' : `periodo ${periodo}`} - ${selectedStudent.nombreCompleto || 'Estudiante'}`,
+          body: `Adjunto encontraras el boletin ${tipo === 'final' ? 'final' : `del periodo ${periodo}`} generado para ${selectedStudent.nombreCompleto || 'el estudiante'}.`,
+        })
+        openModal('success', 'Boletin preparado para enviar al email.')
+      } else {
+        await savePdfDocument(pdf, fileName, 'Boletin generado')
+        openModal('success', 'Boletin generado correctamente.')
+      }
     } catch (error) {
       openModal('error', error?.message || 'No fue posible generar el boletin.')
     } finally {
@@ -916,13 +1005,22 @@ function BoletinesPage() {
           <h2>Boletines</h2>
           <p>Boletines parciales (4 periodos) y boletin final.</p>
         </div>
-        <button type="button" className="button" onClick={generatePdf} disabled={generating}>
-          {generating ? 'Generando...' : 'Descargar PDF'}
-        </button>
+        <div className="certificados-actions">
+          <button type="button" className="button" onClick={() => generatePdf('download')} disabled={generating || !canGenerate || !boletinReadyToExport}>
+            {generating ? 'Generando...' : 'Descargar PDF'}
+          </button>
+          <button type="button" className="button secondary" onClick={requestEmailConfirmation} disabled={generating || !canGenerate || !boletinReadyToExport}>
+            {generating ? 'Preparando...' : 'Enviar al email'}
+          </button>
+        </div>
       </div>
 
       {!canGenerate && (
         <p className="feedback error">Tu rol puede ver/registrar, pero no tiene permiso para generar PDF.</p>
+      )}
+
+      {boletinBlockedMessage && (
+        <p className="feedback error">{boletinBlockedMessage}</p>
       )}
 
       <div className="home-left-card evaluations-card" style={{ width: '100%' }}>
@@ -971,11 +1069,18 @@ function BoletinesPage() {
               onChange={(e) => {
                 setAnio(sanitizeYearInput(e.target.value))
               }}
-              disabled={saving || generating}
+              disabled={saving || generating || !canEditAcademicYear}
+              readOnly={!canEditAcademicYear}
               inputMode="numeric"
               pattern="[0-9]*"
             />
           </label>
+
+          {!canEditAcademicYear && (
+            <p className="feedback">
+              El año lectivo usa el valor actual ({CURRENT_YEAR}). Para cambiarlo necesitas el permiso <strong>Modificar año lectivo</strong>.
+            </p>
+          )}
 
           <label>
             Tipo
@@ -1005,7 +1110,7 @@ function BoletinesPage() {
 
           {(!structureDocId || (estructura.grupos || []).length === 0) && selectedStudentId && (
             <p className="feedback error">
-              No hay estructura configurada para el grado/grupo ({resolvedGrade || '-'} {resolvedGroup || '-'}). Configúrala en
+              No hay estructura configurada para el grado/grupo ({resolvedGrade || '-'} {resolvedGroup || '-'}). ConfigÃºrala en
               {' '}<strong>Estructura de boletines</strong>.
             </p>
           )}
@@ -1141,9 +1246,22 @@ function BoletinesPage() {
         type={modalType}
         message={modalMessage}
       />
+      <EmailDeliveryConfirmModal
+        open={emailConfirmOpen}
+        recipient={selectedStudent?.email || ''}
+        documentLabel={`boletin ${tipo === 'final' ? 'final' : `periodo ${periodo}`}`}
+        loading={generating}
+        onCancel={() => setEmailConfirmOpen(false)}
+        onConfirm={() => {
+          setEmailConfirmOpen(false)
+          void generatePdf('email', { skipEmailConfirmation: true })
+        }}
+      />
     </section>
   )
 }
 
 export default BoletinesPage
+
+
 

@@ -116,16 +116,30 @@ function ProfessorsListPage() {
   }
 
   return (
-    <section>
-      <div className="students-header">
-        <h2>Crear profesores</h2>
+    <section className="dashboard-module-shell member-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Gestion de Miembros</span>
+          <h2>Crear profesores</h2>
+          <p>Consulta, busca y administra profesores creados.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{filteredProfessors.length}</strong>
+          <span>Profesores visibles</span>
+          <small>{canCreateProfessors ? 'Administra el equipo docente' : 'Consulta el directorio docente'}</small>
+        </div>
+      </div>
+      <div className="students-header member-module-header">
+        <div className="member-module-header-copy">
+          <h3>Listado docente</h3>
+          <p>Busca por documento, nombres, apellidos, especializacion o estado.</p>
+        </div>
         {canCreateProfessors && (
           <Link className="button button-link" to="/dashboard/crear-profesores/nuevo">
             Agregar nuevo profesor
           </Link>
         )}
       </div>
-      <p>Consulta, busca y administra profesores creados.</p>
 
       <div className="students-toolbar">
 

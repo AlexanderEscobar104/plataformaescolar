@@ -221,9 +221,24 @@ function RoleMemberEditPage() {
   }
 
   return (
-    <section>
-      <div className="students-header">
-        <h2>{canEdit ? `Editar ${roleName}` : `Informacion de ${roleName}`}</h2>
+    <section className="dashboard-module-shell member-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Gestion de Miembros</span>
+          <h2>{canEdit ? `Editar ${roleName}` : `Informacion de ${roleName}`}</h2>
+          <p>Actualiza la informacion principal, documentos y estado del registro seleccionado.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{canEdit ? 'Edicion' : 'Solo lectura'}</strong>
+          <span>{roleName || 'Registro personalizado'}</span>
+          <small>Revisa los datos antes de guardar cambios</small>
+        </div>
+      </div>
+      <div className="students-header member-module-header">
+        <div className="member-module-header-copy">
+          <h3>Ficha del miembro</h3>
+          <p>{canEdit ? 'Modifica los campos necesarios y guarda los cambios.' : 'Consulta la informacion registrada.'}</p>
+        </div>
         <Link className="button button-link secondary" to={backTo}>Volver a la lista</Link>
       </div>
       {!canEdit && <p className="feedback">Modo de solo lectura para este registro.</p>}

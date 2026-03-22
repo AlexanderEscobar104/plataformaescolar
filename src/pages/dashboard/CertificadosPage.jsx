@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import jsPDF from 'jspdf'
 import { db, storage } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import OperationStatusModal from '../../components/OperationStatusModal'
+import EmailDeliveryConfirmModal from '../../components/EmailDeliveryConfirmModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import { fileToDataUrl, guessImageFormat } from '../../utils/pdfImages'
-import { savePdfDocument } from '../../utils/nativeLinks'
+import { savePdfDocument, sendPdfByEmail } from '../../utils/nativeLinks'
 
 function formatHumanDate(dateStr) {
   const raw = String(dateStr || '').trim()
@@ -37,7 +38,7 @@ function resolvePlantelName(plantelData) {
 function buildDefaultBody() {
   return [
     'El/La Rector(a) de {{plantelNombre}} certifica que {{studentNombre}}, identificado(a) con documento No. {{studentDocumento}},',
-    'curso y aprobo satisfactoriamente el grado {{grado}} en el año lectivo {{anio}}.',
+    'curso y aprobó satisfactoriamente el grado {{grado}} en el año lectivo {{anio}}.',
     '',
     'Dado en {{ciudad}} a los {{fecha}}.',
   ].join('\n')
@@ -57,6 +58,7 @@ function CertificadosPage() {
   const canGenerate =
     hasPermission(PERMISSION_KEYS.CERTIFICADOS_GENERATE) ||
     hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
+  const canEditAcademicYear = hasPermission(PERMISSION_KEYS.CERTIFICADOS_ACADEMIC_YEAR_EDIT)
 
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -74,6 +76,9 @@ function CertificadosPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState('success')
   const [modalMessage, setModalMessage] = useState('')
+  const [emailConfirmOpen, setEmailConfirmOpen] = useState(false)
+  const [gradeStatusLoading, setGradeStatusLoading] = useState(false)
+  const [studentHasGrades, setStudentHasGrades] = useState(false)
 
   const sanitizeYearInput = useCallback((value) => {
     const digitsOnly = String(value || '').replace(/[^\d]/g, '').slice(0, 4)
@@ -83,6 +88,12 @@ function CertificadosPage() {
     if (numeric > CURRENT_YEAR) return String(CURRENT_YEAR)
     return String(numeric)
   }, [CURRENT_YEAR])
+
+  useEffect(() => {
+    if (!canEditAcademicYear) {
+      setAnio(String(CURRENT_YEAR))
+    }
+  }, [CURRENT_YEAR, canEditAcademicYear])
 
   const openModal = (type, message) => {
     setModalType(type)
@@ -101,6 +112,7 @@ function CertificadosPage() {
     }
 
     setLoading(true)
+
     try {
       const [tiposSnap, templatesSnap, studentsSnap] = await Promise.all([
         getDocs(query(collection(db, 'tipo_certificados'), where('nitRut', '==', userNitRut))),
@@ -125,6 +137,7 @@ function CertificadosPage() {
         .map((docSnapshot) => {
           const data = docSnapshot.data() || {}
           const profile = data.profile || {}
+          const infoComplementaria = profile.informacionComplementaria || {}
           const fullName = `${profile.primerNombre || ''} ${profile.segundoNombre || ''} ${profile.primerApellido || ''} ${profile.segundoApellido || ''}`
             .replace(/\s+/g, ' ')
             .trim()
@@ -134,6 +147,8 @@ function CertificadosPage() {
             nombreCompleto: fullName || data.name || '',
             grado: profile.grado || '',
             grupo: profile.grupo || '',
+            email: String(infoComplementaria.email || data.email || '').trim(),
+            autorizaEnvioCorreos: infoComplementaria.autorizaEnvioCorreos !== false,
           }
         })
         .sort((a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto))
@@ -163,8 +178,86 @@ function CertificadosPage() {
     () => (selectedTipoId ? templatesByTipoId[selectedTipoId] || null : null),
     [selectedTipoId, templatesByTipoId],
   )
+  const effectiveYear = useMemo(
+    () => (canEditAcademicYear ? String(anio || '').trim() : String(CURRENT_YEAR)),
+    [anio, canEditAcademicYear, CURRENT_YEAR],
+  )
 
-  const handleGeneratePdf = async () => {
+  useEffect(() => {
+    let cancelled = false
+
+    const loadGradeStatus = async () => {
+      if (!userNitRut || !selectedStudentId || !effectiveYear) {
+        setStudentHasGrades(false)
+        setGradeStatusLoading(false)
+        return
+      }
+
+      try {
+        setGradeStatusLoading(true)
+        const snapshot = await getDocs(
+          query(
+            collection(db, 'boletin_notas'),
+            where('nitRut', '==', String(userNitRut).trim()),
+            where('studentId', '==', String(selectedStudentId).trim()),
+            where('anio', '==', effectiveYear),
+          ),
+        )
+
+        const hasGrades = snapshot.docs.some((docSnapshot) => {
+          const data = docSnapshot.data() || {}
+          const notasMap = data.notasByItemId && typeof data.notasByItemId === 'object' ? data.notasByItemId : {}
+          return Object.values(notasMap).some((entry) => !Number.isNaN(Number(entry?.promedio)))
+        })
+
+        if (!cancelled) {
+          setStudentHasGrades(hasGrades)
+        }
+      } catch {
+        if (!cancelled) {
+          setStudentHasGrades(false)
+        }
+      } finally {
+        if (!cancelled) {
+          setGradeStatusLoading(false)
+        }
+      }
+    }
+
+    loadGradeStatus()
+
+    return () => {
+      cancelled = true
+    }
+  }, [effectiveYear, selectedStudentId, userNitRut])
+
+  const canIssueCertificate = Boolean(selectedStudentId && effectiveYear && studentHasGrades)
+  const certificateBlockedMessage = selectedStudentId && !gradeStatusLoading && !studentHasGrades
+    ? `El estudiante aun no tiene calificaciones registradas para el año ${effectiveYear}.`
+    : ''
+
+  const requestEmailConfirmation = () => {
+    if (!canIssueCertificate) {
+      openModal('error', certificateBlockedMessage || 'El estudiante aun no esta calificado.')
+      return
+    }
+    if (!selectedStudentId) {
+      openModal('error', 'Selecciona un estudiante.')
+      return
+    }
+    if (!selectedStudent?.email) {
+      openModal('error', 'El estudiante no tiene un correo registrado.')
+      return
+    }
+    if (selectedStudent.autorizaEnvioCorreos === false) {
+      openModal('error', 'El estudiante no autoriza el envio de correos.')
+      return
+    }
+    setEmailConfirmOpen(true)
+  }
+
+  const handleGeneratePdf = async (deliveryMode = 'download', options = {}) => {
+    const skipEmailConfirmation = options.skipEmailConfirmation === true
     if (!canGenerate) {
       openModal('error', 'No tienes permisos para generar diplomas/certificados.')
       return
@@ -177,9 +270,27 @@ function CertificadosPage() {
       openModal('error', 'Selecciona un estudiante.')
       return
     }
-    const parsedYear = Number(String(anio).trim())
+    if (!canIssueCertificate) {
+      openModal('error', certificateBlockedMessage || 'El estudiante aun no esta calificado.')
+      return
+    }
+    if (deliveryMode === 'email') {
+      if (!selectedStudent?.email) {
+        openModal('error', 'El estudiante no tiene un correo registrado.')
+        return
+      }
+      if (selectedStudent.autorizaEnvioCorreos === false) {
+        openModal('error', 'El estudiante no autoriza el envio de correos.')
+        return
+      }
+      if (!skipEmailConfirmation) {
+        setEmailConfirmOpen(true)
+        return
+      }
+    }
+    const parsedYear = Number(effectiveYear)
     if (Number.isNaN(parsedYear) || parsedYear <= 0) {
-      openModal('error', 'El año lectivo no es valido.')
+      openModal('error', 'El año lectivo no es válido.')
       return
     }
     if (parsedYear > CURRENT_YEAR) {
@@ -209,7 +320,7 @@ function CertificadosPage() {
         studentDocumento: String(selectedStudent?.numeroDocumento || '').trim(),
         grado: String(selectedStudent?.grado || '').trim(),
         grupo: String(selectedStudent?.grupo || '').trim(),
-        anio: String(anio || '').trim(),
+        anio: effectiveYear,
         fecha: formatHumanDate(TODAY_ISO) || '',
         tipoCertificado: String(selectedTipo?.nombre || '').trim(),
       }
@@ -422,8 +533,17 @@ function CertificadosPage() {
       }
 
       const fileName = `${(selectedTipo?.nombre || 'certificado').toLowerCase().replace(/\s+/g, '_')}_${(selectedStudent?.nombreCompleto || 'estudiante').toLowerCase().replace(/\s+/g, '_')}.pdf`
-      await savePdfDocument(pdf, fileName, 'Certificado generado')
-      openModal('success', 'PDF generado correctamente.')
+      if (deliveryMode === 'email') {
+        await sendPdfByEmail(pdf, fileName, {
+          to: selectedStudent?.email || '',
+          subject: `${selectedTipo?.nombre || 'Certificado'} - ${selectedStudent?.nombreCompleto || 'Estudiante'}`,
+          body: `Adjunto encontraras el ${String(selectedTipo?.nombre || 'certificado').toLowerCase()} generado para ${selectedStudent?.nombreCompleto || 'el estudiante'}.`,
+        })
+        openModal('success', 'Correo preparado correctamente.')
+      } else {
+        await savePdfDocument(pdf, fileName, 'Certificado generado')
+        openModal('success', 'PDF generado correctamente.')
+      }
     } catch (error) {
       const message = error?.message || 'No fue posible generar el PDF.'
       openModal('error', message)
@@ -457,9 +577,19 @@ function CertificadosPage() {
           <h2>Certificados</h2>
           <p>Genera diplomas y certificados usando los datos del plantel.</p>
         </div>
-        <button type="button" className="button" onClick={handleGeneratePdf} disabled={generating || !canGenerate}>
-          {generating ? 'Generando...' : 'Descargar PDF'}
-        </button>
+        <div className="certificados-actions">
+          <button type="button" className="button" onClick={() => handleGeneratePdf('download')} disabled={generating || gradeStatusLoading || !canGenerate || !canIssueCertificate}>
+            {generating ? 'Generando...' : 'Descargar PDF'}
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={requestEmailConfirmation}
+            disabled={generating || gradeStatusLoading || !canGenerate || !canIssueCertificate}
+          >
+            {generating ? 'Preparando...' : 'Enviar al email'}
+          </button>
+        </div>
       </div>
 
       {!canGenerate && (
@@ -500,7 +630,8 @@ function CertificadosPage() {
               onChange={(e) => {
                 setAnio(sanitizeYearInput(e.target.value))
               }}
-              disabled={generating}
+              disabled={generating || !canEditAcademicYear}
+              readOnly={!canEditAcademicYear}
               inputMode="numeric"
               pattern="[0-9]*"
             />
@@ -519,9 +650,24 @@ function CertificadosPage() {
 
           {selectedTipoId && !selectedTemplate && (
             <p className="feedback">
-              No hay plantilla para este tipo. Se usara un formato basico. Configura una plantilla en el menu
+              No hay plantilla para este tipo. Se usará un formato básico. Configura una plantilla en el menu
               {' '}<strong>Plantillas de certificados</strong>.
             </p>
+          )}
+
+          {!canEditAcademicYear && (
+            <p className="feedback">
+              El año lectivo usa el valor actual ({CURRENT_YEAR}). Para cambiarlo necesitas el permiso
+              {' '}<strong>Modificar año lectivo</strong>.
+            </p>
+          )}
+
+          {gradeStatusLoading && selectedStudentId && (
+            <p className="feedback">Validando si el estudiante ya tiene calificaciones registradas...</p>
+          )}
+
+          {certificateBlockedMessage && (
+            <p className="feedback error">{certificateBlockedMessage} No se puede descargar ni enviar el PDF.</p>
           )}
         </div>
       </div>
@@ -532,9 +678,22 @@ function CertificadosPage() {
         type={modalType}
         message={modalMessage}
       />
+      <EmailDeliveryConfirmModal
+        open={emailConfirmOpen}
+        recipient={selectedStudent?.email || ''}
+        documentLabel={String(selectedTipo?.nombre || 'certificado').trim() || 'certificado'}
+        loading={generating}
+        onCancel={() => setEmailConfirmOpen(false)}
+        onConfirm={() => {
+          setEmailConfirmOpen(false)
+          void handleGeneratePdf('email', { skipEmailConfirmation: true })
+        }}
+      />
     </section>
   )
 }
 
 export default CertificadosPage
+
+
 

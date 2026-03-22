@@ -130,11 +130,23 @@ function NotificationSettingsPage() {
   }
 
   return (
-    <section>
-      <div className="students-header">
-        <div>
+    <section className="dashboard-module-shell settings-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Configuracion</span>
           <h2>Configuracion de notificaciones</h2>
           <p>Define que roles pueden enviar notificaciones a otros roles.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{roleOptions.length}</strong>
+          <span>Roles involucrados</span>
+          <small>{studentGroups.length} subgrupos de estudiantes disponibles</small>
+        </div>
+      </div>
+      <div className="students-header member-module-header">
+        <div className="member-module-header-copy">
+          <h3>Reglas de notificacion</h3>
+          <p>Controla el alcance de las notificaciones entre roles y grupos estudiantiles.</p>
         </div>
         <button type="button" className="button" onClick={saveSettings} disabled={!canManage || saving || loading}>
           {saving ? 'Guardando...' : 'Guardar configuracion'}

@@ -3,6 +3,8 @@ import { collection, doc, getDocs, query, serverTimestamp, where } from 'firebas
 import { db } from '../../firebase'
 import { setDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
+import AnnouncementDisplay from '../../components/AnnouncementDisplay'
+import { matchesAnnouncementAudience, shouldShowAnnouncementOnHome } from '../../utils/announcements'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom']
 
@@ -45,7 +47,7 @@ function buildCalendarCells(anchorDate) {
 }
 
 function DashboardHomePage() {
-  const { user, userNitRut } = useAuth()
+  const { user, userNitRut, userRole, userProfile } = useAuth()
   const tenantNitRut = String(userNitRut || '').trim()
   const canRespondAttendance = Boolean(user?.uid)
   const [events, setEvents] = useState([])
@@ -58,6 +60,7 @@ function DashboardHomePage() {
   const [pendingEvaluations, setPendingEvaluations] = useState(null)
   const [pendingTasks, setPendingTasks] = useState(null)
   const [misServicios, setMisServicios] = useState([])
+  const [anuncios, setAnuncios] = useState([])
 
   const calendarCells = useMemo(() => buildCalendarCells(anchorDate), [anchorDate])
   const monthLabel = useMemo(() => monthTitle(anchorDate), [anchorDate])
@@ -71,6 +74,7 @@ function DashboardHomePage() {
       setEventAttendanceByEventId({})
       setPendingEvaluations(null)
       setPendingTasks(null)
+      setAnuncios([])
       setLoading(false)
       return undefined
     }
@@ -83,6 +87,7 @@ function DashboardHomePage() {
           getDocs(query(collection(db, 'circulares'), where('nitRut', '==', tenantNitRut))),
           getDocs(query(collection(db, 'tareas'), where('nitRut', '==', tenantNitRut))),
           getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', tenantNitRut))),
+          getDocs(query(collection(db, 'anuncios'), where('nitRut', '==', tenantNitRut), where('status', '==', 'activo'))),
         ]
         if (canRespondAttendance && user?.uid) {
           queries.push(
@@ -105,10 +110,10 @@ function DashboardHomePage() {
         }
 
         const results = await Promise.all(queries)
-        const [eventsSnapshot, circularsSnapshot, tareasSnapshot, evaluacionesSnapshot] = results
-        const attendanceSnapshot = canRespondAttendance && user?.uid ? results[4] : null
-        const intentosSnapshot = canRespondAttendance && user?.uid ? results[5] : null
-        const serviciosSnapshot = canRespondAttendance && user?.uid ? results[6] : null
+        const [eventsSnapshot, circularsSnapshot, tareasSnapshot, evaluacionesSnapshot, anunciosSnapshot] = results
+        const attendanceSnapshot = canRespondAttendance && user?.uid ? results[5] : null
+        const intentosSnapshot = canRespondAttendance && user?.uid ? results[6] : null
+        const serviciosSnapshot = canRespondAttendance && user?.uid ? results[7] : null
 
         // Mis Servicios
         if (serviciosSnapshot) {
@@ -124,6 +129,22 @@ function DashboardHomePage() {
         } else {
           setMisServicios([])
         }
+
+        // Anuncios
+        const mappedAnuncios = anunciosSnapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter(
+            (a) =>
+              shouldShowAnnouncementOnHome(a) &&
+              (!a.expirationDate || a.expirationDate >= today) &&
+              matchesAnnouncementAudience(a, {
+                role: userRole,
+                grade: userProfile?.grado || '',
+                group: userProfile?.grupo || '',
+              }),
+          )
+          .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+        setAnuncios(mappedAnuncios)
 
         // Events
         const mappedEvents = eventsSnapshot.docs
@@ -189,7 +210,7 @@ function DashboardHomePage() {
 
     loadData()
     return undefined
-  }, [canRespondAttendance, tenantNitRut, user?.uid, today])
+  }, [canRespondAttendance, tenantNitRut, user?.uid, today, userProfile?.grado, userProfile?.grupo, userRole])
 
   const eventsByDay = useMemo(() => {
     const map = new Map()
@@ -202,6 +223,13 @@ function DashboardHomePage() {
   }, [events])
 
   const selectedDayEvents = selectedDay ? eventsByDay.get(selectedDay) || [] : []
+  const selectedDayLabel = selectedDay
+    ? new Date(`${selectedDay}T12:00:00`).toLocaleDateString('es-CO', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    })
+    : ''
 
   const previousMonth = () => {
     setAnchorDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
@@ -239,7 +267,19 @@ function DashboardHomePage() {
 
   return (
     <section className="home-grid">
-      <div className="home-left-card">
+      <div className="home-left-card home-left-card--hero">
+        <div className="home-hero-banner">
+          <div className="home-hero-copy">
+            <span className="home-hero-eyebrow">Panel principal</span>
+            <h2>Inicio</h2>
+            <p>Consulta lo más importante del día: tareas, evaluaciones, anuncios, circulares y eventos del plantel.</p>
+          </div>
+          <div className="home-hero-date-card">
+            <strong>{new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}</strong>
+            <span>{new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric' })}</span>
+            <small>{tenantNitRut || 'Sin plantel asociado'}</small>
+          </div>
+        </div>
 
 
         {/* ── Stat cards ── */}
@@ -272,11 +312,35 @@ function DashboardHomePage() {
             </div>
           </div>
         </div>
+
+        {/* ── Announcements (Panel) ── */}
+        {anuncios.length > 0 && (
+          <div className="home-announcements-panel">
+            <div className="home-section-heading">
+              <div>
+                <strong>Anuncios destacados</strong>
+                <p>Contenido importante visible desde el panel principal.</p>
+              </div>
+            </div>
+            {anuncios.map((anuncio) => (
+              <div key={anuncio.id} className="home-announcement-card">
+                <h4 style={{ margin: '0 0 10px 0', color: 'var(--primary)' }}>{anuncio.title}</h4>
+                <AnnouncementDisplay announcement={anuncio} variant="panel" />
+              </div>
+            ))}
+          </div>
+        )}
+
       </div>
 
       <div className="home-right-card">
         <div className="home-circulars">
-          <strong>Circulares</strong>
+          <div className="home-section-heading">
+            <div>
+              <strong>Circulares</strong>
+              <p>Acceso rapido a documentos institucionales vigentes.</p>
+            </div>
+          </div>
           {circulars.length === 0 && <p className="feedback">No hay circulares disponibles.</p>}
           {circulars.length > 0 && (
             <div className="home-circulars-list">
@@ -304,8 +368,11 @@ function DashboardHomePage() {
           )}
         </div>
         <div className="home-section-divider" aria-hidden="true" />
-        <div className="events-calendar-header">
-          <strong>Calendario de eventos</strong>
+        <div className="home-section-heading">
+          <div>
+            <strong>Calendario de eventos</strong>
+            <p>Explora el mes y consulta actividades programadas por fecha.</p>
+          </div>
         </div>
         <div className="events-calendar-header">
           <button type="button" className="button small secondary" onClick={previousMonth}>
@@ -341,7 +408,12 @@ function DashboardHomePage() {
         
         {/* Supplementary Services for Current User */}
         <div className="home-circulars">
-          <strong>Mis servicios complementarios</strong>
+          <div className="home-section-heading">
+            <div>
+              <strong>Mis servicios complementarios</strong>
+              <p>Servicios activos asociados al usuario actual.</p>
+            </div>
+          </div>
           {misServicios.length === 0 && <p className="feedback">No tienes servicios complementarios asignados.</p>}
           {misServicios.length > 0 && (
             <div className="home-circulars-list">
@@ -369,7 +441,7 @@ function DashboardHomePage() {
             <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={() => setSelectedDay('')}>
               x
             </button>
-            <h3>Eventos del {selectedDay}</h3>
+            <h3>Eventos del {selectedDayLabel || selectedDay}</h3>
             {selectedDayEvents.length === 0 && <p>No hay eventos para este dia.</p>}
             {selectedDayEvents.length > 0 && (
               <div className="events-day-list">

@@ -302,10 +302,20 @@ function UsersPage() {
   }, [search, users])
 
   return (
-    <section>
-      <h2>Usuarios</h2>
-      <p>Listado de usuarios de la plataforma.</p>
-      {!canViewUsers && <p className="feedback">No tienes permisos para ver usuarios.</p>}
+    <section className="users-page-shell dashboard-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Directorio institucional</span>
+          <h2>Usuarios</h2>
+          <p>Listado de usuarios de la plataforma.</p>
+          {!canViewUsers && <p className="feedback">No tienes permisos para ver usuarios.</p>}
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{users.length}</strong>
+          <span>Usuarios registrados</span>
+          <small>Gestiona roles, estado y accesos</small>
+        </div>
+      </div>
       <div className="students-toolbar">
 
         <input

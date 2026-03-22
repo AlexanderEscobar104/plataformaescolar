@@ -65,9 +65,19 @@ function ChangePasswordPage() {
   }
 
   return (
-    <section>
-      <h2>Cambiar clave</h2>
-      <p>Actualiza tu contrasena de acceso.</p>
+    <section className="security-page-shell dashboard-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Seguridad de acceso</span>
+          <h2>Cambiar clave</h2>
+          <p>Actualiza tu contrasena de acceso.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>Cuenta protegida</strong>
+          <span>Renueva tu clave cuando lo necesites</span>
+          <small>Se requiere tu contrasena actual</small>
+        </div>
+      </div>
 
       <form className="form role-form" onSubmit={handleSubmit}>
         <PasswordField
