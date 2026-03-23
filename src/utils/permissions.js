@@ -24,6 +24,21 @@ const PERMISSION_KEYS = {
   MEMBERS_ASPIRANTES_EDIT: 'members_aspirantes_edit',
   MEMBERS_ASPIRANTES_DELETE: 'members_aspirantes_delete',
   MEMBERS_ASPIRANTES_MANAGE: 'members_aspirantes_manage',
+  MEMBERS_ACUDIENTES_VIEW: 'members_acudientes_view',
+  MEMBERS_ACUDIENTES_CREATE: 'members_acudientes_create',
+  MEMBERS_ACUDIENTES_EDIT: 'members_acudientes_edit',
+  MEMBERS_ACUDIENTES_DELETE: 'members_acudientes_delete',
+  MEMBERS_ACUDIENTES_MANAGE: 'members_acudientes_manage',
+  ACUDIENTE_PORTAL_VIEW: 'acudiente_portal_view',
+  ACUDIENTE_BOLETINES_VIEW: 'acudiente_boletines_view',
+  ACUDIENTE_ASISTENCIA_VIEW: 'acudiente_asistencia_view',
+  ACUDIENTE_PERMISOS_CREATE: 'acudiente_permisos_create',
+  ACUDIENTE_TAREAS_VIEW: 'acudiente_tareas_view',
+  ACUDIENTE_HORARIO_VIEW: 'acudiente_horario_view',
+  ACUDIENTE_PAGOS_VIEW: 'acudiente_pagos_view',
+  ACUDIENTE_DOCUMENTOS_VIEW: 'acudiente_documentos_view',
+  ACUDIENTE_MESSAGES_SEND: 'acudiente_messages_send',
+  ACUDIENTE_NOTIFICATIONS_VIEW: 'acudiente_notifications_view',
   MEMBERS_DYNAMIC_MENUS_VIEW: 'members_dynamic_menus_view',
   EMPLEADOS_VIEW: 'empleados_view',
   EMPLEADOS_CREATE: 'empleados_create',
@@ -96,7 +111,7 @@ const PERMISSION_KEYS = {
   STORAGE_MANAGE: 'storage_manage',
 }
 
-const PROTECTED_ROLE_VALUES = ['administrador', 'directivo', 'profesor', 'estudiante', 'aspirante']
+const PROTECTED_ROLE_VALUES = ['administrador', 'directivo', 'profesor', 'estudiante', 'aspirante', 'acudiente']
 
 const ROLE_OPTIONS = [
   { value: 'administrador', label: 'Administrador' },
@@ -104,6 +119,7 @@ const ROLE_OPTIONS = [
   { value: 'profesor', label: 'Profesor' },
   { value: 'estudiante', label: 'Estudiante' },
   { value: 'aspirante', label: 'Aspirante' },
+  { value: 'acudiente', label: 'Acudiente' },
 ]
 
 /**
@@ -254,6 +270,90 @@ const PERMISSIONS_CATALOG = [
     key: PERMISSION_KEYS.MEMBERS_ASPIRANTES_DELETE,
     label: 'Eliminar aspirantes',
     description: 'Permite eliminar aspirantes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_ACUDIENTES_VIEW,
+    label: 'Ver acudientes',
+    description: 'Permite visualizar el modulo de acudientes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_ACUDIENTES_CREATE,
+    label: 'Crear acudientes',
+    description: 'Permite crear acudientes con acceso al portal.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_ACUDIENTES_EDIT,
+    label: 'Editar acudientes',
+    description: 'Permite editar la informacion de acudientes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.MEMBERS_ACUDIENTES_DELETE,
+    label: 'Eliminar acudientes',
+    description: 'Permite eliminar o desactivar acudientes.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.ACUDIENTE_PORTAL_VIEW,
+    label: 'Portal de acudiente',
+    description: 'Permite al acudiente ingresar a su portal y consultar informacion general.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.ACUDIENTE_BOLETINES_VIEW,
+    label: 'Acudiente ver boletines',
+    description: 'Permite al acudiente consultar boletines de estudiantes vinculados.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.ACUDIENTE_ASISTENCIA_VIEW,
+    label: 'Acudiente ver asistencia',
+    description: 'Permite al acudiente consultar asistencia e inasistencias.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.ACUDIENTE_PERMISOS_CREATE,
+    label: 'Acudiente solicitar permisos',
+    description: 'Permite al acudiente solicitar permisos para estudiantes vinculados.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.ACUDIENTE_TAREAS_VIEW,
+    label: 'Acudiente ver tareas',
+    description: 'Permite al acudiente consultar tareas del estudiante.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.ACUDIENTE_HORARIO_VIEW,
+    label: 'Acudiente ver horario',
+    description: 'Permite al acudiente consultar el horario del estudiante.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.ACUDIENTE_PAGOS_VIEW,
+    label: 'Acudiente ver pagos',
+    description: 'Permite al acudiente consultar pagos y estado de cuenta.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.ACUDIENTE_DOCUMENTOS_VIEW,
+    label: 'Acudiente ver documentos',
+    description: 'Permite al acudiente descargar boletines, certificados u otros documentos.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.ACUDIENTE_MESSAGES_SEND,
+    label: 'Acudiente enviar mensajes',
+    description: 'Permite al acudiente enviar mensajes a roles autorizados.',
+  },
+  {
+    group: 'Miembros',
+    key: PERMISSION_KEYS.ACUDIENTE_NOTIFICATIONS_VIEW,
+    label: 'Acudiente ver notificaciones',
+    description: 'Permite al acudiente visualizar notificaciones del portal.',
   },
   {
     group: 'Miembros',
@@ -671,6 +771,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
   profesor: [],
   estudiante: [],
   aspirante: [],
+  acudiente: [],
 }
 
 function normalizeRolePermissionsData(rawData) {

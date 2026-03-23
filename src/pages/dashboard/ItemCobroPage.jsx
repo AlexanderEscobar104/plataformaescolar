@@ -14,12 +14,69 @@ const ROLE_OPTIONS_BASE = [
   { id: '__aspirante', name: 'Aspirante', value: 'aspirante' },
 ]
 
-const EMPTY_FORM = {
-  item: '',
-  valor: '',
-  impuestoIds: [],
-  estado: 'activo',
-  rolesAplican: [],
+function getCurrentPeriodLabel() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  return `${year}-${month}`
+}
+
+function createEmptyForm() {
+  return {
+    item: '',
+    periodLabel: getCurrentPeriodLabel(),
+    valor: '',
+    impuestoIds: [],
+    estado: 'activo',
+    rolesAplican: [],
+    targetStudentSubgroups: [],
+  }
+}
+
+function sanitizePeriodInput(value) {
+  return String(value || '')
+    .replace(/[^\d-]/g, '')
+    .slice(0, 7)
+}
+
+function isValidPeriodLabel(value) {
+  return /^\d{4}-\d{2}$/.test(String(value || '').trim())
+}
+
+function getNextPeriodLabel(value) {
+  const normalized = String(value || '').trim()
+  if (!isValidPeriodLabel(normalized)) {
+    return getCurrentPeriodLabel()
+  }
+  const [yearPart, monthPart] = normalized.split('-')
+  const year = Number.parseInt(yearPart, 10)
+  const month = Number.parseInt(monthPart, 10)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return getCurrentPeriodLabel()
+  }
+  const nextYear = month === 12 ? year + 1 : year
+  const nextMonth = month === 12 ? 1 : month + 1
+  return `${nextYear}-${String(nextMonth).padStart(2, '0')}`
+}
+
+function normalizeDuplicateKeyValue(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function normalizeRolesForDuplicateCheck(roles) {
+  return Array.from(new Set(
+    (Array.isArray(roles) ? roles : [])
+      .map((role) => normalizeDuplicateKeyValue(role))
+      .filter(Boolean),
+  )).sort()
+}
+
+function normalizeSubgroupsForDuplicateCheck(subgroups) {
+  return Array.from(new Set(
+    (Array.isArray(subgroups) ? subgroups : [])
+      .map((subgroup) => String(subgroup || '').trim())
+      .filter(Boolean),
+  )).sort()
 }
 
 function ItemCobroPage() {
@@ -29,14 +86,17 @@ function ItemCobroPage() {
   const [rows, setRows] = useState([])
   const [impuestos, setImpuestos] = useState([])
   const [roleOptions, setRoleOptions] = useState(ROLE_OPTIONS_BASE)
+  const [studentGroups, setStudentGroups] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [search, setSearch] = useState('')
 
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [form, setForm] = useState(() => createEmptyForm())
   const [editingRow, setEditingRow] = useState(null)
   const [deleteRow, setDeleteRow] = useState(null)
+  const [copyRow, setCopyRow] = useState(null)
+  const [copyPeriodLabel, setCopyPeriodLabel] = useState(getCurrentPeriodLabel())
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState('success') // 'success' or 'error'
   const [modalMessage, setModalMessage] = useState('')
@@ -58,10 +118,11 @@ function ItemCobroPage() {
 
     setLoading(true)
     try {
-      const [itemsSnap, impuestosSnap, rolesSnap] = await Promise.all([
+      const [itemsSnap, impuestosSnap, rolesSnap, studentsSnap] = await Promise.all([
         getDocs(query(collection(db, 'items_cobro'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'impuestos'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut))),
+        getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut), where('role', '==', 'estudiante'))),
       ])
 
       const mappedItems = itemsSnap.docs
@@ -88,10 +149,34 @@ function ItemCobroPage() {
         ...ROLE_OPTIONS_BASE,
         ...customRoles.filter((role) => !ROLE_OPTIONS_BASE.some((base) => base.value === role.value)),
       ])
+
+      const groupMap = new Map()
+      studentsSnap.docs.forEach((docSnapshot) => {
+        const data = docSnapshot.data() || {}
+        const profile = data.profile || {}
+        const grade = String(profile.grado || '').trim() || '-'
+        const group = String(profile.grupo || '').trim() || '-'
+        const key = `${grade}-${group}`
+        if (!groupMap.has(key)) {
+          groupMap.set(key, {
+            key,
+            grade,
+            group,
+            label: `Grado ${grade} - Grupo ${group}`,
+          })
+        }
+      })
+      setStudentGroups(
+        Array.from(groupMap.values()).sort((a, b) => {
+          if (a.grade !== b.grade) return a.grade.localeCompare(b.grade, undefined, { numeric: true })
+          return a.group.localeCompare(b.group)
+        }),
+      )
     } catch {
       setRows([])
       setImpuestos([])
       setRoleOptions(ROLE_OPTIONS_BASE)
+      setStudentGroups([])
     } finally {
       setLoading(false)
     }
@@ -108,13 +193,41 @@ function ItemCobroPage() {
       const impuestosLabel = Array.isArray(item.impuestos)
         ? item.impuestos.map((imp) => `${imp?.nombre || ''} ${imp?.porcentaje ?? ''}`).join(' ')
         : (item.impuestoNombre || '')
-      const haystack = `${item.item || ''} ${item.valor ?? ''} ${impuestosLabel} ${item.estado || ''}`.toLowerCase()
+      const subgroupLabel = Array.isArray(item.targetStudentSubgroups) ? item.targetStudentSubgroups.join(' ') : ''
+      const haystack = `${item.item || ''} ${item.periodLabel || ''} ${item.valor ?? ''} ${impuestosLabel} ${item.estado || ''} ${subgroupLabel}`.toLowerCase()
       return haystack.includes(q)
     })
   }, [rows, search])
 
+  const hasDuplicateItemPeriod = useCallback((itemName, periodLabel, rolesAplican = [], targetStudentSubgroups = [], excludeId = '') => {
+    const normalizedRoles = normalizeRolesForDuplicateCheck(rolesAplican)
+    const normalizedSubgroups = normalizeSubgroupsForDuplicateCheck(targetStudentSubgroups)
+    return rows.some((row) => {
+      if (row?.id === excludeId) return false
+      if (normalizeDuplicateKeyValue(row?.item) !== normalizeDuplicateKeyValue(itemName)) return false
+      if (normalizeDuplicateKeyValue(row?.periodLabel) !== normalizeDuplicateKeyValue(periodLabel)) return false
+
+      const rowRoles = normalizeRolesForDuplicateCheck(row?.rolesAplican)
+      if (normalizedRoles.length === 0 || rowRoles.length === 0) {
+        return normalizedRoles.length === rowRoles.length
+      }
+
+      const overlappingRoles = normalizedRoles.filter((role) => rowRoles.includes(role))
+      if (overlappingRoles.length === 0) return false
+
+      if (!overlappingRoles.includes('estudiante')) return true
+
+      const rowSubgroups = normalizeSubgroupsForDuplicateCheck(row?.targetStudentSubgroups)
+      if (normalizedSubgroups.length === 0 || rowSubgroups.length === 0) {
+        return true
+      }
+
+      return normalizedSubgroups.some((subgroup) => rowSubgroups.includes(subgroup))
+    })
+  }, [rows])
+
   const resetForm = () => {
-    setForm(EMPTY_FORM)
+    setForm(createEmptyForm())
     setEditingRow(null)
   }
 
@@ -140,6 +253,18 @@ function ItemCobroPage() {
     })
   }
 
+  const toggleStudentSubgroup = (groupKey) => {
+    const normalized = String(groupKey || '').trim()
+    if (!normalized) return
+    setForm((prev) => {
+      const current = Array.isArray(prev.targetStudentSubgroups) ? prev.targetStudentSubgroups : []
+      const next = current.includes(normalized)
+        ? current.filter((item) => item !== normalized)
+        : [...current, normalized]
+      return { ...prev, targetStudentSubgroups: next }
+    })
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
 
@@ -151,6 +276,17 @@ function ItemCobroPage() {
     const itemName = form.item.trim()
     if (!itemName) {
       openModal('error', 'Debes ingresar el item.')
+      return
+    }
+
+    const periodLabel = String(form.periodLabel || '').trim()
+    if (!isValidPeriodLabel(periodLabel)) {
+      openModal('error', 'Debes ingresar un periodo valido con formato YYYY-MM.')
+      return
+    }
+
+    if (hasDuplicateItemPeriod(itemName, periodLabel, form.rolesAplican, form.targetStudentSubgroups, editingRow?.id || '')) {
+      openModal('error', 'Ya existe un item de cobro con ese tipo de item, periodo, rol y subgrupo aplicable.')
       return
     }
 
@@ -173,6 +309,7 @@ function ItemCobroPage() {
       setSaving(true)
       const payload = {
         item: itemName,
+        periodLabel,
         valor,
         impuestoIds: selectedImpuestos.map((imp) => imp.id),
         impuestos: selectedImpuestos.map((imp) => ({
@@ -186,6 +323,7 @@ function ItemCobroPage() {
         impuestoPorcentaje: selectedImpuestos[0] && Number.isFinite(selectedImpuestos[0].porcentaje) ? selectedImpuestos[0].porcentaje : null,
         estado: form.estado || 'activo',
         rolesAplican: Array.isArray(form.rolesAplican) ? form.rolesAplican : [],
+        targetStudentSubgroups: Array.isArray(form.targetStudentSubgroups) ? form.targetStudentSubgroups : [],
         updatedAt: serverTimestamp(),
         updatedByUid: user?.uid || '',
       }
@@ -232,6 +370,73 @@ function ItemCobroPage() {
     }
   }
 
+  const handleOpenCopyModal = (item) => {
+    setCopyRow(item)
+    setCopyPeriodLabel(getNextPeriodLabel(item?.periodLabel))
+  }
+
+  const handleCloseCopyModal = () => {
+    if (saving) return
+    setCopyRow(null)
+    setCopyPeriodLabel(getCurrentPeriodLabel())
+  }
+
+  const handleCopyRow = async () => {
+    if (!copyRow) return
+    if (!canManage) {
+      openModal('error', 'No tienes permisos para duplicar items de cobro.')
+      return
+    }
+
+    const periodLabel = String(copyPeriodLabel || '').trim()
+    if (!isValidPeriodLabel(periodLabel)) {
+      openModal('error', 'Debes ingresar un periodo valido con formato YYYY-MM.')
+      return
+    }
+
+    if (hasDuplicateItemPeriod(copyRow.item, periodLabel, copyRow.rolesAplican, copyRow.targetStudentSubgroups)) {
+      openModal('error', 'No se puede duplicar el registro porque ya existe ese tipo de item en el mismo periodo para uno de los roles o subgrupos seleccionados.')
+      return
+    }
+
+    try {
+      setSaving(true)
+      await addDocTracked(collection(db, 'items_cobro'), {
+        item: String(copyRow.item || '').trim(),
+        periodLabel,
+        valor: Number.isFinite(copyRow.valor) ? copyRow.valor : Number.parseFloat(String(copyRow.valor || 0).replace(',', '.')) || 0,
+        impuestoIds: Array.isArray(copyRow.impuestoIds)
+          ? copyRow.impuestoIds.filter(Boolean).map(String)
+          : (copyRow.impuestoId ? [String(copyRow.impuestoId)] : []),
+        impuestos: Array.isArray(copyRow.impuestos)
+          ? copyRow.impuestos.map((imp) => ({
+              id: String(imp?.id || '').trim(),
+              nombre: String(imp?.nombre || '').trim(),
+              porcentaje: Number.isFinite(imp?.porcentaje) ? imp.porcentaje : null,
+            }))
+          : [],
+        impuestoId: copyRow.impuestoId ? String(copyRow.impuestoId) : '',
+        impuestoNombre: String(copyRow.impuestoNombre || '').trim(),
+        impuestoPorcentaje: Number.isFinite(copyRow.impuestoPorcentaje) ? copyRow.impuestoPorcentaje : null,
+        estado: copyRow.estado || 'activo',
+        rolesAplican: Array.isArray(copyRow.rolesAplican) ? copyRow.rolesAplican : [],
+        targetStudentSubgroups: Array.isArray(copyRow.targetStudentSubgroups) ? copyRow.targetStudentSubgroups.filter(Boolean).map(String) : [],
+        nitRut: userNitRut,
+        createdAt: serverTimestamp(),
+        createdByUid: user?.uid || '',
+        updatedAt: serverTimestamp(),
+        updatedByUid: user?.uid || '',
+      })
+      handleCloseCopyModal()
+      openModal('success', 'Item de cobro copiado correctamente.')
+      await loadData()
+    } catch {
+      openModal('error', 'No fue posible copiar el item de cobro.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <section className="evaluations-page payments-page-shell">
       <div className="students-header">
@@ -267,6 +472,17 @@ function ItemCobroPage() {
                   type="text"
                   value={form.item}
                   onChange={(e) => setForm((p) => ({ ...p, item: e.target.value }))}
+                />
+              </label>
+              <label htmlFor="item-cobro-periodo">
+                Periodo
+                <input
+                  id="item-cobro-periodo"
+                  type="text"
+                  value={form.periodLabel}
+                  onChange={(e) => setForm((p) => ({ ...p, periodLabel: sanitizePeriodInput(e.target.value) }))}
+                  placeholder="2026-03"
+                  required
                 />
               </label>
               <label htmlFor="item-cobro-valor">
@@ -335,6 +551,31 @@ function ItemCobroPage() {
                 </small>
               </div>
 
+              {form.rolesAplican.includes('estudiante') && (
+                <div className="evaluation-field-full datos-cobro-roles-panel" style={{ marginTop: '2px' }}>
+                  <h4 className="datos-cobro-roles-title">Subgrupo de estudiantes</h4>
+                  <p className="datos-cobro-roles-subtitle">
+                    Si seleccionas subgrupos, el item solo aplicara a esos grados y grupos. Si no marcas ninguno, aplicara a todos los estudiantes.
+                  </p>
+                  <div className="datos-cobro-roles-list" style={{ maxHeight: '240px' }}>
+                    {studentGroups.length === 0 && <p className="feedback">No hay estudiantes con grado y grupo configurados.</p>}
+                    {studentGroups.map((groupItem) => (
+                      <label key={groupItem.key} className="datos-cobro-role-item">
+                        <input
+                          type="checkbox"
+                          checked={form.targetStudentSubgroups.includes(groupItem.key)}
+                          onChange={() => toggleStudentSubgroup(groupItem.key)}
+                        />
+                        <span>{groupItem.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <small className="datos-cobro-roles-count">
+                    Subgrupos seleccionados: {form.targetStudentSubgroups.length}
+                  </small>
+                </div>
+              )}
+
               <div className="modal-actions evaluation-field-full">
                 {editingRow && (
                   <button type="button" className="button secondary" onClick={resetForm}>
@@ -362,7 +603,7 @@ function ItemCobroPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por item, valor, impuesto o estado"
+            placeholder="Buscar por item, periodo, valor, impuesto o estado"
           />
         </div>
 
@@ -374,6 +615,7 @@ function ItemCobroPage() {
               <thead>
                 <tr>
                   <th>Item</th>
+                  <th>Periodo</th>
                   <th>Valor</th>
                   <th>Impuesto</th>
                   <th>Roles</th>
@@ -384,7 +626,7 @@ function ItemCobroPage() {
               <tbody>
                 {filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={canManage ? 6 : 5}>No hay items para mostrar.</td>
+                    <td colSpan={canManage ? 7 : 6}>No hay items para mostrar.</td>
                   </tr>
                 )}
                 {filteredRows.map((item) => {
@@ -401,9 +643,20 @@ function ItemCobroPage() {
                         ? `${item.impuestoNombre}${Number.isFinite(item.impuestoPorcentaje) ? ` (${item.impuestoPorcentaje}%)` : ''}`
                         : '-')
                   const rolesLabel = Array.isArray(item.rolesAplican) && item.rolesAplican.length > 0 ? item.rolesAplican.join(', ') : '-'
+                  const subgroupLabel = Array.isArray(item.targetStudentSubgroups) && item.targetStudentSubgroups.length > 0
+                    ? item.targetStudentSubgroups
+                        .map((groupKey) => studentGroups.find((groupItem) => groupItem.key === groupKey)?.label || groupKey)
+                        .join(', ')
+                    : (Array.isArray(item.rolesAplican) && item.rolesAplican.includes('estudiante') ? 'Todos los grados y grupos' : '-')
                   return (
                     <tr key={item.id}>
-                      <td data-label="Item">{item.item || '-'}</td>
+                      <td data-label="Item">
+                        <strong>{item.item || '-'}</strong>
+                        <div style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                          {subgroupLabel}
+                        </div>
+                      </td>
+                      <td data-label="Periodo">{item.periodLabel || '-'}</td>
                       <td data-label="Valor">{Number.isFinite(item.valor) ? item.valor : '-'}</td>
                       <td data-label="Impuesto">{impuestoLabel}</td>
                       <td data-label="Roles">{rolesLabel}</td>
@@ -415,22 +668,36 @@ function ItemCobroPage() {
                             className="button small icon-action-button"
                             onClick={() => {
                               setEditingRow(item)
-                            setForm({
-                              item: item.item || '',
-                              valor: item.valor ?? '',
-                              impuestoIds: Array.isArray(item.impuestoIds)
-                                ? item.impuestoIds.filter(Boolean).map(String)
-                                : (item.impuestoId ? [String(item.impuestoId)] : []),
-                              estado: item.estado || 'activo',
-                              rolesAplican: Array.isArray(item.rolesAplican) ? item.rolesAplican : [],
-                            })
-                            window.scrollTo({ top: 0, behavior: 'smooth' })
-                          }}
-                          title="Editar"
-                          aria-label="Editar item"
-                        >
+                              setForm({
+                                ...createEmptyForm(),
+                                item: item.item || '',
+                                periodLabel: item.periodLabel || getCurrentPeriodLabel(),
+                                valor: item.valor ?? '',
+                                impuestoIds: Array.isArray(item.impuestoIds)
+                                  ? item.impuestoIds.filter(Boolean).map(String)
+                                  : (item.impuestoId ? [String(item.impuestoId)] : []),
+                                estado: item.estado || 'activo',
+                                rolesAplican: Array.isArray(item.rolesAplican) ? item.rolesAplican : [],
+                                targetStudentSubgroups: Array.isArray(item.targetStudentSubgroups) ? item.targetStudentSubgroups.filter(Boolean).map(String) : [],
+                              })
+                              window.scrollTo({ top: 0, behavior: 'smooth' })
+                            }}
+                            title="Editar"
+                            aria-label="Editar item"
+                          >
                             <svg viewBox="0 0 24 24" aria-hidden="true">
                               <path d="m3 17.3 10.9-10.9 2.7 2.7L5.7 20H3v-2.7Zm17.7-10.1a1 1 0 0 0 0-1.4L18.2 3.3a1 1 0 0 0-1.4 0l-1.4 1.4 4.1 4.1 1.2-1.6Z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="button small secondary icon-action-button"
+                            onClick={() => handleOpenCopyModal(item)}
+                            title="Copiar registro"
+                            aria-label="Copiar registro"
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M9 9a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2V9Zm-6 6V5a2 2 0 0 1 2-2h8v2H5v10h2v2H5a2 2 0 0 1-2-2Z" />
                             </svg>
                           </button>
                           <button
@@ -470,6 +737,40 @@ function ItemCobroPage() {
                 {deleting ? 'Eliminando...' : 'Si, eliminar'}
               </button>
               <button type="button" className="button secondary" disabled={deleting} onClick={() => setDeleteRow(null)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {copyRow && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Copiar item de cobro">
+            <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={handleCloseCopyModal}>
+              x
+            </button>
+            <h3>Copiar registro</h3>
+            <p>
+              Se creara un nuevo registro para <strong>{copyRow.item || '-'}</strong>. Solo cambiara el periodo.
+            </p>
+            <label htmlFor="item-cobro-copy-periodo" className="item-cobro-copy-period-field">
+              Periodo
+              <input
+                id="item-cobro-copy-periodo"
+                type="text"
+                className="item-cobro-copy-period-input"
+                value={copyPeriodLabel}
+                onChange={(e) => setCopyPeriodLabel(sanitizePeriodInput(e.target.value))}
+                placeholder="2026-03"
+                required
+              />
+            </label>
+            <div className="modal-actions">
+              <button type="button" className="button" disabled={saving} onClick={handleCopyRow}>
+                {saving ? 'Creando...' : 'Crear'}
+              </button>
+              <button type="button" className="button secondary" disabled={saving} onClick={handleCloseCopyModal}>
                 Cancelar
               </button>
             </div>

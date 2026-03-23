@@ -183,6 +183,7 @@ function DashboardLayout() {
   const [configMenuOpen, setConfigMenuOpen] = useState(false)
   const [modalAnnouncementsQueue, setModalAnnouncementsQueue] = useState([])
   const [modalAnnouncementIndex, setModalAnnouncementIndex] = useState(0)
+  const isGuardianUser = userRole === 'acudiente'
 
   // Exclusive accordion: opening one group closes all others
   const openSidebarGroup = (group) => {
@@ -214,6 +215,11 @@ function DashboardLayout() {
   const canEditAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_EDIT)
   const canDeleteAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_DELETE)
   const canAccessAspirantesModule = canViewAspirantes || canCreateAspirantes || canEditAspirantes || canDeleteAspirantes
+  const canViewGuardians = hasPermission(PERMISSION_KEYS.MEMBERS_ACUDIENTES_VIEW)
+  const canCreateGuardians = hasPermission(PERMISSION_KEYS.MEMBERS_ACUDIENTES_CREATE)
+  const canEditGuardians = hasPermission(PERMISSION_KEYS.MEMBERS_ACUDIENTES_EDIT)
+  const canDeleteGuardians = hasPermission(PERMISSION_KEYS.MEMBERS_ACUDIENTES_DELETE)
+  const canAccessGuardiansModule = canViewGuardians || canCreateGuardians || canEditGuardians || canDeleteGuardians
   const canViewEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_VIEW)
   const canCreateEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_CREATE)
   const canEditEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_EDIT)
@@ -308,7 +314,7 @@ function DashboardLayout() {
       return undefined
     }
 
-    const base = new Set(['estudiante', 'profesor', 'aspirante', 'directivo'])
+    const base = new Set(['estudiante', 'profesor', 'aspirante', 'directivo', 'acudiente'])
     const rolesQuery = query(collection(db, 'roles'), where('nitRut', '==', userNitRut), where('status', '==', 'activo'))
     const unsub = onSnapshot(rolesQuery, (snap) => {
       const mapped = snap.docs
@@ -403,7 +409,8 @@ function DashboardLayout() {
       !canAccessStudentsModule &&
       !canAccessTeachersModule &&
       !canAccessDirectivosModule &&
-      !canAccessAspirantesModule
+      !canAccessAspirantesModule &&
+      !canAccessGuardiansModule
     ) {
       return []
     }
@@ -413,6 +420,7 @@ function DashboardLayout() {
     if (canAccessTeachersModule) items.push({ label: 'Profesores', to: '/dashboard/crear-profesores', Icon: TeachersIcon })
     if (canAccessAspirantesModule) items.push({ label: 'Aspirantes', to: '/dashboard/crear-aspirantes', Icon: StudentsIcon })
     if (canAccessDirectivosModule) items.push({ label: 'Directivos', to: '/dashboard/crear-directivos', Icon: DirectorsIcon })
+    if (canAccessGuardiansModule) items.push({ label: 'Acudientes', to: '/dashboard/acudientes', Icon: UserIcon })
 
     items.push(
       ...customMemberRoles
@@ -431,6 +439,7 @@ function DashboardLayout() {
     return items
   }, [
     canAccessAspirantesModule,
+    canAccessGuardiansModule,
     canAccessDirectivosModule,
     canAccessEmployeesModule,
     canAccessStudentsModule,
@@ -440,6 +449,25 @@ function DashboardLayout() {
     userRole,
     hasPermission,
   ])
+
+  const guardianPortalItems = useMemo(() => {
+    if (!isGuardianUser) return []
+
+    return [
+      { label: 'Inicio', to: '/dashboard/acudiente', Icon: HomeIcon },
+      { label: 'Mis estudiantes', to: '/dashboard/acudiente/estudiantes', Icon: StudentsIcon },
+      { label: 'Boletines', to: '/dashboard/acudiente/boletines', Icon: ReportsIcon },
+      { label: 'Asistencia', to: '/dashboard/acudiente/asistencia', Icon: AbsencesIcon },
+      { label: 'Inasistencias', to: '/dashboard/acudiente/inasistencias', Icon: AbsencesIcon },
+      { label: 'Tareas', to: '/dashboard/acudiente/tareas', Icon: TasksIcon },
+      { label: 'Horario', to: '/dashboard/acudiente/horario', Icon: ScheduleIcon },
+      { label: 'Pagos', to: '/dashboard/acudiente/pagos', Icon: PaymentsIcon },
+      { label: 'Mensajes', to: '/dashboard/acudiente/mensajes', Icon: MessageIcon },
+      { label: 'Notificaciones', to: '/dashboard/acudiente/notificaciones', Icon: BellIcon },
+      { label: 'Circulares', to: '/dashboard/acudiente/circulares', Icon: ReportsIcon },
+      { label: 'Mi perfil', to: '/dashboard/acudiente/perfil', Icon: UserIcon },
+    ]
+  }, [isGuardianUser])
 
   const reportItems = useMemo(() => {
     return canViewReports ? reportItemsBase : []
@@ -555,7 +583,9 @@ function DashboardLayout() {
     canManageStorage,
     hasPermission,
   ])
-  const allItems = [...mainItems, ...paymentsItems, ...academicItems, ...reportItems, ...memberItems, ...configItems]
+  const allItems = isGuardianUser
+    ? guardianPortalItems
+    : [...mainItems, ...paymentsItems, ...academicItems, ...reportItems, ...memberItems, ...configItems]
   const unreadInitializedRef = useRef(false)
   const todayEventsToastShownRef = useRef(false)
   const previousUnreadCountRef = useRef(0)
@@ -954,152 +984,171 @@ function DashboardLayout() {
           />
         </div>
         <nav className="sidebar-nav">
-           {mainItems.map((item) => (
-             <NavLink
-               key={item.to}
-               className={({ isActive }) =>
-                 `sidebar-link${isActive ? ' active' : ''}`
-               }
-               to={item.to}
-               end={item.to === '/dashboard'}
-               onClick={() => setMenuOpen(false)}
-             >
-               <item.Icon />
-               <span>{item.label}</span>
-             </NavLink>
-           ))}
-           <div className="sidebar-group sidebar-group-members">
-             <button
-               type="button"
-               className={`sidebar-group-toggle sidebar-group-toggle-members${academicMenuOpen ? ' open' : ''}`}
-              onClick={() => openSidebarGroup('academic')}
-              aria-expanded={academicMenuOpen}
-            >
-              <span className="sidebar-group-title">Academico</span>
-              <ChevronIcon />
-            </button>
-            <div className={`sidebar-submenu sidebar-submenu-members${academicMenuOpen ? ' open' : ''}`}>
-              {academicItems.map((item) => (
+          {isGuardianUser ? (
+            guardianPortalItems.map((item) => (
+              <NavLink
+                key={item.to}
+                className={({ isActive }) =>
+                  `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                }
+                to={item.to}
+                end={item.to === '/dashboard/acudiente'}
+                onClick={() => setMenuOpen(false)}
+              >
+                <item.Icon />
+                <span>{item.label}</span>
+              </NavLink>
+            ))
+          ) : (
+            <>
+              {mainItems.map((item) => (
                 <NavLink
                   key={item.to}
                   className={({ isActive }) =>
-                    `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                    `sidebar-link${isActive ? ' active' : ''}`
                   }
                   to={item.to}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <item.Icon />
-                  <span>{item.label}</span>
-                </NavLink>
-               ))}
-             </div>
-           </div>
-           {memberItems.length > 0 && (
-             <div className="sidebar-group sidebar-group-members">
-               <button
-                 type="button"
-                 className={`sidebar-group-toggle sidebar-group-toggle-members${memberMenuOpen ? ' open' : ''}`}
-                 onClick={() => openSidebarGroup('member')}
-                 aria-expanded={memberMenuOpen}
-               >
-                 <span className="sidebar-group-title">Gestion de Miembros</span>
-                 <ChevronIcon />
-               </button>
-               <div className={`sidebar-submenu sidebar-submenu-members${memberMenuOpen ? ' open' : ''}`}>
-                 {memberItems.map((item) => (
-                   <NavLink
-                     key={item.to}
-                     className={({ isActive }) =>
-                       `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
-                     }
-                     to={item.to}
-                     onClick={() => setMenuOpen(false)}
-                   >
-                     <item.Icon />
-                     <span>{item.label}</span>
-                   </NavLink>
-                 ))}
-               </div>
-             </div>
-           )}
-           <div className="sidebar-group sidebar-group-members">
-             <button
-               type="button"
-               className={`sidebar-group-toggle sidebar-group-toggle-members${paymentsMenuOpen ? ' open' : ''}`}
-               onClick={() => openSidebarGroup('payments')}
-               aria-expanded={paymentsMenuOpen}
-             >
-               <span className="sidebar-group-title">PAGOS</span>
-               <ChevronIcon />
-             </button>
-             <div className={`sidebar-submenu sidebar-submenu-members${paymentsMenuOpen ? ' open' : ''}`}>
-               {paymentsItems.map((item) => (
-                 <NavLink
-                   key={item.to}
-                   className={({ isActive }) =>
-                     `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
-                   }
-                   to={item.to}
-                   onClick={() => setMenuOpen(false)}
-                 >
-                   <item.Icon />
-                   <span>{item.label}</span>
-                 </NavLink>
-               ))}
-             </div>
-           </div>
-           <div className="sidebar-group sidebar-group-members">
-             <button
-               type="button"
-               className={`sidebar-group-toggle sidebar-group-toggle-members${reportMenuOpen ? ' open' : ''}`}
-               onClick={() => openSidebarGroup('report')}
-               aria-expanded={reportMenuOpen}
-             >
-               <span className="sidebar-group-title">Reportes</span>
-               <ChevronIcon />
-             </button>
-             <div className={`sidebar-submenu sidebar-submenu-members${reportMenuOpen ? ' open' : ''}`}>
-               {reportItems.map((item) => (
-                 <NavLink
-                   key={item.to}
-                   className={({ isActive }) =>
-                     `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
-                   }
-                   to={item.to}
-                   onClick={() => setMenuOpen(false)}
-                 >
-                   <item.Icon />
-                   <span>{item.label}</span>
-                 </NavLink>
-               ))}
-             </div>
-           </div>
-           <div className="sidebar-group sidebar-group-members">
-             <button
-               type="button"
-               className={`sidebar-group-toggle sidebar-group-toggle-members${configMenuOpen ? ' open' : ''}`}
-              onClick={() => openSidebarGroup('config')}
-              aria-expanded={configMenuOpen}
-            >
-              <span className="sidebar-group-title">Configuracion</span>
-              <ChevronIcon />
-            </button>
-            <div className={`sidebar-submenu sidebar-submenu-members${configMenuOpen ? ' open' : ''}`}>
-              {configItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  className={({ isActive }) =>
-                    `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
-                  }
-                  to={item.to}
+                  end={item.to === '/dashboard'}
                   onClick={() => setMenuOpen(false)}
                 >
                   <item.Icon />
                   <span>{item.label}</span>
                 </NavLink>
               ))}
-            </div>
-          </div>
+              <div className="sidebar-group sidebar-group-members">
+                <button
+                  type="button"
+                  className={`sidebar-group-toggle sidebar-group-toggle-members${academicMenuOpen ? ' open' : ''}`}
+                  onClick={() => openSidebarGroup('academic')}
+                  aria-expanded={academicMenuOpen}
+                >
+                  <span className="sidebar-group-title">Academico</span>
+                  <ChevronIcon />
+                </button>
+                <div className={`sidebar-submenu sidebar-submenu-members${academicMenuOpen ? ' open' : ''}`}>
+                  {academicItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      className={({ isActive }) =>
+                        `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                      }
+                      to={item.to}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <item.Icon />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+              {memberItems.length > 0 && (
+                <div className="sidebar-group sidebar-group-members">
+                  <button
+                    type="button"
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${memberMenuOpen ? ' open' : ''}`}
+                    onClick={() => openSidebarGroup('member')}
+                    aria-expanded={memberMenuOpen}
+                  >
+                    <span className="sidebar-group-title">Gestion de Miembros</span>
+                    <ChevronIcon />
+                  </button>
+                  <div className={`sidebar-submenu sidebar-submenu-members${memberMenuOpen ? ' open' : ''}`}>
+                    {memberItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        className={({ isActive }) =>
+                          `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                        }
+                        to={item.to}
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <item.Icon />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="sidebar-group sidebar-group-members">
+                <button
+                  type="button"
+                  className={`sidebar-group-toggle sidebar-group-toggle-members${paymentsMenuOpen ? ' open' : ''}`}
+                  onClick={() => openSidebarGroup('payments')}
+                  aria-expanded={paymentsMenuOpen}
+                >
+                  <span className="sidebar-group-title">PAGOS</span>
+                  <ChevronIcon />
+                </button>
+                <div className={`sidebar-submenu sidebar-submenu-members${paymentsMenuOpen ? ' open' : ''}`}>
+                  {paymentsItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      className={({ isActive }) =>
+                        `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                      }
+                      to={item.to}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <item.Icon />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+              <div className="sidebar-group sidebar-group-members">
+                <button
+                  type="button"
+                  className={`sidebar-group-toggle sidebar-group-toggle-members${reportMenuOpen ? ' open' : ''}`}
+                  onClick={() => openSidebarGroup('report')}
+                  aria-expanded={reportMenuOpen}
+                >
+                  <span className="sidebar-group-title">Reportes</span>
+                  <ChevronIcon />
+                </button>
+                <div className={`sidebar-submenu sidebar-submenu-members${reportMenuOpen ? ' open' : ''}`}>
+                  {reportItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      className={({ isActive }) =>
+                        `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                      }
+                      to={item.to}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <item.Icon />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+              <div className="sidebar-group sidebar-group-members">
+                <button
+                  type="button"
+                  className={`sidebar-group-toggle sidebar-group-toggle-members${configMenuOpen ? ' open' : ''}`}
+                  onClick={() => openSidebarGroup('config')}
+                  aria-expanded={configMenuOpen}
+                >
+                  <span className="sidebar-group-title">Configuracion</span>
+                  <ChevronIcon />
+                </button>
+                <div className={`sidebar-submenu sidebar-submenu-members${configMenuOpen ? ' open' : ''}`}>
+                  {configItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      className={({ isActive }) =>
+                        `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                      }
+                      to={item.to}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <item.Icon />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </nav>
         <button
           type="button"

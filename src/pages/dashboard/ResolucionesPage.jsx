@@ -8,6 +8,7 @@ import OperationStatusModal from '../../components/OperationStatusModal'
 
 const EMPTY_FORM = {
   resolucion: '',
+  prefijo: '',
   numeroDesde: '',
   numeroHasta: '',
   estado: 'activo',
@@ -63,7 +64,7 @@ function ResolucionesPage() {
     const q = search.trim().toLowerCase()
     if (!q) return rows
     return rows.filter((item) => {
-      const haystack = `${item.resolucion || ''} ${item.numeroDesde ?? ''} ${item.numeroHasta ?? ''} ${item.estado || ''}`.toLowerCase()
+      const haystack = `${item.resolucion || ''} ${item.prefijo || ''} ${item.numeroDesde ?? ''} ${item.numeroHasta ?? ''} ${item.estado || ''}`.toLowerCase()
       return haystack.includes(q)
     })
   }, [rows, search])
@@ -87,6 +88,12 @@ function ResolucionesPage() {
       return
     }
 
+    const prefijo = String(form.prefijo || '').trim().toUpperCase()
+    if (!prefijo) {
+      openModal('error', 'Debes ingresar el prefijo.')
+      return
+    }
+
     const numeroDesde = Number.parseInt(String(form.numeroDesde || '').trim(), 10)
     const numeroHasta = Number.parseInt(String(form.numeroHasta || '').trim(), 10)
     if (!Number.isInteger(numeroDesde) || numeroDesde < 0) {
@@ -106,6 +113,7 @@ function ResolucionesPage() {
       setSaving(true)
       const payload = {
         resolucion,
+        prefijo,
         numeroDesde,
         numeroHasta,
         estado: form.estado || 'activo',
@@ -187,6 +195,15 @@ function ResolucionesPage() {
                   onChange={(e) => setForm((p) => ({ ...p, resolucion: e.target.value }))}
                 />
               </label>
+              <label htmlFor="resolucion-prefijo">
+                Prefijo
+                <input
+                  id="resolucion-prefijo"
+                  type="text"
+                  value={form.prefijo}
+                  onChange={(e) => setForm((p) => ({ ...p, prefijo: String(e.target.value || '').toUpperCase() }))}
+                />
+              </label>
               <label htmlFor="resolucion-desde">
                 Numero desde
                 <input
@@ -261,6 +278,7 @@ function ResolucionesPage() {
               <thead>
                 <tr>
                   <th>Resolucion</th>
+                  <th>Prefijo</th>
                   <th>Numero desde</th>
                   <th>Numero hasta</th>
                   <th>Estado</th>
@@ -270,12 +288,13 @@ function ResolucionesPage() {
               <tbody>
                 {filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={canManage ? 5 : 4}>No hay resoluciones para mostrar.</td>
+                    <td colSpan={canManage ? 6 : 5}>No hay resoluciones para mostrar.</td>
                   </tr>
                 )}
                 {filteredRows.map((item) => (
                   <tr key={item.id}>
                     <td data-label="Resolucion">{item.resolucion || '-'}</td>
+                    <td data-label="Prefijo">{item.prefijo || '-'}</td>
                     <td data-label="Numero desde">{Number.isInteger(item.numeroDesde) ? item.numeroDesde : '-'}</td>
                     <td data-label="Numero hasta">{Number.isInteger(item.numeroHasta) ? item.numeroHasta : '-'}</td>
                     <td data-label="Estado">{item.estado || '-'}</td>
@@ -288,6 +307,7 @@ function ResolucionesPage() {
                             setEditingRow(item)
                             setForm({
                               resolucion: item.resolucion || '',
+                              prefijo: item.prefijo || '',
                               numeroDesde: item.numeroDesde ?? '',
                               numeroHasta: item.numeroHasta ?? '',
                               estado: item.estado || 'activo',

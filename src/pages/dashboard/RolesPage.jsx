@@ -13,6 +13,7 @@ const PROTECTED_ROWS = [
   { id: '__profesor', name: 'Profesor', status: 'activo', isProtected: true },
   { id: '__estudiante', name: 'Estudiante', status: 'activo', isProtected: true },
   { id: '__aspirante', name: 'Aspirante', status: 'activo', isProtected: true },
+  { id: '__acudiente', name: 'Acudiente', status: 'activo', isProtected: true },
 ]
 
 function RolesPage() {

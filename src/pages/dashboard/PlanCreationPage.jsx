@@ -23,6 +23,7 @@ const MODULE_OPTIONS = [
   { key: 'crear-profesores', label: 'Crear profesores', route: '/dashboard/crear-profesores' },
   { key: 'crear-directivos', label: 'Crear directivos', route: '/dashboard/crear-directivos' },
   { key: 'crear-aspirantes', label: 'Crear aspirantes', route: '/dashboard/crear-aspirantes' },
+  { key: 'acudientes', label: 'Acudientes', route: '/dashboard/acudientes' },
   { key: 'eventos', label: 'Eventos', route: '/dashboard/eventos' },
   { key: 'circulares', label: 'Circulares', route: '/dashboard/circulares' },
   { key: 'crear-asignaturas', label: 'Crear asignaturas', route: '/dashboard/crear-asignaturas' },

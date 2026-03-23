@@ -9,6 +9,7 @@ import OperationStatusModal from '../../components/OperationStatusModal'
 const EMPTY_FORM = {
   nombreCaja: '',
   resolucionId: '',
+  numeroRecibo: '',
   estado: 'activo',
 }
 
@@ -72,7 +73,7 @@ function CajaPage() {
     const q = search.trim().toLowerCase()
     if (!q) return rows
     return rows.filter((item) => {
-      const haystack = `${item.nombreCaja || ''} ${item.resolucionNombre || item.resolucion || ''} ${item.numeroDesde ?? ''} ${item.numeroHasta ?? ''} ${item.estado || ''}`.toLowerCase()
+      const haystack = `${item.nombreCaja || ''} ${item.resolucionNombre || item.resolucion || ''} ${item.resolucionPrefijo || item.prefijo || ''} ${item.numeroRecibo ?? ''} ${item.numeroDesde ?? ''} ${item.numeroHasta ?? ''} ${item.estado || ''}`.toLowerCase()
       return haystack.includes(q)
     })
   }, [rows, search])
@@ -102,16 +103,25 @@ function CajaPage() {
       return
     }
 
+    const numeroRecibo = Number.parseInt(String(form.numeroRecibo || '').trim(), 10)
+    if (!Number.isInteger(numeroRecibo) || numeroRecibo < 0) {
+      openModal('error', 'Debes ingresar un numero de recibo valido.')
+      return
+    }
+
     try {
       setSaving(true)
       const payload = {
         nombreCaja,
         resolucionId: selectedResolucion.id,
         resolucionNombre: String(selectedResolucion.resolucion || '').trim(),
+        resolucionPrefijo: String(selectedResolucion.prefijo || '').trim().toUpperCase(),
         // Backwards compat: keep same keys previously used around the app.
         resolucion: String(selectedResolucion.resolucion || '').trim(),
         numeroDesde: selectedResolucion.numeroDesde ?? null,
         numeroHasta: selectedResolucion.numeroHasta ?? null,
+        numeroRecibo,
+        currentReceiptNumber: numeroRecibo > 0 ? numeroRecibo - 1 : 0,
         estado: form.estado || 'activo',
         updatedAt: serverTimestamp(),
         updatedByUid: user?.uid || '',
@@ -201,7 +211,17 @@ function CajaPage() {
                 <select
                   id="resolucion-caja"
                   value={form.resolucionId}
-                  onChange={(e) => setForm((p) => ({ ...p, resolucionId: e.target.value }))}
+                  onChange={(e) => {
+                    const selectedId = e.target.value
+                    const selectedResolucion = resoluciones.find((item) => item.id === selectedId) || null
+                    setForm((p) => ({
+                      ...p,
+                      resolucionId: selectedId,
+                      numeroRecibo: selectedResolucion && Number.isInteger(selectedResolucion.numeroDesde)
+                        ? String(selectedResolucion.numeroDesde)
+                        : '',
+                    }))
+                  }}
                 >
                   <option value="">Seleccionar resolucion</option>
                   {resoluciones.map((r) => (
@@ -217,6 +237,18 @@ function CajaPage() {
                     No hay resoluciones registradas. Crea una en Configuracion &gt; Resoluciones.
                   </small>
                 )}
+              </label>
+              <label htmlFor="numero-recibo-caja">
+                Numero recibo
+                <input
+                  id="numero-recibo-caja"
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  value={form.numeroRecibo}
+                  onChange={(e) => setForm((p) => ({ ...p, numeroRecibo: e.target.value }))}
+                />
               </label>
               <label htmlFor="estado-caja">
                 Estado
@@ -269,6 +301,8 @@ function CajaPage() {
                 <tr>
                   <th>Nombre caja</th>
                   <th>Resolucion</th>
+                  <th>Prefijo</th>
+                  <th>Numero recibo</th>
                   <th>Numero desde</th>
                   <th>Numero hasta</th>
                   <th>Estado</th>
@@ -278,13 +312,15 @@ function CajaPage() {
               <tbody>
                 {filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={canManage ? 6 : 5}>No hay cajas para mostrar.</td>
+                    <td colSpan={canManage ? 8 : 7}>No hay cajas para mostrar.</td>
                   </tr>
                 )}
                 {filteredRows.map((item) => (
                   <tr key={item.id}>
                     <td data-label="Nombre caja">{item.nombreCaja || '-'}</td>
                     <td data-label="Resolucion">{item.resolucionNombre || item.resolucion || '-'}</td>
+                    <td data-label="Prefijo">{item.resolucionPrefijo || item.prefijo || '-'}</td>
+                    <td data-label="Numero recibo">{Number.isInteger(item.numeroRecibo) ? item.numeroRecibo : '-'}</td>
                     <td data-label="Numero desde">{Number.isInteger(item.numeroDesde) ? item.numeroDesde : '-'}</td>
                     <td data-label="Numero hasta">{Number.isInteger(item.numeroHasta) ? item.numeroHasta : '-'}</td>
                     <td data-label="Estado">{item.estado || '-'}</td>
@@ -301,6 +337,7 @@ function CajaPage() {
                             setForm({
                               nombreCaja: item.nombreCaja || '',
                               resolucionId: selectedId,
+                              numeroRecibo: item.numeroRecibo ?? (Number.isInteger(item.currentReceiptNumber) ? item.currentReceiptNumber + 1 : (item.numeroDesde ?? '')),
                               estado: item.estado || 'activo',
                             })
                             window.scrollTo({ top: 0, behavior: 'smooth' })

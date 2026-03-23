@@ -43,6 +43,23 @@ import AspiranteEditPage from './pages/dashboard/AspiranteEditPage'
 import EmpleadosPage from './pages/dashboard/EmpleadosPage'
 import EmpleadoRegistrationPage from './pages/dashboard/EmpleadoRegistrationPage'
 import EmpleadoEditPage from './pages/dashboard/EmpleadoEditPage'
+import GuardiansListPage from './pages/dashboard/GuardiansListPage'
+import GuardianRegistrationPage from './pages/dashboard/GuardianRegistrationPage'
+import GuardianEditPage from './pages/dashboard/GuardianEditPage'
+import StudentGuardianLinksPage from './pages/dashboard/StudentGuardianLinksPage'
+import GuardianHomePage from './pages/dashboard/GuardianHomePage'
+import GuardianStudentsPage from './pages/dashboard/GuardianStudentsPage'
+import GuardianBoletinesPage from './pages/dashboard/GuardianBoletinesPage'
+import GuardianAttendancePage from './pages/dashboard/GuardianAttendancePage'
+import GuardianAbsencesPage from './pages/dashboard/GuardianAbsencesPage'
+import GuardianMessagesPage from './pages/dashboard/GuardianMessagesPage'
+import GuardianNotificationsPage from './pages/dashboard/GuardianNotificationsPage'
+import GuardianCircularsPage from './pages/dashboard/GuardianCircularsPage'
+import GuardianPaymentsPage from './pages/dashboard/GuardianPaymentsPage'
+import GuardianProfilePage from './pages/dashboard/GuardianProfilePage'
+import GuardianTasksPage from './pages/dashboard/GuardianTasksPage'
+import GuardianSchedulePage from './pages/dashboard/GuardianSchedulePage'
+import PaymentsPage from './pages/dashboard/PaymentsPage'
 import TipoEmpleadosPage from './pages/dashboard/TipoEmpleadosPage'
 import DatosCobroPage from './pages/dashboard/DatosCobroPage'
 import ImpuestosPage from './pages/dashboard/ImpuestosPage'
@@ -238,6 +255,23 @@ function App() {
           <Route path="crear-aspirantes" element={<AspirantesListPage />} />
           <Route path="crear-aspirantes/nuevo" element={<AspiranteRegistrationPage />} />
           <Route path="crear-aspirantes/editar/:aspiranteId" element={<AspiranteEditPage />} />
+          <Route path="acudientes" element={<GuardiansListPage />} />
+          <Route path="acudientes/nuevo" element={<GuardianRegistrationPage />} />
+          <Route path="acudientes/editar/:guardianId" element={<GuardianEditPage />} />
+          <Route path="acudientes/:guardianId/vinculos" element={<StudentGuardianLinksPage />} />
+          <Route path="acudiente" element={<GuardianHomePage />} />
+          <Route path="acudiente/estudiantes" element={<GuardianStudentsPage />} />
+          <Route path="acudiente/boletines" element={<GuardianBoletinesPage />} />
+          <Route path="acudiente/asistencia" element={<GuardianAttendancePage />} />
+          <Route path="acudiente/inasistencias" element={<GuardianAbsencesPage />} />
+          <Route path="acudiente/permisos" element={<Navigate to="/dashboard/acudiente/inasistencias" replace />} />
+          <Route path="acudiente/tareas" element={<GuardianTasksPage />} />
+          <Route path="acudiente/horario" element={<GuardianSchedulePage />} />
+          <Route path="acudiente/pagos" element={<GuardianPaymentsPage />} />
+          <Route path="acudiente/mensajes" element={<GuardianMessagesPage />} />
+          <Route path="acudiente/notificaciones" element={<GuardianNotificationsPage />} />
+          <Route path="acudiente/circulares" element={<GuardianCircularsPage />} />
+          <Route path="acudiente/perfil" element={<GuardianProfilePage />} />
           <Route
             path="inasistencias"
             element={<InasistenciasPage />}
@@ -248,12 +282,7 @@ function App() {
           />
           <Route
             path="pagos"
-            element={
-              <SimpleModulePage
-                title="Registrar pagos"
-                description="Controla pagos de matricula, mensualidades y otros conceptos."
-              />
-            }
+            element={<PaymentsPage />}
           />
           <Route
             path="reportes"

@@ -58,14 +58,14 @@ function ServiciosComplementariosPage() {
   const [form, setForm] = useState({
     servicio: '',
     valor: '',
-    impuestoId: '',
+    impuestoIds: [],
     estado: 'activo',
     fechaVencimiento: '',
     usuariosAsignados: [],
   })
 
   const resetForm = () => {
-    setForm({ servicio: '', valor: '', impuestoId: '', estado: 'activo', fechaVencimiento: '', usuariosAsignados: [] })
+    setForm({ servicio: '', valor: '', impuestoIds: [], estado: 'activo', fechaVencimiento: '', usuariosAsignados: [] })
     setEditingId(null)
     setFeedback('')
     setUserSearch('')
@@ -107,10 +107,13 @@ function ServiciosComplementariosPage() {
   const filteredServicios = servicios.filter((s) => {
     const q = search.trim().toLowerCase()
     if (!q) return true
+    const impuestosLabel = Array.isArray(s.impuestos) && s.impuestos.length > 0
+      ? s.impuestos.map((imp) => `${imp?.nombre || ''} ${imp?.porcentaje ?? ''}`).join(' ')
+      : String(s.impuestoNombre || '')
     return (
       (s.servicio || '').toLowerCase().includes(q) ||
       String(s.valor || '').includes(q) ||
-      String(s.impuestoNombre || '').toLowerCase().includes(q) ||
+      impuestosLabel.toLowerCase().includes(q) ||
       (s.estado || '').toLowerCase().includes(q)
     )
   })
@@ -120,7 +123,11 @@ function ServiciosComplementariosPage() {
       const userIds = Array.isArray(item.usuariosAsignados) ? item.usuariosAsignados : []
       const impuestoLabel = item.impuestoNombre
         ? `${item.impuestoNombre}${Number.isFinite(item.impuestoPorcentaje) ? ` (${item.impuestoPorcentaje}%)` : ''}`
-        : '-'
+        : Array.isArray(item.impuestos) && item.impuestos.length > 0
+          ? item.impuestos
+              .map((imp) => `${imp?.nombre || 'Impuesto'}${Number.isFinite(imp?.porcentaje) ? ` (${imp.porcentaje}%)` : ''}`)
+              .join(', ')
+          : '-'
 
       if (userIds.length === 0) {
         return [{
@@ -202,12 +209,23 @@ function ServiciosComplementariosPage() {
     }))
   }
 
+  const toggleImpuesto = (impuestoId) => {
+    setForm((prev) => ({
+      ...prev,
+      impuestoIds: prev.impuestoIds.includes(impuestoId)
+        ? prev.impuestoIds.filter((id) => id !== impuestoId)
+        : [...prev.impuestoIds, impuestoId],
+    }))
+  }
+
   const handleEdit = (item) => {
     setEditingId(item.id)
     setForm({
       servicio: item.servicio || '',
       valor: item.valor !== undefined ? String(item.valor) : '',
-      impuestoId: String(item.impuestoId || ''),
+      impuestoIds: Array.isArray(item.impuestoIds)
+        ? item.impuestoIds.filter(Boolean).map(String)
+        : (item.impuestoId ? [String(item.impuestoId)] : []),
       estado: item.estado || 'activo',
       fechaVencimiento: item.fechaVencimiento || '',
       usuariosAsignados: Array.isArray(item.usuariosAsignados) ? item.usuariosAsignados : [],
@@ -282,13 +300,19 @@ function ServiciosComplementariosPage() {
     try {
       setSaving(true)
 
-      const selectedImpuesto = impuestos.find((imp) => imp.id === form.impuestoId) || null
+      const selectedImpuestos = impuestos.filter((imp) => form.impuestoIds.includes(imp.id))
       const basePayload = {
         servicio: trimmedServicio,
         valor: parsedValor,
-        impuestoId: selectedImpuesto ? selectedImpuesto.id : '',
-        impuestoNombre: selectedImpuesto ? String(selectedImpuesto.tipoImpuesto || '').trim() : '',
-        impuestoPorcentaje: selectedImpuesto && Number.isFinite(selectedImpuesto.porcentaje) ? selectedImpuesto.porcentaje : null,
+        impuestoIds: selectedImpuestos.map((imp) => imp.id),
+        impuestos: selectedImpuestos.map((imp) => ({
+          id: imp.id,
+          nombre: String(imp.tipoImpuesto || '').trim(),
+          porcentaje: Number.isFinite(imp.porcentaje) ? imp.porcentaje : null,
+        })),
+        impuestoId: selectedImpuestos[0] ? selectedImpuestos[0].id : '',
+        impuestoNombre: selectedImpuestos[0] ? String(selectedImpuestos[0].tipoImpuesto || '').trim() : '',
+        impuestoPorcentaje: selectedImpuestos[0] && Number.isFinite(selectedImpuestos[0].porcentaje) ? selectedImpuestos[0].porcentaje : null,
         estado: form.estado,
         fechaVencimiento: form.fechaVencimiento,
         nitRut: userNitRut,
@@ -403,24 +427,31 @@ function ServiciosComplementariosPage() {
                 placeholder="0"
               />
             </label>
-            <label htmlFor="servicio-impuesto">
-              Impuesto
-              <select
-                id="servicio-impuesto"
-                value={form.impuestoId}
-                onChange={(e) => setForm((prev) => ({ ...prev, impuestoId: e.target.value }))}
-                disabled={loadingImpuestos}
-              >
-                <option value="">{loadingImpuestos ? 'Cargando impuestos...' : 'Sin impuesto'}</option>
+            <div className="evaluation-field-full" style={{ marginTop: '2px' }}>
+              <strong>Impuestos ({form.impuestoIds.length} seleccionados)</strong>
+              <div className="teacher-checkbox-list" style={{ marginTop: '8px', maxHeight: '220px', overflowY: 'auto' }}>
+                {loadingImpuestos && <p className="feedback">Cargando impuestos...</p>}
+                {!loadingImpuestos && impuestos.filter((imp) => String(imp.estado || 'activo').toLowerCase() !== 'inactivo').length === 0 && (
+                  <p className="feedback">No hay impuestos activos.</p>
+                )}
                 {impuestos
                   .filter((imp) => String(imp.estado || 'activo').toLowerCase() !== 'inactivo')
                   .map((imp) => (
-                    <option key={imp.id} value={imp.id}>
-                      {String(imp.tipoImpuesto || 'Impuesto').trim() || 'Impuesto'}{Number.isFinite(imp.porcentaje) ? ` (${imp.porcentaje}%)` : ''}
-                    </option>
+                    <label key={imp.id} className="teacher-checkbox-item">
+                      <input
+                        type="checkbox"
+                        style={{ width: '16px', minWidth: '16px', height: '16px' }}
+                        checked={form.impuestoIds.includes(imp.id)}
+                        onChange={() => toggleImpuesto(imp.id)}
+                      />
+                      <span style={{ flex: 1 }}>
+                        {String(imp.tipoImpuesto || 'Impuesto').trim() || 'Impuesto'}
+                        {Number.isFinite(imp.porcentaje) ? ` (${imp.porcentaje}%)` : ''}
+                      </span>
+                    </label>
                   ))}
-              </select>
-            </label>
+              </div>
+            </div>
             <label htmlFor="servicio-fecha">
               Fecha de vencimiento
               <input
@@ -571,9 +602,13 @@ function ServiciosComplementariosPage() {
                       })()
                     : '-'
 
-                  const impuestoLabel = item.impuestoNombre
-                    ? `${item.impuestoNombre}${Number.isFinite(item.impuestoPorcentaje) ? ` (${item.impuestoPorcentaje}%)` : ''}`
-                    : '-'
+                  const impuestoLabel = Array.isArray(item.impuestos) && item.impuestos.length > 0
+                    ? item.impuestos
+                        .map((imp) => `${imp?.nombre || 'Impuesto'}${Number.isFinite(imp?.porcentaje) ? ` (${imp.porcentaje}%)` : ''}`)
+                        .join(', ')
+                    : item.impuestoNombre
+                      ? `${item.impuestoNombre}${Number.isFinite(item.impuestoPorcentaje) ? ` (${item.impuestoPorcentaje}%)` : ''}`
+                      : '-'
 
                   return (
                     <tr key={`${item.id}-${user?.id || 'none'}-${idx}`}>

@@ -15,6 +15,139 @@ const INVALID_TOKEN_ERRORS = new Set([
   'messaging/registration-token-not-registered',
 ]);
 const cachedMailers = new Map();
+const STUDENT_BILLING_COLLECTION = 'estado_cuenta_estudiantes';
+
+function normalizeTenantNit(value) {
+  return String(value || '').trim();
+}
+
+async function getAuthenticatedUserProfile(context) {
+  if (!context.auth?.uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Debes iniciar sesion para ejecutar esta accion.');
+  }
+
+  const userSnapshot = await db.collection('users').doc(context.auth.uid).get();
+  if (!userSnapshot.exists) {
+    throw new functions.https.HttpsError('not-found', 'No fue posible identificar el usuario autenticado.');
+  }
+
+  const userData = userSnapshot.data() || {};
+  const nitRut = normalizeTenantNit(userData.nitRut || userData.profile?.nitRut || '');
+  if (!nitRut) {
+    throw new functions.https.HttpsError('failed-precondition', 'El usuario no tiene un plantel asociado.');
+  }
+
+  return {
+    uid: context.auth.uid,
+    nitRut,
+    displayName:
+      String(userData.name || '').trim() ||
+      String(context.auth.token?.name || '').trim() ||
+      String(context.auth.token?.email || '').trim() ||
+      'Sistema',
+    userData,
+  };
+}
+
+function resolveChargeStatus(charge) {
+  const explicitStatus = String(charge?.status || '').trim().toLowerCase();
+  if (['pagado', 'abonado', 'anulado'].includes(explicitStatus)) return explicitStatus;
+
+  const balance = Number(charge?.balance);
+  if (Number.isFinite(balance) && balance <= 0) return 'pagado';
+
+  const dueDate = String(charge?.dueDate || '').trim();
+  if (!dueDate) return explicitStatus || 'pendiente';
+
+  const due = new Date(`${dueDate}T00:00:00`);
+  const today = new Date();
+  const todayDateOnly = new Date(
+    `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}T00:00:00`,
+  );
+  if (!Number.isNaN(due.getTime()) && due < todayDateOnly) return 'vencido';
+
+  return explicitStatus || 'pendiente';
+}
+
+function classifyReminderType(charge, baseDate = new Date()) {
+  const status = resolveChargeStatus(charge);
+  if (status === 'pagado' || status === 'anulado') return '';
+
+  const dueDate = String(charge?.dueDate || '').trim();
+  if (!dueDate) return '';
+
+  const due = new Date(`${dueDate}T00:00:00`);
+  if (Number.isNaN(due.getTime())) return '';
+
+  const today = new Date(
+    `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, '0')}-${String(baseDate.getDate()).padStart(2, '0')}T00:00:00`,
+  );
+  const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return 'vencido';
+  if (diffDays <= 3) return 'por_vencer';
+  return '';
+}
+
+function buildReminderKey(chargeId, reminderType, isoDate) {
+  return [String(chargeId || '').trim(), String(reminderType || '').trim(), String(isoDate || '').trim()]
+    .filter(Boolean)
+    .join('__');
+}
+
+function buildReminderDocId(chargeId, guardianUid, reminderType, isoDate) {
+  return [
+    String(chargeId || '').trim(),
+    String(guardianUid || '').trim(),
+    String(reminderType || '').trim(),
+    String(isoDate || '').trim(),
+  ]
+    .filter(Boolean)
+    .join('__');
+}
+
+function formatCurrency(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return '$0';
+
+  try {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `$${Math.round(amount)}`;
+  }
+}
+
+function formatHumanDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const parsed = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return raw;
+
+  try {
+    return new Intl.DateTimeFormat('es-CO', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(parsed);
+  } catch {
+    return raw;
+  }
+}
+
+function buildReceiptOfficialNumber(cashBox, nextNumber) {
+  const prefix = String(cashBox?.resolucionPrefijo || cashBox?.prefijo || cashBox?.receiptPrefix || '')
+    .trim()
+    .toUpperCase();
+  const safePrefix = prefix || String(cashBox?.nombreCaja || 'CAJA')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '-');
+  return `${safePrefix}${String(nextNumber).padStart(6, '0')}`;
+}
 
 function readMailerConfigValue(key) {
   const upperKey = String(key || '').trim().toUpperCase();
@@ -455,4 +588,372 @@ exports.sendDocumentEmail = functions.https.onCall(async (data, context) => {
 
   return { success: true };
 });
+
+exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName } = await getAuthenticatedUserProfile(context);
+  const transactionId = String(data?.transactionId || '').trim();
+
+  if (!transactionId) {
+    throw new functions.https.HttpsError('invalid-argument', 'transactionId es obligatorio.');
+  }
+
+  const result = await db.runTransaction(async (transaction) => {
+    const transactionRef = db.collection('payments_transactions').doc(transactionId);
+    const receiptRef = db.collection('payments_receipts').doc(transactionId);
+    const [transactionSnap, existingReceiptSnap] = await Promise.all([
+      transaction.get(transactionRef),
+      transaction.get(receiptRef),
+    ]);
+
+    if (!transactionSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'La transaccion de pago no existe.');
+    }
+
+    const transactionData = transactionSnap.data() || {};
+    const transactionNit = normalizeTenantNit(transactionData.nitRut || '');
+    if (transactionNit && transactionNit !== nitRut) {
+      throw new functions.https.HttpsError('permission-denied', 'La transaccion no pertenece a tu plantel.');
+    }
+
+    if (existingReceiptSnap.exists) {
+      const existingReceipt = existingReceiptSnap.data() || {};
+      return {
+        officialNumber: String(existingReceipt.officialNumber || '').trim(),
+        consecutiveNumber: Number(existingReceipt.consecutiveNumber) || 0,
+        cajaNombre: String(existingReceipt.cajaNombre || '').trim(),
+        resolucionNombre: String(existingReceipt.resolucionNombre || '').trim(),
+        alreadyIssued: true,
+      };
+    }
+
+    const chargeId = String(transactionData.chargeId || '').trim();
+    if (!chargeId) {
+      throw new functions.https.HttpsError('failed-precondition', 'La transaccion no tiene un cargo asociado.');
+    }
+
+    const chargeRef = db.collection(STUDENT_BILLING_COLLECTION).doc(chargeId);
+    const billingRef = db.collection('configuracion').doc(`datos_cobro_${nitRut}`);
+    const [chargeSnap, billingSnap] = await Promise.all([
+      transaction.get(chargeRef),
+      transaction.get(billingRef),
+    ]);
+
+    if (!chargeSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'El cargo asociado a la transaccion no existe.');
+    }
+    if (!billingSnap.exists) {
+      throw new functions.https.HttpsError('failed-precondition', 'No existe configuracion de cobro para este plantel.');
+    }
+
+    const chargeData = chargeSnap.data() || {};
+    const chargeNit = normalizeTenantNit(chargeData.nitRut || '');
+    if (chargeNit && chargeNit !== nitRut) {
+      throw new functions.https.HttpsError('permission-denied', 'El cargo asociado no pertenece a tu plantel.');
+    }
+
+    const billingData = billingSnap.data() || {};
+    const cajaId = String(billingData.cajaId || '').trim();
+    if (!cajaId) {
+      throw new functions.https.HttpsError('failed-precondition', 'No hay una caja configurada para emitir recibos.');
+    }
+
+    const cashBoxRef = db.collection('cajas').doc(cajaId);
+    const cashBoxSnap = await transaction.get(cashBoxRef);
+    if (!cashBoxSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'La caja configurada no existe.');
+    }
+
+    const cashBox = cashBoxSnap.data() || {};
+    if (normalizeTenantNit(cashBox.nitRut || '') !== nitRut) {
+      throw new functions.https.HttpsError('permission-denied', 'La caja configurada no pertenece a tu plantel.');
+    }
+
+    const resolucionId = String(cashBox.resolucionId || '').trim();
+    if (!resolucionId) {
+      throw new functions.https.HttpsError('failed-precondition', 'La caja no tiene una resolucion asociada.');
+    }
+
+    const resolutionRef = db.collection('resoluciones').doc(resolucionId);
+    const resolutionSnap = await transaction.get(resolutionRef);
+    if (!resolutionSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'La resolucion asociada a la caja no existe.');
+    }
+
+    const resolution = resolutionSnap.data() || {};
+    const resolutionPrefix = String(
+      cashBox.resolucionPrefijo ||
+      resolution.prefijo ||
+      cashBox.prefijo ||
+      ''
+    ).trim().toUpperCase();
+    const start = Number(cashBox.numeroDesde ?? resolution.numeroDesde ?? 0) || 0;
+    const end = Number(cashBox.numeroHasta ?? resolution.numeroHasta ?? 0) || 0;
+    const configuredNextNumber = Number(cashBox.numeroRecibo);
+    const legacyCurrentNumber = Number(cashBox.currentReceiptNumber);
+    const nextNumber = Number.isFinite(configuredNextNumber) && configuredNextNumber > 0
+      ? configuredNextNumber
+      : (Number.isFinite(legacyCurrentNumber) ? legacyCurrentNumber + 1 : start);
+
+    if (end > 0 && nextNumber > end) {
+      throw new functions.https.HttpsError('failed-precondition', 'La resolucion de la caja ya no tiene numeracion disponible.');
+    }
+
+    const officialNumber = buildReceiptOfficialNumber({
+      ...cashBox,
+      resolucionPrefijo: resolutionPrefix,
+    }, nextNumber);
+    transaction.set(
+      receiptRef,
+      {
+        nitRut,
+        chargeId,
+        transactionId,
+        recipientUid: String(chargeData.recipientUid || transactionData.recipientUid || chargeData.studentUid || transactionData.studentUid || '').trim(),
+        recipientName: String(chargeData.recipientName || transactionData.recipientName || chargeData.studentName || transactionData.studentName || '').trim(),
+        recipientDocument: String(chargeData.recipientDocument || transactionData.recipientDocument || chargeData.studentDocument || '').trim(),
+        recipientRole: String(chargeData.recipientRole || transactionData.recipientRole || 'estudiante').trim().toLowerCase(),
+        studentUid: String(chargeData.studentUid || transactionData.studentUid || '').trim(),
+        studentName: String(chargeData.studentName || transactionData.studentName || '').trim(),
+        studentDocument: String(chargeData.studentDocument || '').trim(),
+        conceptName: String(chargeData.conceptName || '').trim(),
+        periodLabel: String(chargeData.periodLabel || '').trim(),
+        amount: Number(transactionData.amount) || 0,
+        method: String(transactionData.method || '').trim(),
+        reference: String(transactionData.reference || '').trim(),
+        cajaId,
+        cajaNombre: String(cashBox.nombreCaja || '').trim(),
+        resolucionId,
+        resolucionPrefijo: resolutionPrefix,
+        resolucionNombre:
+          String(cashBox.resolucionNombre || '').trim() ||
+          String(cashBox.resolucion || '').trim() ||
+          String(resolution.resolucion || resolution.nombre || '').trim(),
+        officialNumber,
+        consecutiveNumber: nextNumber,
+        status: 'activo',
+        annulledAt: null,
+        annulledByUid: '',
+        annulledByName: '',
+        issuedByUid: uid,
+        issuedByName: displayName,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    transaction.update(cashBoxRef, {
+      numeroRecibo: nextNumber + 1,
+      currentReceiptNumber: nextNumber,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return {
+      officialNumber,
+      consecutiveNumber: nextNumber,
+      cajaNombre: String(cashBox.nombreCaja || '').trim(),
+      resolucionNombre:
+        String(cashBox.resolucionNombre || '').trim() ||
+        String(cashBox.resolucion || '').trim() ||
+        String(resolution.resolucion || resolution.nombre || '').trim(),
+      alreadyIssued: false,
+    };
+  });
+
+  return result;
+});
+
+exports.annulPaymentReceipt = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName } = await getAuthenticatedUserProfile(context);
+  const transactionId = String(data?.transactionId || '').trim();
+
+  if (!transactionId) {
+    throw new functions.https.HttpsError('invalid-argument', 'transactionId es obligatorio.');
+  }
+
+  const result = await db.runTransaction(async (transaction) => {
+    const transactionRef = db.collection('payments_transactions').doc(transactionId);
+    const receiptRef = db.collection('payments_receipts').doc(transactionId);
+    const transactionSnap = await transaction.get(transactionRef);
+
+    if (!transactionSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'La transaccion de pago no existe.');
+    }
+
+    const transactionData = transactionSnap.data() || {};
+    const transactionNit = normalizeTenantNit(transactionData.nitRut || '');
+    if (transactionNit && transactionNit !== nitRut) {
+      throw new functions.https.HttpsError('permission-denied', 'La transaccion no pertenece a tu plantel.');
+    }
+
+    const chargeId = String(transactionData.chargeId || '').trim();
+    if (!chargeId) {
+      throw new functions.https.HttpsError('failed-precondition', 'La transaccion no tiene un cargo asociado.');
+    }
+
+    const chargeRef = db.collection(STUDENT_BILLING_COLLECTION).doc(chargeId);
+    const [chargeSnap, receiptSnap] = await Promise.all([
+      transaction.get(chargeRef),
+      transaction.get(receiptRef),
+    ]);
+
+    if (!chargeSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'El cargo asociado a la transaccion no existe.');
+    }
+
+    const chargeData = chargeSnap.data() || {};
+    const chargeNit = normalizeTenantNit(chargeData.nitRut || '');
+    if (chargeNit && chargeNit !== nitRut) {
+      throw new functions.https.HttpsError('permission-denied', 'El cargo asociado no pertenece a tu plantel.');
+    }
+
+    const chargeStatus = String(chargeData.status || '').trim().toLowerCase();
+    const receiptData = receiptSnap.exists ? receiptSnap.data() || {} : {};
+    const receiptStatus = String(receiptData.status || 'activo').trim().toLowerCase();
+    const alreadyAnnulled = chargeStatus === 'anulado' && (!receiptSnap.exists || receiptStatus === 'anulado');
+    if (alreadyAnnulled) {
+      return { success: true, alreadyAnnulled: true };
+    }
+
+    transaction.set(
+      chargeRef,
+      {
+        status: 'anulado',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    if (receiptSnap.exists) {
+      transaction.set(
+        receiptRef,
+        {
+          status: 'anulado',
+          annulledAt: admin.firestore.FieldValue.serverTimestamp(),
+          annulledByUid: uid,
+          annulledByName: displayName,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
+
+    return { success: true, alreadyAnnulled: false };
+  });
+
+  return result;
+});
+
+exports.sendScheduledPaymentReminders = functions.pubsub
+  .schedule('0 7 * * *')
+  .timeZone('America/Bogota')
+  .onRun(async () => {
+    const today = new Date();
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    const [chargesSnap, linksSnap, usersSnap, remindersSnap] = await Promise.all([
+      db.collection(STUDENT_BILLING_COLLECTION).get(),
+      db.collection('student_guardians').where('status', '==', 'activo').get(),
+      db.collection('users').get(),
+      db.collection('payments_reminders').where('date', '==', todayIso).get(),
+    ]);
+
+    const usersById = new Map();
+    usersSnap.docs.forEach((docSnapshot) => {
+      usersById.set(docSnapshot.id, docSnapshot.data() || {});
+    });
+
+    const guardianLinksByStudent = new Map();
+    linksSnap.docs.forEach((docSnapshot) => {
+      const data = docSnapshot.data() || {};
+      const studentUid = String(data.studentUid || '').trim();
+      if (!studentUid) return;
+      const current = guardianLinksByStudent.get(studentUid) || [];
+      current.push({ id: docSnapshot.id, ...data });
+      guardianLinksByStudent.set(studentUid, current);
+    });
+
+    const sentReminderIds = new Set(remindersSnap.docs.map((docSnapshot) => String(docSnapshot.id || '').trim()).filter(Boolean));
+
+    let sentCount = 0;
+    for (const chargeDoc of chargesSnap.docs) {
+      const charge = { id: chargeDoc.id, ...chargeDoc.data() };
+      const reminderType = classifyReminderType(charge, today);
+      if (!reminderType) continue;
+
+      const guardians = guardianLinksByStudent.get(String(charge.studentUid || '').trim()) || [];
+      if (guardians.length === 0) continue;
+
+      const chargeNit = normalizeTenantNit(charge.nitRut || '');
+      const title = reminderType === 'vencido' ? 'Cobro vencido' : 'Cobro proximo a vencer';
+      const body =
+        reminderType === 'vencido'
+          ? `El cargo ${charge.conceptName || 'sin concepto'} de ${charge.studentName || 'estudiante'} se encuentra vencido. Saldo pendiente: ${formatCurrency(charge.balance)}.`
+          : `El cargo ${charge.conceptName || 'sin concepto'} de ${charge.studentName || 'estudiante'} vence el ${formatHumanDate(charge.dueDate)}. Saldo pendiente: ${formatCurrency(charge.balance)}.`;
+
+      for (const guardian of guardians) {
+        const guardianUid = String(guardian.guardianUid || '').trim();
+        if (!guardianUid) continue;
+
+        const reminderDocId = buildReminderDocId(charge.id, guardianUid, reminderType, todayIso);
+        if (sentReminderIds.has(reminderDocId)) continue;
+
+        const guardianUser = usersById.get(guardianUid) || {};
+        const guardianName =
+          String(guardian.guardianName || '').trim() ||
+          String(guardianUser.name || '').trim() ||
+          String(guardianUser.email || '').trim() ||
+          'Acudiente';
+
+        const batch = db.batch();
+        batch.set(db.collection('payments_reminders').doc(reminderDocId), {
+          nitRut: chargeNit,
+          reminderKey: buildReminderKey(charge.id, reminderType, todayIso),
+          reminderType,
+          date: todayIso,
+          chargeId: charge.id,
+          studentUid: String(charge.studentUid || '').trim(),
+          guardianUid,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          source: 'scheduled_function',
+        });
+        batch.set(db.collection('notifications').doc(), {
+          nitRut: chargeNit,
+          recipientUid: guardianUid,
+          recipientName: guardianName,
+          recipientRole: 'acudiente',
+          title,
+          body,
+          read: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdByUid: 'system',
+          createdByName: 'Sistema automatico',
+          targetRoles: ['acudiente'],
+          route: '/dashboard/acudiente/pagos',
+        });
+        batch.set(db.collection('messages').doc(), {
+          nitRut: chargeNit,
+          senderUid: 'system',
+          senderName: 'Sistema automatico',
+          recipientUid: guardianUid,
+          recipientName: guardianName,
+          subject: title,
+          body,
+          read: false,
+          attachments: [],
+          threadId: null,
+          parentMessageId: null,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          contextStudentUid: String(charge.studentUid || '').trim(),
+          contextStudentName: String(charge.studentName || '').trim(),
+        });
+        await batch.commit();
+
+        sentReminderIds.add(reminderDocId);
+        sentCount += 1;
+      }
+    }
+
+    console.log('sendScheduledPaymentReminders completed', { date: todayIso, sentCount });
+    return null;
+  });
 
