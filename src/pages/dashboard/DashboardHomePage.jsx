@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { collection, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { setDocTracked } from '../../services/firestoreProxy'
@@ -48,6 +49,7 @@ function buildCalendarCells(anchorDate) {
 
 function DashboardHomePage() {
   const { user, userNitRut, userRole, userProfile } = useAuth()
+  const navigate = useNavigate()
   const tenantNitRut = String(userNitRut || '').trim()
   const canRespondAttendance = Boolean(user?.uid)
   const [events, setEvents] = useState([])
@@ -186,9 +188,18 @@ function DashboardHomePage() {
         }
 
         // Pending tasks: status === 'pendiente'
-        const pendingTasksCount = tareasSnapshot.docs.filter(
-          (d) => (d.data().status || 'pendiente') === 'pendiente'
-        ).length
+        const pendingTasksCount = tareasSnapshot.docs.filter((d) => {
+          const data = d.data()
+          if ((data.status || 'pendiente') !== 'pendiente') return false
+          if (userRole === 'estudiante' || userRole === 'aspirante') {
+            const grade = String(data.grade || '').trim()
+            const group = String(data.group || '').trim().toUpperCase()
+            const myGrade = String(userProfile?.grado || '').trim()
+            const myGroup = String(userProfile?.grupo || '').trim().toUpperCase()
+            if (grade !== myGrade || group !== myGroup) return false
+          }
+          return true
+        }).length
         setPendingTasks(pendingTasksCount)
 
         // Pending evaluations: dueDate >= today and user has no completed attempt
@@ -200,7 +211,16 @@ function DashboardHomePage() {
         const pendingEvalsCount = evaluacionesSnapshot.docs.filter((d) => {
           const data = d.data()
           const dueDate = data.dueDate || ''
-          return dueDate >= today && !completedEvalIds.has(d.id)
+          if (dueDate < today || completedEvalIds.has(d.id)) return false
+          
+          if (userRole === 'estudiante' || userRole === 'aspirante') {
+            const grade = String(data.grade || '').trim()
+            const group = String(data.group || '').trim().toUpperCase()
+            const myGrade = String(userProfile?.grado || '').trim()
+            const myGroup = String(userProfile?.grupo || '').trim().toUpperCase()
+            if (grade !== myGrade || group !== myGroup) return false
+          }
+          return true
         }).length
         setPendingEvaluations(pendingEvalsCount)
       } finally {
@@ -268,49 +288,134 @@ function DashboardHomePage() {
   return (
     <section className="home-grid">
       <div className="home-left-card home-left-card--hero">
-        <div className="home-hero-banner">
-          <div className="home-hero-copy">
-            <span className="home-hero-eyebrow">Panel principal</span>
-            <h2>Inicio</h2>
-            <p>Consulta lo más importante del día: tareas, evaluaciones, anuncios, circulares y eventos del plantel.</p>
+
+        {/* ── Hero banner ── */}
+        <div style={{
+          background: 'linear-gradient(135deg, var(--primary, #1e40af) 0%, #3b82f6 60%, #0ea5e9 100%)',
+          borderRadius: '16px',
+          padding: '28px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+          marginBottom: '20px',
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          {/* Decorative circles */}
+          <div style={{ position: 'absolute', top: '-30px', right: '140px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.07)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', bottom: '-20px', right: '60px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', pointerEvents: 'none' }} />
+
+          {/* Copy */}
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '6px' }}>
+              Panel principal
+            </span>
+            <h2 style={{ margin: '0 0 8px 0', color: '#fff', fontSize: '1.75rem', fontWeight: 800, lineHeight: 1.1 }}>Inicio</h2>
+            <p style={{ margin: 0, color: 'rgba(255,255,255,0.8)', fontSize: '0.875rem', maxWidth: '340px', lineHeight: 1.5 }}>
+              Consulta lo más importante del día: tareas, evaluaciones, anuncios, circulares y eventos del plantel.
+            </p>
           </div>
-          <div className="home-hero-date-card">
-            <strong>{new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}</strong>
-            <span>{new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric' })}</span>
-            <small>{tenantNitRut || 'Sin plantel asociado'}</small>
+
+          {/* Date card */}
+          <div style={{
+            background: 'rgba(255,255,255,0.15)',
+            backdropFilter: 'blur(8px)',
+            borderRadius: '14px',
+            padding: '14px 18px',
+            textAlign: 'center',
+            border: '1px solid rgba(255,255,255,0.25)',
+            flexShrink: 0,
+          }}>
+            <strong style={{ display: 'block', fontSize: '1.3rem', fontWeight: 800, color: '#fff', lineHeight: 1 }}>
+              {new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}
+            </strong>
+            <span style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)', marginTop: '4px', textTransform: 'capitalize' }}>
+              {new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric' })}
+            </span>
+            <small style={{ display: 'block', fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', marginTop: '6px', fontWeight: 500 }}>
+              {tenantNitRut || 'Sin plantel'}
+            </small>
           </div>
         </div>
 
-
         {/* ── Stat cards ── */}
-        <div className="home-stat-cards">
-          <div className="home-stat-card home-stat-card--eval">
-            <div className="home-stat-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4" />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '8px' }}>
+          {/* Evaluaciones */}
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/evaluaciones')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '14px',
+              background: 'var(--card-bg, #fff)',
+              border: '1px solid var(--border-color, #e5e7eb)',
+              borderRadius: '14px',
+              padding: '16px 18px',
+              cursor: 'pointer',
+              textAlign: 'left',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              transition: 'transform 0.15s, box-shadow 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(59,130,246,0.15)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)' }}
+          >
+            <div style={{
+              width: '48px', height: '48px', borderRadius: '12px', flexShrink: 0,
+              background: 'linear-gradient(135deg, #1e40af, #3b82f6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4" />
               </svg>
             </div>
-            <div className="home-stat-body">
-              <span className="home-stat-label">Evaluaciones pendientes</span>
-              <span className="home-stat-value">
-                {pendingEvaluations === null ? '...' : pendingEvaluations}
-              </span>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '2px' }}>Evaluaciones pendientes</div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1e40af', lineHeight: 1 }}>
+                {pendingEvaluations === null ? '—' : pendingEvaluations}
+              </div>
             </div>
-          </div>
+            <svg style={{ marginLeft: 'auto', opacity: 0.3, flexShrink: 0 }} width="16" height="16" viewBox="0 0 24 24" fill="var(--text-muted)">
+              <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            </svg>
+          </button>
 
-          <div className="home-stat-card home-stat-card--task">
-            <div className="home-stat-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1h-2zm3 18H5V8h14v11z" />
+          {/* Tareas */}
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/tareas')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '14px',
+              background: 'var(--card-bg, #fff)',
+              border: '1px solid var(--border-color, #e5e7eb)',
+              borderRadius: '14px',
+              padding: '16px 18px',
+              cursor: 'pointer',
+              textAlign: 'left',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              transition: 'transform 0.15s, box-shadow 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(245,158,11,0.18)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)' }}
+          >
+            <div style={{
+              width: '48px', height: '48px', borderRadius: '12px', flexShrink: 0,
+              background: 'linear-gradient(135deg, #d97706, #f59e0b)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                <path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1h-2zm3 18H5V8h14v11z" />
               </svg>
             </div>
-            <div className="home-stat-body">
-              <span className="home-stat-label">Tareas pendientes</span>
-              <span className="home-stat-value">
-                {pendingTasks === null ? '...' : pendingTasks}
-              </span>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '2px' }}>Tareas pendientes</div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#d97706', lineHeight: 1 }}>
+                {pendingTasks === null ? '—' : pendingTasks}
+              </div>
             </div>
-          </div>
+            <svg style={{ marginLeft: 'auto', opacity: 0.3, flexShrink: 0 }} width="16" height="16" viewBox="0 0 24 24" fill="var(--text-muted)">
+              <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            </svg>
+          </button>
         </div>
 
         {/* ── Announcements (Panel) ── */}
@@ -416,20 +521,87 @@ function DashboardHomePage() {
           </div>
           {misServicios.length === 0 && <p className="feedback">No tienes servicios complementarios asignados.</p>}
           {misServicios.length > 0 && (
-            <div className="home-circulars-list">
-              {misServicios.map((item) => (
-                <div key={item.id} className="home-circular-item" style={{ borderLeft: '3px solid var(--accent)' }}>
-                  <div style={{ paddingLeft: '8px' }}>
-                    <strong>{item.servicio || 'Servicio'}</strong>
-                    <p style={{ marginTop: '4px', marginBottom: '4px', color: 'var(--text-color)' }}>
-                      <strong>Valor:</strong> {Number(item.valor).toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}
-                    </p>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                      Vence: {item.fechaVencimiento ? new Date(item.fechaVencimiento + 'T12:00:00Z').toLocaleDateString() : 'Sin fecha'}
-                    </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginTop: '8px' }}>
+              {misServicios.map((item) => {
+                const vence = item.fechaVencimiento ? new Date(item.fechaVencimiento + 'T12:00:00Z') : null
+                const today = new Date()
+                const daysLeft = vence ? Math.ceil((vence - today) / (1000 * 60 * 60 * 24)) : null
+                const isExpiringSoon = daysLeft !== null && daysLeft <= 30 && daysLeft > 0
+                const isExpired = daysLeft !== null && daysLeft <= 0
+                const chipColor = isExpired ? '#ef4444' : isExpiringSoon ? '#f59e0b' : 'var(--accent)'
+                const chipBg = isExpired ? '#fef2f2' : isExpiringSoon ? '#fffbeb' : 'var(--accent-light, #e0f2fe)'
+
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      background: 'var(--card-bg, #fff)',
+                      border: '1px solid var(--border-color, #e5e7eb)',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                      transition: 'box-shadow 0.2s',
+                    }}
+                  >
+                    {/* Icon + name */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{
+                        width: '36px', height: '36px', borderRadius: '10px',
+                        background: 'linear-gradient(135deg, var(--primary, #2563eb), var(--accent, #0ea5e9))',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                        </svg>
+                      </div>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-color)', lineHeight: 1.2 }}>
+                        {item.servicio || 'Servicio'}
+                      </span>
+                    </div>
+
+                    {/* Price */}
+                    <div style={{
+                      background: 'var(--primary-light, #eff6ff)',
+                      border: '1px solid var(--primary-border, #bfdbfe)',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Valor</span>
+                      <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--primary, #2563eb)' }}>
+                        {Number(item.valor).toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+
+                    {/* Expiry chip */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill={chipColor} aria-hidden="true">
+                        <path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V9h14v11Z"/>
+                      </svg>
+                      <span style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: chipColor,
+                        background: chipBg,
+                        borderRadius: '20px',
+                        padding: '2px 8px',
+                        border: `1px solid ${chipColor}33`,
+                      }}>
+                        {isExpired
+                          ? 'Vencido'
+                          : vence
+                            ? `Vence ${vence.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                            : 'Sin fecha de vencimiento'}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

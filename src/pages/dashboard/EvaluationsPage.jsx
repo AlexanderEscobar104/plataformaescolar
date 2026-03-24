@@ -336,9 +336,15 @@ function EvaluationsPage() {
   const [exportingAll, setExportingAll] = useState(false)
 
   const navigate = useNavigate()
-  const { user, userRole, hasPermission, userNitRut } = useAuth()
+  const { user, userRole, userProfile, hasPermission, userNitRut } = useAuth()
   const canViewEvaluations = hasPermission(PERMISSION_KEYS.EVALUATIONS_VIEW)
   const canManageEvaluations = hasPermission(PERMISSION_KEYS.EVALUATIONS_MANAGE)
+  const canCreateEvaluations = canManageEvaluations || hasPermission(PERMISSION_KEYS.EVALUATIONS_CREATE)
+  const canEditEvaluations = canManageEvaluations || hasPermission(PERMISSION_KEYS.EVALUATIONS_EDIT)
+  const canDeleteEvaluations = canManageEvaluations || hasPermission(PERMISSION_KEYS.EVALUATIONS_DELETE)
+  const canFollowUpEvaluations = canManageEvaluations || hasPermission(PERMISSION_KEYS.EVALUATIONS_FOLLOW_UP)
+  const canTakeEvaluations = canManageEvaluations || hasPermission(PERMISSION_KEYS.EVALUATIONS_TAKE)
+  const canGradeEvaluations = canManageEvaluations || hasPermission(PERMISSION_KEYS.EVALUATIONS_GRADE)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const isProfessor = userRole === 'profesor'
 
@@ -350,6 +356,7 @@ function EvaluationsPage() {
   const [successMessage, setSuccessMessage] = useState('')
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorModalMessage, setErrorModalMessage] = useState('')
+  const [evalStats, setEvalStats] = useState({}) // { [evaluationId]: { lastScore, totalAttempts } }
   const [evaluationFile, setEvaluationFile] = useState(null)
   const [parsedQuestionsFromFile, setParsedQuestionsFromFile] = useState([])
   const [evaluations, setEvaluations] = useState([])
@@ -366,7 +373,7 @@ function EvaluationsPage() {
 
   const [form, setForm] = useState({
     subject: '',
-    evaluationType: EVALUATION_TYPE.FILE,
+    evaluationType: EVALUATION_TYPE.ONLINE,
     timeLimitMinutes: '',
     maxAttempts: '',
     examDate: toIsoDate(new Date()),
@@ -407,6 +414,17 @@ function EvaluationsPage() {
 
       const professorMap = new Map(mappedProfessors.map((item) => [item.id, item.name]))
       const mappedEvaluations = evaluationsSnapshot.docs
+        .filter((docSnapshot) => {
+          const data = docSnapshot.data()
+          if (userRole === 'estudiante' || userRole === 'aspirante') {
+            const grade = String(data.grade || '').trim()
+            const group = String(data.group || '').trim().toUpperCase()
+            const myGrade = String(userProfile?.grado || '').trim()
+            const myGroup = String(userProfile?.grupo || '').trim().toUpperCase()
+            return grade === myGrade && group === myGroup
+          }
+          return true
+        })
         .map((docSnapshot) => {
           const data = docSnapshot.data()
           const questions = Array.isArray(data.questions) ? data.questions : []
@@ -437,6 +455,61 @@ function EvaluationsPage() {
 
       setProfessors(mappedProfessors)
       setEvaluations(mappedEvaluations)
+
+      // ── Load grades + attempts per evaluation (batched in chunks of 10) ────
+      const evalIds = mappedEvaluations.map((ev) => ev.id)
+      if (evalIds.length > 0) {
+        const chunkSize = 10
+        const chunks = []
+        for (let i = 0; i < evalIds.length; i += chunkSize) {
+          chunks.push(evalIds.slice(i, i + chunkSize))
+        }
+
+        const allCalDocs = []
+        const allIntentosDocs = []
+
+        await Promise.all(
+          chunks.flatMap((chunk) => [
+            getDocs(query(collection(db, 'evaluacion_calificaciones'), where('evaluationId', 'in', chunk)))
+              .then((snap) => allCalDocs.push(...snap.docs)),
+            getDocs(query(collection(db, 'examen_intentos'), where('evaluationId', 'in', chunk)))
+              .then((snap) => allIntentosDocs.push(...snap.docs)),
+          ])
+        )
+
+        const stats = {}
+        const ensureEntry = (id) => {
+          if (!stats[id]) stats[id] = { lastScore: null, totalAttempts: 0 }
+        }
+
+        // FILE-type grades from evaluacion_calificaciones
+        allCalDocs.forEach((d) => {
+          const data = d.data()
+          const id = data.evaluationId
+          if (!id) return
+          ensureEntry(id)
+          const score = typeof data.score === 'number' ? data.score : null
+          if (score !== null && (stats[id].lastScore === null || score > stats[id].lastScore)) {
+            stats[id].lastScore = score
+          }
+          stats[id].totalAttempts += 1
+        })
+
+        // ONLINE-type attempts from examen_intentos
+        allIntentosDocs.forEach((d) => {
+          const data = d.data()
+          const id = data.evaluationId
+          if (!id) return
+          ensureEntry(id)
+          const score = typeof data.score === 'number' ? data.score : null
+          if (score !== null && (stats[id].lastScore === null || score > stats[id].lastScore)) {
+            stats[id].lastScore = score
+          }
+          stats[id].totalAttempts += 1
+        })
+
+        setEvalStats(stats)
+      }
 
       const mappedEmpleados = empleadosSnapshot.docs
         .map((docSnapshot) => {
@@ -555,8 +628,13 @@ function EvaluationsPage() {
     setFeedback('')
     setFeedbackType('info')
 
-    if (!canManageEvaluations) {
-      setFeedback('No tienes permisos para gestionar evaluaciones.')
+    if (!canCreateEvaluations && !editingEvaluation) {
+      setFeedback('No tienes permisos para crear evaluaciones.')
+      setFeedbackType('error')
+      return
+    }
+    if (editingEvaluation && !canEditEvaluations) {
+      setFeedback('No tienes permisos para editar evaluaciones.')
       setFeedbackType('error')
       return
     }
@@ -677,7 +755,7 @@ function EvaluationsPage() {
       setForm((prev) => ({
         ...prev,
         subject: '',
-        evaluationType: EVALUATION_TYPE.FILE,
+        evaluationType: EVALUATION_TYPE.ONLINE,
         timeLimitMinutes: '',
         maxAttempts: '',
         examDate: toIsoDate(new Date()),
@@ -698,11 +776,10 @@ function EvaluationsPage() {
       setFileInputKey((value) => value + 1)
       if (editingEvaluation?.id) {
         setSuccessMessage('Registros actualizados correctamente.')
-        setShowSuccessModal(true)
       } else {
-        setFeedback('Evaluacion creada correctamente.')
-        setFeedbackType('success')
+        setSuccessMessage('Evaluacion creada correctamente.')
       }
+      setShowSuccessModal(true)
       await loadBaseData()
     } catch {
       setErrorModalMessage(`No fue posible ${editingEvaluation?.id ? 'actualizar' : 'crear'} la evaluacion.`)
@@ -742,7 +819,7 @@ function EvaluationsPage() {
     setForm((prev) => ({
       ...prev,
       subject: '',
-      evaluationType: EVALUATION_TYPE.FILE,
+      evaluationType: EVALUATION_TYPE.ONLINE,
       timeLimitMinutes: '',
       maxAttempts: '',
       examDate: toIsoDate(new Date()),
@@ -868,26 +945,30 @@ function EvaluationsPage() {
   }
 
   return (
-    <section className="evaluations-page">
-      <div className="students-header">
-        <h2>Evaluaciones</h2>
-        {canManageEvaluations && (
-          <button
-            type="submit"
-            form="evaluations-form"
-            className="button"
-            disabled={saving}
-          >
-            {saving ? 'Guardando...' : editingEvaluation ? 'Guardar cambios' : 'Crear nueva evaluacion'}
-          </button>
-        )}
+    <section className="evaluations-page tasks-page-shell">
+      <div className="tasks-page-hero">
+        <div className="tasks-page-hero-copy">
+          <span className="tasks-page-eyebrow">Academico</span>
+          <h2>Evaluaciones</h2>
+          <p>Gestiona la creacion de examenes y consulta los ya registrados. Crea evaluaciones con opciones multiples (a, b, c, o d), subiendo tu plantilla en formato xls o csv.</p>
+        </div>
+        <div className="tasks-page-hero-actions">
+          {(canCreateEvaluations || canEditEvaluations) && (
+            <button
+              type="submit"
+              form="evaluations-form"
+              className="button"
+              disabled={saving}
+            >
+              {saving ? 'Guardando...' : editingEvaluation ? 'Guardar cambios' : 'Crear nueva evaluacion'}
+            </button>
+          )}
+        </div>
       </div>
-      <p>Gestiona la creacion de examenes y consulta los ya registrados.</p>
       {loading && <p>Cargando informacion...</p>}
-      <p>Crea evaluaciones con opciones multiples (a, b, c, o d), subiendo tu plantilla en formato xls o csv.</p>
       {feedback && <p className={`feedback ${feedbackType === 'error' ? 'error' : feedbackType === 'success' ? 'success' : ''}`}>{feedback}</p>}
 
-      {canManageEvaluations && (
+      {(canCreateEvaluations || canEditEvaluations) && (
         <div className="home-left-card evaluations-card">
           <h3>{editingEvaluation ? 'Editar evaluacion' : 'Crear evaluacion'}</h3>
           <form className="form evaluation-create-form" onSubmit={handleCreateEvaluation} id="evaluations-form">
@@ -1205,7 +1286,7 @@ function EvaluationsPage() {
               placeholder="Buscar por asunto, fecha, grado, grupo o profesor"
             />
           </div>
-          <div className="students-table-wrap">
+          <div className="students-table-wrap" style={{ overflowX: 'auto' }}>
             <table className="students-table">
               <thead>
                 <tr>
@@ -1218,13 +1299,15 @@ function EvaluationsPage() {
                   <th>Profesor / Empleado</th>
                   <th>Aprendiz</th>
                   <th>Recuperacion</th>
-                  {canManageEvaluations && <th>Acciones</th>}
+                  <th>Nota</th>
+                  <th>Intentos</th>
+                  {(canEditEvaluations || canDeleteEvaluations || canFollowUpEvaluations || canTakeEvaluations || canGradeEvaluations) && <th>Acciones</th>}
                 </tr>
               </thead>
               <tbody>
                 {filteredEvaluations.length === 0 && (
                   <tr>
-                    <td colSpan="10">No hay examenes creados.</td>
+                    <td colSpan="12">No hay examenes creados.</td>
                   </tr>
                 )}
                 {(exportingAll ? filteredEvaluations : filteredEvaluations.slice((currentPage - 1) * 10, currentPage * 10)).map((item) => (
@@ -1238,27 +1321,39 @@ function EvaluationsPage() {
                     <td data-label="Profesor / Empleado">{item.esParaAprendiz ? (item.empleadoEncargadoNombre || '-') : (item.professorName || '-')}</td>
                     <td data-label="Aprendiz">{item.esParaAprendiz ? '✓' : ''}</td>
                     <td data-label="Recuperacion">{item.hasRecovery ? formatDate(item.recoveryDate) : 'No'}</td>
-                    {canManageEvaluations && (
+                    <td data-label="Nota" style={{ fontWeight: 600, color: (evalStats[item.id]?.lastScore ?? null) !== null ? (evalStats[item.id].lastScore >= 3 ? 'var(--success, #16a34a)' : '#ef4444') : 'var(--text-muted)' }}>
+                      {(evalStats[item.id]?.lastScore ?? null) !== null ? evalStats[item.id].lastScore.toFixed(2) : '-'}
+                    </td>
+                    <td data-label="Intentos">
+                      {(evalStats[item.id]?.totalAttempts ?? 0) > 0
+                        ? `${evalStats[item.id].totalAttempts}${item.maxAttempts > 0 ? ` / ${item.maxAttempts}` : ''}`
+                        : '-'}
+                    </td>
+                    {(canEditEvaluations || canDeleteEvaluations || canFollowUpEvaluations || canTakeEvaluations || canGradeEvaluations) && (
                       <td data-label="Acciones" className="student-actions">
-                        <button
-                          type="button"
-                          className="button small secondary icon-action-button"
-                          onClick={() => handleEditEvaluation(item)}
-                          title="Editar evaluacion"
-                          aria-label="Editar evaluacion"
-                        >
-                          <EditIcon />
-                        </button>
-                        <button
-                          type="button"
-                          className="button small danger icon-action-button"
-                          onClick={() => setEvaluationToDelete(item)}
-                          title="Eliminar evaluacion"
-                          aria-label="Eliminar evaluacion"
-                        >
-                          <DeleteIcon />
-                        </button>
-                        {item.evaluationType === EVALUATION_TYPE.FILE ? (
+                        {canEditEvaluations && (
+                          <button
+                            type="button"
+                            className="button small secondary icon-action-button"
+                            onClick={() => handleEditEvaluation(item)}
+                            title="Editar evaluacion"
+                            aria-label="Editar evaluacion"
+                          >
+                            <EditIcon />
+                          </button>
+                        )}
+                        {canDeleteEvaluations && (
+                          <button
+                            type="button"
+                            className="button small danger icon-action-button"
+                            onClick={() => setEvaluationToDelete(item)}
+                            title="Eliminar evaluacion"
+                            aria-label="Eliminar evaluacion"
+                          >
+                            <DeleteIcon />
+                          </button>
+                        )}
+                        {canFollowUpEvaluations && item.evaluationType === EVALUATION_TYPE.FILE && (
                           <>
                             <button
                               type="button"
@@ -1278,37 +1373,40 @@ function EvaluationsPage() {
                             >
                               <PdfIcon />
                             </button>
-                            <button
-                              type="button"
-                              className="button icon-action-button"
-                              onClick={() => navigate(`/dashboard/evaluaciones/calificar?evaluationId=${item.id}`)}
-                              title="Calificar evaluacion"
-                              aria-label="Calificar evaluacion"
-                            >
-                              <GradeIcon />
-                            </button>
                           </>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              className="button secondary icon-action-button"
-                              onClick={() => navigate(`/dashboard/evaluaciones/en-linea/${item.id}`)}
-                              title="Ver seguimiento"
-                              aria-label="Ver seguimiento"
-                            >
-                              <FollowUpIcon />
-                            </button>
-                            <button
-                              type="button"
-                              className="button icon-action-button"
-                              onClick={() => navigate(`/dashboard/evaluaciones/realizar/${item.id}`, { state: { startAttempt: true } })}
-                              title="Realizar evaluacion"
-                              aria-label="Realizar evaluacion"
-                            >
-                              <TakeEvaluationIcon />
-                            </button>
-                          </>
+                        )}
+                        {canGradeEvaluations && item.evaluationType === EVALUATION_TYPE.FILE && (
+                          <button
+                            type="button"
+                            className="button icon-action-button"
+                            onClick={() => navigate(`/dashboard/evaluaciones/calificar?evaluationId=${item.id}`)}
+                            title="Calificar evaluacion"
+                            aria-label="Calificar evaluacion"
+                          >
+                            <GradeIcon />
+                          </button>
+                        )}
+                        {canFollowUpEvaluations && item.evaluationType === EVALUATION_TYPE.ONLINE && (
+                          <button
+                            type="button"
+                            className="button secondary icon-action-button"
+                            onClick={() => navigate(`/dashboard/evaluaciones/en-linea/${item.id}`)}
+                            title="Ver seguimiento"
+                            aria-label="Ver seguimiento"
+                          >
+                            <FollowUpIcon />
+                          </button>
+                        )}
+                        {canTakeEvaluations && item.evaluationType === EVALUATION_TYPE.ONLINE && (
+                          <button
+                            type="button"
+                            className="button icon-action-button"
+                            onClick={() => navigate(`/dashboard/evaluaciones/realizar/${item.id}`, { state: { startAttempt: true } })}
+                            title="Realizar evaluacion"
+                            aria-label="Realizar evaluacion"
+                          >
+                            <TakeEvaluationIcon />
+                          </button>
                         )}
                       </td>
                     )}

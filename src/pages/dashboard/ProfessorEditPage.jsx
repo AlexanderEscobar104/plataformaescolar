@@ -26,6 +26,8 @@ function ProfessorEditPage() {
   const [error, setError] = useState('')
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorModalMessage, setErrorModalMessage] = useState('')
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [saveModalMessage, setSaveModalMessage] = useState('')
 
   const [nombres, setNombres] = useState('')
   const [apellidos, setApellidos] = useState('')
@@ -281,10 +283,8 @@ function ProfessorEditPage() {
         updatedAt: serverTimestamp(),
       })
 
-      navigate('/dashboard/crear-profesores', {
-        replace: true,
-        state: { flash: { text: 'Profesor actualizado correctamente.' } },
-      })
+      setSaveModalMessage('Profesor actualizado correctamente.')
+      setShowSaveModal(true)
     } catch {
       setErrorModalMessage('No fue posible actualizar el profesor.')
       setShowErrorModal(true)
@@ -597,6 +597,15 @@ function ProfessorEditPage() {
           )}
         </fieldset>
       </form>
+      <OperationStatusModal
+        open={showSaveModal}
+        title="Operacion exitosa"
+        message={saveModalMessage}
+        onClose={() => {
+          setShowSaveModal(false)
+          navigate('/dashboard/crear-profesores', { replace: true })
+        }}
+      />
       <OperationStatusModal
         open={showErrorModal}
         title="Operacion fallida"

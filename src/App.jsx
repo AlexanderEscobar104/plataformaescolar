@@ -58,6 +58,7 @@ import GuardianCircularsPage from './pages/dashboard/GuardianCircularsPage'
 import GuardianPaymentsPage from './pages/dashboard/GuardianPaymentsPage'
 import GuardianProfilePage from './pages/dashboard/GuardianProfilePage'
 import GuardianTasksPage from './pages/dashboard/GuardianTasksPage'
+import GuardianEvaluationsPage from './pages/dashboard/GuardianEvaluationsPage'
 import GuardianSchedulePage from './pages/dashboard/GuardianSchedulePage'
 import PaymentsPage from './pages/dashboard/PaymentsPage'
 import TipoEmpleadosPage from './pages/dashboard/TipoEmpleadosPage'
@@ -98,6 +99,7 @@ import AdmissionsLeadsPage from './pages/dashboard/AdmissionsLeadsPage'
 import AdmissionsLeadDetailPage from './pages/dashboard/AdmissionsLeadDetailPage'
 import AdmissionsAgendaPage from './pages/dashboard/AdmissionsAgendaPage'
 import AdmissionsReportsPage from './pages/dashboard/AdmissionsReportsPage'
+import ManagementDashboardPage from './pages/dashboard/ManagementDashboardPage'
 import WhatsAppInboxPage from './pages/dashboard/WhatsAppInboxPage'
 import WhatsAppTemplatesPage from './pages/dashboard/WhatsAppTemplatesPage'
 import WhatsAppCampaignsPage from './pages/dashboard/WhatsAppCampaignsPage'
@@ -234,6 +236,7 @@ function App() {
           }
         >
           <Route index element={<DashboardHomePage />} />
+          <Route path="gerencial" element={<ManagementDashboardPage />} />
           <Route
             path="crear-estudiantes"
             element={<StudentsListPage />}
@@ -285,6 +288,7 @@ function App() {
           <Route path="acudiente/inasistencias" element={<GuardianAbsencesPage />} />
           <Route path="acudiente/permisos" element={<Navigate to="/dashboard/acudiente/inasistencias" replace />} />
           <Route path="acudiente/tareas" element={<GuardianTasksPage />} />
+          <Route path="acudiente/evaluaciones" element={<GuardianEvaluationsPage />} />
           <Route path="acudiente/horario" element={<GuardianSchedulePage />} />
           <Route path="acudiente/pagos" element={<GuardianPaymentsPage />} />
           <Route path="acudiente/mensajes" element={<GuardianMessagesPage />} />

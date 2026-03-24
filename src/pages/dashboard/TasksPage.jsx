@@ -44,7 +44,7 @@ function TasksPage() {
   const [exportingAll, setExportingAll] = useState(false)
 
   const navigate = useNavigate()
-  const { user, hasPermission, userNitRut } = useAuth()
+  const { user, userRole, userProfile, hasPermission, userNitRut } = useAuth()
   const canViewTasks = hasPermission(PERMISSION_KEYS.TASKS_VIEW)
   const canCreateTasks = hasPermission(PERMISSION_KEYS.TASKS_CREATE)
   const canEditTasks = hasPermission(PERMISSION_KEYS.TASKS_EDIT)
@@ -90,6 +90,17 @@ function TasksPage() {
       const snapshot = await getDocs(query(collection(db, 'tareas'), where('nitRut', '==', userNitRut)))
       const pendingExpired = []
       const mapped = snapshot.docs
+        .filter((docSnapshot) => {
+          const data = docSnapshot.data()
+          if (userRole === 'estudiante' || userRole === 'aspirante') {
+            const grade = String(data.grade || '').trim()
+            const group = String(data.group || '').trim().toUpperCase()
+            const myGrade = String(userProfile?.grado || '').trim()
+            const myGroup = String(userProfile?.grupo || '').trim().toUpperCase()
+            return grade === myGrade && group === myGroup
+          }
+          return true
+        })
         .map((docSnapshot) => {
           const data = docSnapshot.data()
           const dueDate = data.dueDate || ''

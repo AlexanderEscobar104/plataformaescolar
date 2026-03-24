@@ -147,7 +147,7 @@ function ChevronIcon() {
   )
 }
 
-const mainItems = [
+const mainItemsBase = [
   { label: 'Inicio', to: '/dashboard', Icon: HomeIcon },
 ]
 const reportItemsBase = [
@@ -186,6 +186,12 @@ function DashboardLayout() {
   const [modalAnnouncementsQueue, setModalAnnouncementsQueue] = useState([])
   const [modalAnnouncementIndex, setModalAnnouncementIndex] = useState(0)
   const isGuardianUser = userRole === 'acudiente'
+
+  useEffect(() => {
+    if (isGuardianUser && location.pathname === '/dashboard') {
+      navigate('/dashboard/acudiente', { replace: true })
+    }
+  }, [isGuardianUser, location.pathname, navigate])
 
   // Exclusive accordion: opening one group closes all others
   const openSidebarGroup = (group) => {
@@ -260,6 +266,7 @@ function DashboardLayout() {
   const canViewAsistencia = hasPermission(PERMISSION_KEYS.ASISTENCIA_VIEW) || canViewInasistencias
   const canViewPermisos = hasPermission(PERMISSION_KEYS.PERMISOS_VIEW)
   const canViewReports = hasPermission(PERMISSION_KEYS.REPORTS_VIEW)
+  const canViewManagementDashboard = hasPermission(PERMISSION_KEYS.MANAGEMENT_DASHBOARD_VIEW)
   const canViewPayments = hasPermission(PERMISSION_KEYS.PAYMENTS_VIEW)
   const canViewAdmissions = hasPermission(PERMISSION_KEYS.ADMISSIONS_CRM_VIEW)
   const canManageAdmissions = hasPermission(PERMISSION_KEYS.ADMISSIONS_CRM_MANAGE)
@@ -496,6 +503,7 @@ function DashboardLayout() {
       { label: 'Asistencia', to: '/dashboard/acudiente/asistencia', Icon: AbsencesIcon },
       { label: 'Inasistencias', to: '/dashboard/acudiente/inasistencias', Icon: AbsencesIcon },
       { label: 'Tareas', to: '/dashboard/acudiente/tareas', Icon: TasksIcon },
+      { label: 'Evaluaciones', to: '/dashboard/acudiente/evaluaciones', Icon: EvaluationsIcon },
       { label: 'Horario', to: '/dashboard/acudiente/horario', Icon: ScheduleIcon },
       { label: 'Pagos', to: '/dashboard/acudiente/pagos', Icon: PaymentsIcon },
       { label: 'Mensajes', to: '/dashboard/acudiente/mensajes', Icon: MessageIcon },
@@ -504,6 +512,14 @@ function DashboardLayout() {
       { label: 'Mi perfil', to: '/dashboard/acudiente/perfil', Icon: UserIcon },
     ]
   }, [isGuardianUser])
+
+  const mainItems = useMemo(() => {
+    const items = [...mainItemsBase]
+    if (canViewManagementDashboard) {
+      items.push({ label: 'Dashboard gerencial', to: '/dashboard/gerencial', Icon: ReportsIcon })
+    }
+    return items
+  }, [canViewManagementDashboard])
 
   const reportItems = useMemo(() => {
     return canViewReports ? reportItemsBase : []
@@ -953,7 +969,9 @@ function DashboardLayout() {
   }
 
   const currentPathLabel =
-    allItems.find((item) =>
+    [...allItems]
+      .sort((a, b) => b.to.length - a.to.length)
+      .find((item) =>
       item.to === '/dashboard'
         ? location.pathname === '/dashboard'
         : location.pathname.startsWith(item.to),
@@ -1048,6 +1066,12 @@ function DashboardLayout() {
     }
   }
 
+  const handleMainNavigation = (event, to) => {
+    event.preventDefault()
+    navigate(to)
+    setMenuOpen(false)
+  }
+
   return (
     <div className="dashboard-shell">
       <aside className={`sidebar${menuOpen ? ' open' : ''}`}>
@@ -1085,7 +1109,7 @@ function DashboardLayout() {
                   }
                   to={item.to}
                   end={item.to === '/dashboard'}
-                  onClick={() => setMenuOpen(false)}
+                  onClick={(event) => handleMainNavigation(event, item.to)}
                 >
                   <item.Icon />
                   <span>{item.label}</span>
