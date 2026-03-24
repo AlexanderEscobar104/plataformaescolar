@@ -179,6 +179,8 @@ function DashboardLayout() {
   const [academicMenuOpen, setAcademicMenuOpen] = useState(false)
   const [reportMenuOpen, setReportMenuOpen] = useState(false)
   const [memberMenuOpen, setMemberMenuOpen] = useState(false)
+  const [admissionsMenuOpen, setAdmissionsMenuOpen] = useState(false)
+  const [whatsAppMenuOpen, setWhatsAppMenuOpen] = useState(false)
   const [paymentsMenuOpen, setPaymentsMenuOpen] = useState(false)
   const [configMenuOpen, setConfigMenuOpen] = useState(false)
   const [modalAnnouncementsQueue, setModalAnnouncementsQueue] = useState([])
@@ -190,6 +192,8 @@ function DashboardLayout() {
     setAcademicMenuOpen(group === 'academic' ? (prev) => !prev : false)
     setReportMenuOpen(group === 'report' ? (prev) => !prev : false)
     setMemberMenuOpen(group === 'member' ? (prev) => !prev : false)
+    setAdmissionsMenuOpen(group === 'admissions' ? (prev) => !prev : false)
+    setWhatsAppMenuOpen(group === 'whatsapp' ? (prev) => !prev : false)
     setPaymentsMenuOpen(group === 'payments' ? (prev) => !prev : false)
     setConfigMenuOpen(group === 'config' ? (prev) => !prev : false)
   }
@@ -257,6 +261,16 @@ function DashboardLayout() {
   const canViewPermisos = hasPermission(PERMISSION_KEYS.PERMISOS_VIEW)
   const canViewReports = hasPermission(PERMISSION_KEYS.REPORTS_VIEW)
   const canViewPayments = hasPermission(PERMISSION_KEYS.PAYMENTS_VIEW)
+  const canViewAdmissions = hasPermission(PERMISSION_KEYS.ADMISSIONS_CRM_VIEW)
+  const canManageAdmissions = hasPermission(PERMISSION_KEYS.ADMISSIONS_CRM_MANAGE)
+  const canManageAdmissionsFollowups = hasPermission(PERMISSION_KEYS.ADMISSIONS_FOLLOWUPS_MANAGE)
+  const canViewAdmissionsReports = hasPermission(PERMISSION_KEYS.ADMISSIONS_REPORTS_VIEW)
+  const canAccessAdmissionsModule = canViewAdmissions || canManageAdmissions || canManageAdmissionsFollowups
+  const canViewWhatsAppModule = hasPermission(PERMISSION_KEYS.WHATSAPP_MODULE_VIEW)
+  const canSendWhatsApp = hasPermission(PERMISSION_KEYS.WHATSAPP_SEND)
+  const canManageWhatsAppTemplates = hasPermission(PERMISSION_KEYS.WHATSAPP_TEMPLATES_MANAGE)
+  const canManageWhatsAppCampaigns = hasPermission(PERMISSION_KEYS.WHATSAPP_CAMPAIGNS_MANAGE)
+  const canManageWhatsAppSettings = hasPermission(PERMISSION_KEYS.WHATSAPP_SETTINGS_MANAGE)
   const canManagePaymentsImpuestos = hasPermission(PERMISSION_KEYS.PAYMENTS_IMPUESTOS_MANAGE)
   const canManagePaymentsResoluciones = hasPermission(PERMISSION_KEYS.PAYMENTS_RESOLUCIONES_MANAGE)
   const canManagePaymentsCaja = hasPermission(PERMISSION_KEYS.PAYMENTS_CAJA_MANAGE)
@@ -450,6 +464,28 @@ function DashboardLayout() {
     hasPermission,
   ])
 
+  const admissionsItems = useMemo(() => {
+    if (!canAccessAdmissionsModule && !canViewAdmissionsReports) return []
+
+    const items = []
+    if (canAccessAdmissionsModule) items.push({ label: 'CRM Admisiones', to: '/dashboard/admisiones/crm', Icon: ReportsIcon })
+    if (canAccessAdmissionsModule) items.push({ label: 'Leads Admisiones', to: '/dashboard/admisiones/leads', Icon: StudentsIcon })
+    if (canAccessAdmissionsModule) items.push({ label: 'Agenda admisiones', to: '/dashboard/admisiones/agenda', Icon: ScheduleIcon })
+    if (canViewAdmissionsReports || canAccessAdmissionsModule) items.push({ label: 'Reportes admisiones', to: '/dashboard/admisiones/reportes', Icon: ReportsIcon })
+    return items
+  }, [canAccessAdmissionsModule, canViewAdmissionsReports])
+
+  const whatsappItems = useMemo(() => {
+    if (!canViewWhatsAppModule) return []
+
+    const items = []
+    items.push({ label: 'Bandeja WhatsApp', to: '/dashboard/whatsapp/bandeja', Icon: MessageIcon })
+    if (canManageWhatsAppTemplates) items.push({ label: 'Plantillas WhatsApp', to: '/dashboard/whatsapp/plantillas', Icon: MessageIcon })
+    if (canManageWhatsAppCampaigns) items.push({ label: 'Campanas WhatsApp', to: '/dashboard/whatsapp/campanas', Icon: MessageIcon })
+    if (canManageWhatsAppSettings) items.push({ label: 'Configuracion WhatsApp', to: '/dashboard/whatsapp/configuracion', Icon: GearIcon })
+    return items
+  }, [canManageWhatsAppCampaigns, canManageWhatsAppSettings, canManageWhatsAppTemplates, canViewWhatsAppModule])
+
   const guardianPortalItems = useMemo(() => {
     if (!isGuardianUser) return []
 
@@ -585,12 +621,18 @@ function DashboardLayout() {
   ])
   const allItems = isGuardianUser
     ? guardianPortalItems
-    : [...mainItems, ...paymentsItems, ...academicItems, ...reportItems, ...memberItems, ...configItems]
+    : [...mainItems, ...paymentsItems, ...academicItems, ...reportItems, ...memberItems, ...admissionsItems, ...whatsappItems, ...configItems]
   const unreadInitializedRef = useRef(false)
   const todayEventsToastShownRef = useRef(false)
   const previousUnreadCountRef = useRef(0)
   const previousUnreadNotificationCountRef = useRef(0)
   const paymentsRouteActive = paymentsItems.some((item) =>
+    location.pathname.startsWith(item.to),
+  )
+  const admissionsRouteActive = admissionsItems.some((item) =>
+    location.pathname.startsWith(item.to),
+  )
+  const whatsappRouteActive = whatsappItems.some((item) =>
     location.pathname.startsWith(item.to),
   )
   const academicRouteActive = academicItems.some((item) =>
@@ -612,6 +654,8 @@ function DashboardLayout() {
       setAcademicMenuOpen(false)
       setReportMenuOpen(false)
       setMemberMenuOpen(false)
+      setAdmissionsMenuOpen(false)
+      setWhatsAppMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [paymentsRouteActive])
@@ -621,6 +665,8 @@ function DashboardLayout() {
       setAcademicMenuOpen(true)
       setReportMenuOpen(false)
       setMemberMenuOpen(false)
+      setAdmissionsMenuOpen(false)
+      setWhatsAppMenuOpen(false)
       setPaymentsMenuOpen(false)
       setConfigMenuOpen(false)
     }
@@ -631,6 +677,8 @@ function DashboardLayout() {
       setReportMenuOpen(true)
       setAcademicMenuOpen(false)
       setMemberMenuOpen(false)
+      setAdmissionsMenuOpen(false)
+      setWhatsAppMenuOpen(false)
       setPaymentsMenuOpen(false)
       setConfigMenuOpen(false)
     }
@@ -641,10 +689,36 @@ function DashboardLayout() {
       setMemberMenuOpen(true)
       setAcademicMenuOpen(false)
       setReportMenuOpen(false)
+      setAdmissionsMenuOpen(false)
+      setWhatsAppMenuOpen(false)
       setPaymentsMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [memberRouteActive])
+
+  useEffect(() => {
+    if (admissionsRouteActive) {
+      setAdmissionsMenuOpen(true)
+      setAcademicMenuOpen(false)
+      setReportMenuOpen(false)
+      setMemberMenuOpen(false)
+      setPaymentsMenuOpen(false)
+      setWhatsAppMenuOpen(false)
+      setConfigMenuOpen(false)
+    }
+  }, [admissionsRouteActive])
+
+  useEffect(() => {
+    if (whatsappRouteActive) {
+      setWhatsAppMenuOpen(true)
+      setAcademicMenuOpen(false)
+      setReportMenuOpen(false)
+      setMemberMenuOpen(false)
+      setAdmissionsMenuOpen(false)
+      setPaymentsMenuOpen(false)
+      setConfigMenuOpen(false)
+    }
+  }, [whatsappRouteActive])
 
   useEffect(() => {
     if (configRouteActive) {
@@ -652,6 +726,8 @@ function DashboardLayout() {
       setAcademicMenuOpen(false)
       setReportMenuOpen(false)
       setMemberMenuOpen(false)
+      setAdmissionsMenuOpen(false)
+      setWhatsAppMenuOpen(false)
       setPaymentsMenuOpen(false)
     }
   }, [configRouteActive])
@@ -1054,6 +1130,62 @@ function DashboardLayout() {
                   </button>
                   <div className={`sidebar-submenu sidebar-submenu-members${memberMenuOpen ? ' open' : ''}`}>
                     {memberItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        className={({ isActive }) =>
+                          `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                        }
+                        to={item.to}
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <item.Icon />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {admissionsItems.length > 0 && (
+                <div className="sidebar-group sidebar-group-members">
+                  <button
+                    type="button"
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${admissionsMenuOpen ? ' open' : ''}`}
+                    onClick={() => openSidebarGroup('admissions')}
+                    aria-expanded={admissionsMenuOpen}
+                  >
+                    <span className="sidebar-group-title">Admisiones</span>
+                    <ChevronIcon />
+                  </button>
+                  <div className={`sidebar-submenu sidebar-submenu-members${admissionsMenuOpen ? ' open' : ''}`}>
+                    {admissionsItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        className={({ isActive }) =>
+                          `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                        }
+                        to={item.to}
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <item.Icon />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {whatsappItems.length > 0 && (
+                <div className="sidebar-group sidebar-group-members">
+                  <button
+                    type="button"
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${whatsAppMenuOpen ? ' open' : ''}`}
+                    onClick={() => openSidebarGroup('whatsapp')}
+                    aria-expanded={whatsAppMenuOpen}
+                  >
+                    <span className="sidebar-group-title">WhatsApp</span>
+                    <ChevronIcon />
+                  </button>
+                  <div className={`sidebar-submenu sidebar-submenu-members${whatsAppMenuOpen ? ' open' : ''}`}>
+                    {whatsappItems.map((item) => (
                       <NavLink
                         key={item.to}
                         className={({ isActive }) =>

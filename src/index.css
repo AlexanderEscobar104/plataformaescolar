@@ -2758,6 +2758,341 @@ body {
   background: #ffffff;
 }
 
+.admissions-module-shell select,
+.admissions-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #c8def2;
+  border-radius: 16px;
+  padding: 12px 46px 12px 14px;
+  color: #17496f;
+  font-weight: 600;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%231b5f93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7 5 6 5-6'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  background-repeat: no-repeat, no-repeat;
+  background-position: right 14px center, center;
+  background-size: 16px 16px, 100% 100%;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 8px 18px rgba(15, 72, 116, 0.05);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.admissions-module-shell select::-ms-expand,
+.admissions-select::-ms-expand {
+  display: none;
+}
+
+.admissions-module-shell select:hover,
+.admissions-select:hover {
+  border-color: #a9cdea;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 12px 24px rgba(15, 72, 116, 0.08);
+}
+
+.admissions-module-shell select:focus,
+.admissions-select:focus {
+  outline: none;
+  border-color: #5b9fd6;
+  box-shadow:
+    0 0 0 4px rgba(91, 159, 214, 0.18),
+    0 12px 24px rgba(15, 72, 116, 0.08);
+}
+
+.admissions-module-shell .students-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.admissions-module-shell .students-toolbar input {
+  flex: 1 1 320px;
+  max-width: none;
+  margin-bottom: 0;
+}
+
+.admissions-module-shell .students-toolbar .admissions-select {
+  flex: 0 0 220px;
+  width: 220px;
+  min-width: 180px;
+  max-width: 220px;
+  min-height: 42px;
+  padding: 10px 38px 10px 12px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  background-position: right 12px center, center;
+  background-size: 14px 14px, 100% 100%;
+}
+
+@media (max-width: 768px) {
+  .admissions-module-shell .students-toolbar .admissions-select {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.whatsapp-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.whatsapp-stat-card {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid #dbe7f3;
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.12), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.05);
+}
+
+.whatsapp-stat-value {
+  display: block;
+  margin: 0;
+  color: #0f4f82;
+  font-size: clamp(1.8rem, 2.2vw, 2.3rem);
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.whatsapp-stat-label {
+  display: block;
+  color: #123e63;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.whatsapp-stat-help {
+  display: block;
+  color: #5a7894;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.whatsapp-inbox-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.whatsapp-conversation-list-card,
+.whatsapp-thread-card {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 22px;
+  border: 1px solid #dbe7f3;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.06);
+}
+
+.whatsapp-panel-head,
+.whatsapp-thread-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.whatsapp-panel-head h3,
+.whatsapp-thread-head h3 {
+  margin: 0;
+  color: #103654;
+}
+
+.whatsapp-panel-head small,
+.whatsapp-thread-head small,
+.whatsapp-thread-summary span {
+  color: #5a7894;
+}
+
+.whatsapp-thread-summary {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  font-size: 0.9rem;
+}
+
+.whatsapp-conversation-list {
+  display: grid;
+  gap: 10px;
+  max-height: 720px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.whatsapp-conversation-item {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid #dbe7f3;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.whatsapp-conversation-item:hover,
+.whatsapp-conversation-item.active {
+  transform: translateY(-1px);
+  border-color: #9fc4e6;
+  box-shadow: 0 14px 28px rgba(15, 79, 130, 0.08);
+}
+
+.whatsapp-conversation-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.whatsapp-conversation-top strong {
+  color: #103654;
+  font-size: 0.96rem;
+}
+
+.whatsapp-conversation-top span,
+.whatsapp-conversation-item small,
+.whatsapp-conversation-meta span {
+  color: #5a7894;
+  font-size: 0.82rem;
+}
+
+.whatsapp-conversation-item p {
+  margin: 0;
+  color: #36556f;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.whatsapp-conversation-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.whatsapp-thread-messages {
+  display: grid;
+  gap: 12px;
+  max-height: 720px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.whatsapp-bubble {
+  display: grid;
+  gap: 6px;
+  max-width: min(78%, 620px);
+  padding: 14px 16px;
+  border-radius: 20px;
+  border: 1px solid #dbe7f3;
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.04);
+}
+
+.whatsapp-bubble.inbound {
+  justify-self: start;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.whatsapp-bubble.outbound {
+  justify-self: end;
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 34%),
+    linear-gradient(180deg, #eef7ff 0%, #dff0ff 100%);
+  border-color: #bfdcf7;
+}
+
+.whatsapp-bubble-body p {
+  margin: 0;
+  color: #26455f;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.whatsapp-bubble-meta,
+.whatsapp-bubble-status {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: #5a7894;
+  font-size: 0.8rem;
+}
+
+.whatsapp-reply-form {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid #e3edf7;
+}
+
+.whatsapp-reply-form label {
+  display: grid;
+  gap: 8px;
+  color: #103654;
+  font-weight: 700;
+}
+
+.whatsapp-reply-form textarea {
+  min-height: 110px;
+}
+
+.template-helper-text {
+  display: block;
+  margin-top: 6px;
+  color: #5a7894;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.template-help-action {
+  display: flex;
+  align-items: flex-end;
+}
+
+.template-help-action .button {
+  width: auto;
+}
+
+@media (max-width: 960px) {
+  .whatsapp-inbox-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .whatsapp-thread-summary {
+    justify-items: start;
+  }
+
+  .whatsapp-bubble {
+    max-width: 100%;
+  }
+}
+
 .guardian-portal-row-group td,
 .guardian-portal-row-subgroup td {
   font-weight: 700;
@@ -2921,6 +3256,69 @@ body {
 .payments-page-shell .guardian-message-card small {
   display: block;
   margin-top: 4px;
+}
+
+.admissions-kanban-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.admissions-kanban-column {
+  border: 1px solid #dbe7f3;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  padding: 14px;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.05);
+}
+
+.admissions-kanban-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: #113d63;
+}
+
+.admissions-kanban-column-header span {
+  min-width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #e8f3ff;
+  color: #1462a0;
+  font-weight: 700;
+}
+
+.admissions-kanban-cards {
+  display: grid;
+  gap: 12px;
+}
+
+.admissions-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.2fr) minmax(320px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.admissions-agenda-card.admissions-agenda-vencido {
+  border-color: #f2b7b7;
+  box-shadow: inset 3px 0 0 #d9534f;
+}
+
+.admissions-agenda-card.admissions-agenda-proximo {
+  border-color: #b8d9f2;
+  box-shadow: inset 3px 0 0 #1d7fc5;
+}
+
+@media (max-width: 900px) {
+  .admissions-detail-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .payments-inline-status {

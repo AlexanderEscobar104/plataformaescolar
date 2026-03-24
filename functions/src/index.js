@@ -149,6 +149,85 @@ function buildReceiptOfficialNumber(cashBox, nextNumber) {
   return `${safePrefix}${String(nextNumber).padStart(6, '0')}`;
 }
 
+function normalizePhoneNumber(phone, defaultCountryCode) {
+  const digits = String(phone || '').replace(/\D+/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('00')) return digits.slice(2);
+  if (digits.startsWith('57') || digits.startsWith('1')) return digits;
+  const countryCode = String(defaultCountryCode || '57').replace(/\D+/g, '') || '57';
+  return `${countryCode}${digits}`;
+}
+
+async function getWhatsAppConfigByNit(nitRut) {
+  const snapshot = await db.collection('configuracion').doc(`whatsapp_config_${nitRut}`).get();
+  if (!snapshot.exists) {
+    throw new functions.https.HttpsError('failed-precondition', 'El plantel no tiene configuracion de WhatsApp.');
+  }
+
+  const data = snapshot.data() || {};
+  if (String(data.status || '').trim().toLowerCase() !== 'activo') {
+    throw new functions.https.HttpsError('failed-precondition', 'El canal de WhatsApp del plantel esta inactivo.');
+  }
+  if (String(data.provider || '').trim() !== 'meta_cloud_api') {
+    throw new functions.https.HttpsError('failed-precondition', 'Solo esta soportado Meta Cloud API en esta fase.');
+  }
+  if (!String(data.phoneNumberId || '').trim() || !String(data.accessToken || '').trim()) {
+    throw new functions.https.HttpsError('failed-precondition', 'La configuracion de WhatsApp esta incompleta.');
+  }
+  return data;
+}
+
+async function getWhatsAppConfigByVerifyToken(verifyToken) {
+  const token = String(verifyToken || '').trim();
+  if (!token) return null;
+
+  const snapshot = await db.collection('configuracion')
+    .where('verifyToken', '==', token)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+  const docSnapshot = snapshot.docs[0];
+  return {
+    id: docSnapshot.id,
+    ...(docSnapshot.data() || {}),
+  };
+}
+
+async function getWhatsAppConfigByPhoneNumberId(phoneNumberId) {
+  const safePhoneNumberId = String(phoneNumberId || '').trim();
+  if (!safePhoneNumberId) return null;
+
+  const snapshot = await db.collection('configuracion')
+    .where('phoneNumberId', '==', safePhoneNumberId)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+  const docSnapshot = snapshot.docs[0];
+  return {
+    id: docSnapshot.id,
+    ...(docSnapshot.data() || {}),
+  };
+}
+
+function convertMetaTimestamp(value) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  return admin.firestore.Timestamp.fromMillis(raw * 1000);
+}
+
+async function writeWhatsAppWebhookLog({ nitRut, eventType, payload, status = 'recibido', message = '' }) {
+  await db.collection('whatsapp_webhook_logs').add({
+    nitRut: normalizeTenantNit(nitRut || ''),
+    eventType: String(eventType || 'unknown').trim() || 'unknown',
+    payload: payload || {},
+    status: String(status || 'recibido').trim() || 'recibido',
+    message: String(message || '').trim(),
+    receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
 function readMailerConfigValue(key) {
   const upperKey = String(key || '').trim().toUpperCase();
   return process.env[upperKey] || '';
@@ -841,6 +920,299 @@ exports.annulPaymentReceipt = functions.https.onCall(async (data, context) => {
   });
 
   return result;
+});
+
+exports.sendWhatsAppMessage = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName } = await getAuthenticatedUserProfile(context);
+  const settings = await getWhatsAppConfigByNit(nitRut);
+  const phone = normalizePhoneNumber(data?.phone, settings.defaultCountryCode);
+  const message = String(data?.message || '').trim();
+  const templateName = String(data?.templateName || '').trim();
+  const sourceModule = String(data?.sourceModule || 'general').trim() || 'general';
+  const recipientName = String(data?.recipientName || '').trim() || 'Destinatario';
+  const recipientType = String(data?.recipientType || '').trim() || 'contacto';
+  const leadId = String(data?.leadId || '').trim();
+  const variables = data?.variables && typeof data.variables === 'object' ? data.variables : {};
+
+  if (!phone) {
+    throw new functions.https.HttpsError('invalid-argument', 'Debes indicar un telefono valido para WhatsApp.');
+  }
+
+  if (!message) {
+    throw new functions.https.HttpsError('invalid-argument', 'Debes indicar el mensaje a enviar.');
+  }
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: phone,
+    type: 'text',
+    text: {
+      preview_url: false,
+      body: message,
+    },
+  };
+
+  let status = 'pendiente';
+  let providerMessageId = '';
+  let errorMessage = '';
+
+  try {
+    const response = await fetch(`https://graph.facebook.com/v20.0/${settings.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${settings.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseData = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      errorMessage = String(
+        responseData?.error?.message ||
+        responseData?.message ||
+        'La API de WhatsApp rechazo el envio.',
+      ).trim();
+      status = 'fallido';
+      throw new functions.https.HttpsError('internal', errorMessage);
+    }
+
+    providerMessageId = String(responseData?.messages?.[0]?.id || '').trim();
+    status = providerMessageId ? 'enviado' : 'pendiente';
+  } catch (error) {
+    errorMessage = errorMessage || String(error?.message || 'No fue posible enviar el mensaje por WhatsApp.');
+    status = 'fallido';
+    await db.collection('whatsapp_messages').add({
+      nitRut,
+      conversationKey: `${recipientType}__${phone}`,
+      recipientPhone: phone,
+      recipientName,
+      recipientUid: '',
+      recipientType,
+      sourceModule,
+      templateName,
+      messageBody: message,
+      variables,
+      status,
+      providerMessageId,
+      direction: 'outbound',
+      leadId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      deliveredAt: null,
+      readAt: null,
+      errorMessage,
+      createdByUid: uid,
+      createdByName: displayName,
+    });
+    throw error;
+  }
+
+  const messageRef = await db.collection('whatsapp_messages').add({
+    nitRut,
+    conversationKey: `${recipientType}__${phone}`,
+    recipientPhone: phone,
+    recipientName,
+    recipientUid: '',
+    recipientType,
+    sourceModule,
+    templateName,
+    messageBody: message,
+    variables,
+    status,
+    providerMessageId,
+    direction: 'outbound',
+    leadId,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    sentAt: admin.firestore.FieldValue.serverTimestamp(),
+    deliveredAt: null,
+    readAt: null,
+    errorMessage: '',
+    createdByUid: uid,
+    createdByName: displayName,
+  });
+
+  return {
+    ok: true,
+    id: messageRef.id,
+    status,
+    providerMessageId,
+  };
+});
+
+exports.whatsappWebhook = functions.https.onRequest(async (req, res) => {
+  if (req.method === 'GET') {
+    const mode = String(req.query['hub.mode'] || '').trim();
+    const verifyToken = String(req.query['hub.verify_token'] || '').trim();
+    const challenge = String(req.query['hub.challenge'] || '').trim();
+
+    if (mode !== 'subscribe' || !verifyToken || !challenge) {
+      res.status(400).send('Solicitud de verificacion incompleta.');
+      return;
+    }
+
+    const config = await getWhatsAppConfigByVerifyToken(verifyToken).catch(() => null);
+    if (!config) {
+      res.status(403).send('Verify token no valido.');
+      return;
+    }
+
+    res.status(200).send(challenge);
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).send('Metodo no permitido.');
+    return;
+  }
+
+  const payload = req.body || {};
+  const entries = Array.isArray(payload.entry) ? payload.entry : [];
+
+  try {
+    for (const entry of entries) {
+      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+      for (const change of changes) {
+        const value = change?.value || {};
+        const metadata = value?.metadata || {};
+        const phoneNumberId = String(metadata.phone_number_id || '').trim();
+        const config = await getWhatsAppConfigByPhoneNumberId(phoneNumberId).catch(() => null);
+        const nitRut = normalizeTenantNit(config?.nitRut || '');
+
+        const statuses = Array.isArray(value?.statuses) ? value.statuses : [];
+        const inboundMessages = Array.isArray(value?.messages) ? value.messages : [];
+        const contacts = Array.isArray(value?.contacts) ? value.contacts : [];
+        const contactsByWaId = new Map();
+        contacts.forEach((contact) => {
+          const waId = String(contact?.wa_id || '').trim();
+          if (!waId) return;
+          contactsByWaId.set(waId, contact);
+        });
+
+        if (statuses.length > 0) {
+          await writeWhatsAppWebhookLog({
+            nitRut,
+            eventType: 'status',
+            payload: change,
+            status: 'procesado',
+            message: `Estados recibidos: ${statuses.length}`,
+          });
+        }
+
+        for (const statusItem of statuses) {
+          const providerMessageId = String(statusItem?.id || '').trim();
+          if (!providerMessageId) continue;
+
+          const messageSnapshot = await db.collection('whatsapp_messages')
+            .where('providerMessageId', '==', providerMessageId)
+            .limit(1)
+            .get();
+
+          if (messageSnapshot.empty) {
+            await writeWhatsAppWebhookLog({
+              nitRut,
+              eventType: 'status_unmatched',
+              payload: statusItem,
+              status: 'sin_coincidencia',
+              message: `No se encontro mensaje para providerMessageId ${providerMessageId}`,
+            });
+            continue;
+          }
+
+          const docSnapshot = messageSnapshot.docs[0];
+          const nextStatus = String(statusItem?.status || '').trim().toLowerCase() || 'pendiente';
+          const errorDetails = Array.isArray(statusItem?.errors) ? statusItem.errors : [];
+          const errorMessage = errorDetails
+            .map((item) => String(item?.title || item?.message || '').trim())
+            .filter(Boolean)
+            .join(' | ');
+          const timestamp = convertMetaTimestamp(statusItem?.timestamp);
+
+          const updatePayload = {
+            status: nextStatus,
+            providerStatusRaw: statusItem,
+            errorMessage: nextStatus === 'failed' ? errorMessage || 'Error reportado por WhatsApp.' : '',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          };
+
+          if (nextStatus === 'sent' || nextStatus === 'enviado') {
+            updatePayload.sentAt = timestamp || admin.firestore.FieldValue.serverTimestamp();
+            updatePayload.status = 'enviado';
+          } else if (nextStatus === 'delivered' || nextStatus === 'entregado') {
+            updatePayload.deliveredAt = timestamp || admin.firestore.FieldValue.serverTimestamp();
+            updatePayload.status = 'entregado';
+          } else if (nextStatus === 'read' || nextStatus === 'leido') {
+            updatePayload.readAt = timestamp || admin.firestore.FieldValue.serverTimestamp();
+            updatePayload.status = 'leido';
+          } else if (nextStatus === 'failed' || nextStatus === 'fallido') {
+            updatePayload.status = 'fallido';
+          }
+
+          await docSnapshot.ref.set(updatePayload, { merge: true });
+        }
+
+        if (inboundMessages.length > 0) {
+          await writeWhatsAppWebhookLog({
+            nitRut,
+            eventType: 'inbound',
+            payload: change,
+            status: 'procesado',
+            message: `Mensajes entrantes recibidos: ${inboundMessages.length}`,
+          });
+        }
+
+        for (const inboundMessage of inboundMessages) {
+          const from = String(inboundMessage?.from || '').trim();
+          const providerMessageId = String(inboundMessage?.id || '').trim();
+          const contactProfile = contactsByWaId.get(from) || {};
+          const contactName = String(contactProfile?.profile?.name || '').trim() || 'Contacto';
+          const messageType = String(inboundMessage?.type || 'text').trim().toLowerCase();
+          const messageBody =
+            messageType === 'text'
+              ? String(inboundMessage?.text?.body || '').trim()
+              : `Mensaje entrante tipo ${messageType}`;
+
+          await db.collection('whatsapp_messages').add({
+            nitRut,
+            conversationKey: `contacto__${from}`,
+            recipientPhone: from,
+            recipientName: contactName,
+            recipientUid: '',
+            recipientType: 'contacto',
+            sourceModule: 'inbound',
+            templateName: '',
+            messageBody,
+            variables: {},
+            status: 'recibido',
+            providerMessageId,
+            direction: 'inbound',
+            leadId: '',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            sentAt: convertMetaTimestamp(inboundMessage?.timestamp) || admin.firestore.FieldValue.serverTimestamp(),
+            deliveredAt: null,
+            readAt: null,
+            errorMessage: '',
+            providerStatusRaw: inboundMessage,
+            createdByUid: 'whatsapp_webhook',
+            createdByName: 'WhatsApp Webhook',
+          });
+        }
+      }
+    }
+
+    res.status(200).json({ received: true });
+  } catch (error) {
+    await writeWhatsAppWebhookLog({
+      nitRut: '',
+      eventType: 'webhook_error',
+      payload,
+      status: 'error',
+      message: String(error?.message || 'Error procesando webhook de WhatsApp.'),
+    }).catch(() => {});
+    res.status(500).json({ received: false });
+  }
 });
 
 exports.sendScheduledPaymentReminders = functions.pubsub

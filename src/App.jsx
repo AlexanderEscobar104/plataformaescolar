@@ -93,6 +93,15 @@ import CertificadosTemplatesPage from './pages/dashboard/CertificadosTemplatesPa
 import BoletinesPage from './pages/dashboard/BoletinesPage'
 import BoletinesStructurePage from './pages/dashboard/BoletinesStructurePage'
 import AnnouncementsPage from './pages/dashboard/AnnouncementsPage'
+import AdmissionsCrmPage from './pages/dashboard/AdmissionsCrmPage'
+import AdmissionsLeadsPage from './pages/dashboard/AdmissionsLeadsPage'
+import AdmissionsLeadDetailPage from './pages/dashboard/AdmissionsLeadDetailPage'
+import AdmissionsAgendaPage from './pages/dashboard/AdmissionsAgendaPage'
+import AdmissionsReportsPage from './pages/dashboard/AdmissionsReportsPage'
+import WhatsAppInboxPage from './pages/dashboard/WhatsAppInboxPage'
+import WhatsAppTemplatesPage from './pages/dashboard/WhatsAppTemplatesPage'
+import WhatsAppCampaignsPage from './pages/dashboard/WhatsAppCampaignsPage'
+import WhatsAppSettingsPage from './pages/dashboard/WhatsAppSettingsPage'
 
 const PENDING_NATIVE_ROUTE_KEY = 'pending_native_route'
 
@@ -255,6 +264,16 @@ function App() {
           <Route path="crear-aspirantes" element={<AspirantesListPage />} />
           <Route path="crear-aspirantes/nuevo" element={<AspiranteRegistrationPage />} />
           <Route path="crear-aspirantes/editar/:aspiranteId" element={<AspiranteEditPage />} />
+          <Route path="admisiones/crm" element={<AdmissionsCrmPage />} />
+          <Route path="admisiones/leads" element={<AdmissionsLeadsPage />} />
+          <Route path="admisiones/leads/nuevo" element={<AdmissionsLeadDetailPage />} />
+          <Route path="admisiones/leads/:leadId" element={<AdmissionsLeadDetailPage />} />
+          <Route path="admisiones/agenda" element={<AdmissionsAgendaPage />} />
+          <Route path="admisiones/reportes" element={<AdmissionsReportsPage />} />
+          <Route path="whatsapp/bandeja" element={<WhatsAppInboxPage />} />
+          <Route path="whatsapp/plantillas" element={<WhatsAppTemplatesPage />} />
+          <Route path="whatsapp/campanas" element={<WhatsAppCampaignsPage />} />
+          <Route path="whatsapp/configuracion" element={<WhatsAppSettingsPage />} />
           <Route path="acudientes" element={<GuardiansListPage />} />
           <Route path="acudientes/nuevo" element={<GuardianRegistrationPage />} />
           <Route path="acudientes/editar/:guardianId" element={<GuardianEditPage />} />
