@@ -10,6 +10,27 @@ import {
 } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 
+function shouldSkipAuditForCollection(collectionName) {
+  const normalized = String(collectionName || '').trim().toLowerCase()
+  if (!normalized) return true
+
+  // Skip audit noise / high-churn / sensitive plumbing.
+  const SKIP = new Set([
+    'tipo_reportes',
+    'historial_modificaciones',
+    'auditoria_accesos',
+    'users', // user profile updates can be frequent; audit can be enabled later if needed
+    'notifications',
+    'messages',
+    'chat_messages',
+    'chat_presence',
+    'chat_preferences',
+    'chat_typing',
+  ])
+
+  return SKIP.has(normalized) || normalized.includes('linkeddevices') || normalized.includes('pushtokens')
+}
+
 /**
  * Returns the tenant NIT from the global auth context.
  */
@@ -167,6 +188,11 @@ export async function updateDocTracked(documentRef, data) {
     data.nitRut = nitRut
   }
 
+  const { coleccion, documentoId } = parseRef(documentRef)
+  if (shouldSkipAuditForCollection(coleccion)) {
+    return updateDoc(documentRef, data)
+  }
+
   // Capture previous state BEFORE the update.
   let snapshotData = null
   try {
@@ -178,11 +204,8 @@ export async function updateDocTracked(documentRef, data) {
 
   const result = await updateDoc(documentRef, data)
 
-  const { coleccion, documentoId } = parseRef(documentRef)
-  if (coleccion !== 'tipo_reportes') {
-    const { datoAnterior, datoNuevo } = computeDiff(snapshotData, data)
-    await logHistory({ coleccion, documentoId, operacion: 'actualizar', datoAnterior, datoNuevo })
-  }
+  const { datoAnterior, datoNuevo } = computeDiff(snapshotData, data)
+  await logHistory({ coleccion, documentoId, operacion: 'actualizar', datoAnterior, datoNuevo })
 
   return result
 }
@@ -197,6 +220,11 @@ export async function setDocTracked(documentRef, data, options) {
     data.nitRut = nitRut
   }
 
+  const { coleccion, documentoId } = parseRef(documentRef)
+  if (shouldSkipAuditForCollection(coleccion)) {
+    return options ? setDoc(documentRef, data, options) : setDoc(documentRef, data)
+  }
+
   // Capture previous state BEFORE the set.
   let snapshotData = null
   try {
@@ -208,16 +236,11 @@ export async function setDocTracked(documentRef, data, options) {
 
   const result = options ? await setDoc(documentRef, data, options) : await setDoc(documentRef, data)
 
-  const { coleccion, documentoId } = parseRef(documentRef)
-  if (coleccion !== 'tipo_reportes') {
-    if (snapshotData) {
-      // Existing document — log only diff.
-      const { datoAnterior, datoNuevo } = computeDiff(snapshotData, data)
-      await logHistory({ coleccion, documentoId, operacion: 'actualizar', datoAnterior, datoNuevo })
-    } else {
-      // New document — log full payload as datoNuevo.
-      await logHistory({ coleccion, documentoId, operacion: 'crear', datoAnterior: null, datoNuevo: data })
-    }
+  if (snapshotData) {
+    const { datoAnterior, datoNuevo } = computeDiff(snapshotData, data)
+    await logHistory({ coleccion, documentoId, operacion: 'actualizar', datoAnterior, datoNuevo })
+  } else {
+    await logHistory({ coleccion, documentoId, operacion: 'crear', datoAnterior: null, datoNuevo: data })
   }
 
   return result
@@ -233,13 +256,15 @@ export async function addDocTracked(collectionRef, data) {
     data.nitRut = nitRut
   }
 
+  const coleccion = collectionRef.path || (collectionRef.id ?? '')
+  if (shouldSkipAuditForCollection(coleccion)) {
+    return addDoc(collectionRef, data)
+  }
+
   const result = await addDoc(collectionRef, data)
 
-  const coleccion = collectionRef.path || (collectionRef.id ?? '')
-  if (coleccion !== 'tipo_reportes') {
-    const documentoId = result.id
-    await logHistory({ coleccion, documentoId, operacion: 'crear', datoAnterior: null, datoNuevo: data })
-  }
+  const documentoId = result.id
+  await logHistory({ coleccion, documentoId, operacion: 'crear', datoAnterior: null, datoNuevo: data })
 
   return result
 }
@@ -251,6 +276,10 @@ export async function addDocTracked(collectionRef, data) {
 export async function deleteDocTracked(documentRef) {
   const { coleccion, documentoId } = parseRef(documentRef)
 
+  if (shouldSkipAuditForCollection(coleccion)) {
+    return deleteDoc(documentRef)
+  }
+
   let datoAnterior = null
   try {
     const snap = await getDoc(documentRef)
@@ -261,9 +290,7 @@ export async function deleteDocTracked(documentRef) {
 
   const result = await deleteDoc(documentRef)
 
-  if (coleccion !== 'tipo_reportes') {
-    await logHistory({ coleccion, documentoId, operacion: 'eliminar', datoAnterior, datoNuevo: null })
-  }
+  await logHistory({ coleccion, documentoId, operacion: 'eliminar', datoAnterior, datoNuevo: null })
 
   return result
 }

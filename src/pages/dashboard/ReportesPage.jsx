@@ -48,6 +48,7 @@ function resolveReportKind(tipo) {
   if (key === 'permisos_solicitados' || key === 'permisos_solicitado' || key === 'permisos') return 'permisos'
   if (key === 'evaluaciones' || key === 'reporte_evaluaciones') return 'evaluaciones'
   if (key === 'tareas' || key === 'reporte_tareas') return 'tareas'
+  if (key === 'pagos' || key === 'reporte_pagos' || key === 'facturacion_y_recibos') return 'pagos'
   if (key === 'historial_modificaciones' || key === 'historial_de_modificaciones' || key === 'historial') {
     return 'historial_modificaciones'
   }
@@ -479,6 +480,13 @@ function ReportesPage() {
   const [tareasGradeFilter, setTareasGradeFilter] = useState('')
   const [tareasGroupFilter, setTareasGroupFilter] = useState('')
   const [tareasStatusFilter, setTareasStatusFilter] = useState('')
+  const [paymentsReport, setPaymentsReport] = useState([])
+  const [loadingPayments, setLoadingPayments] = useState(false)
+  const [paymentsFeedback, setPaymentsFeedback] = useState('')
+  const [paymentsSearch, setPaymentsSearch] = useState('')
+  const [paymentsMethodFilter, setPaymentsMethodFilter] = useState('')
+  const [paymentsPeriodFilter, setPaymentsPeriodFilter] = useState('')
+  const [paymentsReceiptStatusFilter, setPaymentsReceiptStatusFilter] = useState('')
 
   const currentYear = new Date().getFullYear()
   const todayIso = new Date().toISOString().slice(0, 10)
@@ -584,6 +592,30 @@ function ReportesPage() {
     )
     return [...set].sort()
   }, [tareasReport])
+  const paymentsMethodOptions = useMemo(() => {
+    const set = new Set(
+      paymentsReport
+        .map((r) => String(r.metodo || '').trim())
+        .filter((v) => v && v !== '-'),
+    )
+    return [...set].sort()
+  }, [paymentsReport])
+  const paymentsPeriodOptions = useMemo(() => {
+    const set = new Set(
+      paymentsReport
+        .map((r) => String(r.periodo || '').trim())
+        .filter((v) => v && v !== '-'),
+    )
+    return [...set].sort()
+  }, [paymentsReport])
+  const paymentsReceiptStatusOptions = useMemo(() => {
+    const set = new Set(
+      paymentsReport
+        .map((r) => String(r.estadoRecibo || '').trim())
+        .filter((v) => v && v !== '-'),
+    )
+    return [...set].sort()
+  }, [paymentsReport])
   const boletinesGradeOptions = useMemo(() => {
     const set = new Set(
       boletinesReport
@@ -1125,6 +1157,82 @@ function ReportesPage() {
     }
   }, [loadTareas, reportKind])
 
+  const loadPayments = useCallback(async () => {
+    if (!userNitRut) return
+    setLoadingPayments(true)
+    setPaymentsFeedback('')
+    try {
+      const [transactionsSnap, receiptsSnap, chargesSnap] = await Promise.all([
+        getDocs(query(collection(db, 'payments_transactions'), where('nitRut', '==', userNitRut))),
+        getDocs(query(collection(db, 'payments_receipts'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] })),
+        getDocs(query(collection(db, 'estado_cuenta_estudiantes'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] })),
+      ])
+
+      const receiptsByTransactionId = new Map(
+        receiptsSnap.docs.map((docSnapshot) => [docSnapshot.id, docSnapshot.data() || {}]),
+      )
+      const chargesById = new Map(
+        chargesSnap.docs.map((docSnapshot) => [docSnapshot.id, docSnapshot.data() || {}]),
+      )
+
+      const mapped = transactionsSnap.docs
+        .map((docSnapshot) => {
+          const data = docSnapshot.data() || {}
+          const receiptData = receiptsByTransactionId.get(docSnapshot.id) || {}
+          const chargeData = chargesById.get(String(data.chargeId || '').trim()) || {}
+          const createdDate = data.createdAt?.toDate?.()
+            ? data.createdAt.toDate().toISOString().split('T')[0]
+            : ''
+
+          return {
+            id: docSnapshot.id,
+            fecha: createdDate || '-',
+            createdAt: data.createdAt || null,
+            titular: data.recipientName || data.studentName || chargeData.recipientName || chargeData.studentName || '-',
+            documento: data.recipientDocument || chargeData.recipientDocument || chargeData.studentDocument || '-',
+            rol: data.recipientRole || chargeData.recipientRole || '-',
+            concepto: chargeData.conceptName || receiptData.conceptName || '-',
+            periodo: chargeData.periodLabel || receiptData.periodLabel || '-',
+            metodo: data.method || '-',
+            referencia: data.reference || '-',
+            valor: Number(data.amount) || 0,
+            recibo: receiptData.officialNumber || '',
+            estadoRecibo: String(receiptData.status || 'activo').trim().toLowerCase() || 'activo',
+            estadoCargo: String(chargeData.status || '').trim().toLowerCase() || '-',
+            saldoPosterior: Number(chargeData.balance),
+          }
+        })
+        .filter((row) => {
+          if (!filterFechaDesde && !filterFechaHasta) return true
+          if (!row.fecha || row.fecha === '-') return false
+          if (filterFechaDesde && row.fecha < filterFechaDesde) return false
+          if (filterFechaHasta && row.fecha > filterFechaHasta) return false
+          return true
+        })
+        .sort((a, b) => {
+          const left = a.createdAt?.toMillis?.() || 0
+          const right = b.createdAt?.toMillis?.() || 0
+          return right - left
+        })
+
+      setPaymentsReport(mapped)
+    } catch (err) {
+      console.error('Error loading payments report:', err)
+      setPaymentsReport([])
+      setPaymentsFeedback('No fue posible cargar el reporte de pagos.')
+    } finally {
+      setLoadingPayments(false)
+    }
+  }, [filterFechaDesde, filterFechaHasta, userNitRut])
+
+  useEffect(() => {
+    if (reportKind === 'pagos') {
+      loadPayments()
+    } else {
+      setPaymentsReport([])
+    }
+  }, [loadPayments, reportKind])
+
   const loadBoletines = useCallback(async () => {
     if (!userNitRut) return
     setLoadingBoletines(true)
@@ -1483,7 +1591,8 @@ function ReportesPage() {
   const isPermisos = reportKind === 'permisos'
   const isEvaluaciones = reportKind === 'evaluaciones'
   const isTareas = reportKind === 'tareas'
-  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isBoletines && !isAsistencias && !isInasistencias && !isPermisos && !isEvaluaciones && !isTareas
+  const isPayments = reportKind === 'pagos'
+  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isBoletines && !isAsistencias && !isInasistencias && !isPermisos && !isEvaluaciones && !isTareas && !isPayments
 
   return (
     <section className="reports-page">
@@ -2518,6 +2627,157 @@ function ReportesPage() {
                       <ExportExcelButton
                         data={exportRows}
                         filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'Tareas'}
+                        onExportStart={() => setExportingAll(true)}
+                        onExportEnd={() => setExportingAll(false)}
+                      />
+                    </div>
+                  )}
+                </>
+              )
+            })()
+          )}
+        </>
+      )}
+
+      {isPayments && (
+        <>
+          <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <input
+              type="text"
+              placeholder="Buscar por titular, documento, concepto, referencia o recibo..."
+              value={paymentsSearch}
+              onChange={(e) => { setPaymentsSearch(e.target.value); setCurrentPage(1) }}
+              style={{ flex: '1 1 240px' }}
+            />
+            <select
+              className="role-select-box"
+              value={paymentsMethodFilter}
+              onChange={(e) => { setPaymentsMethodFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los metodos</option>
+              {paymentsMethodOptions.map((method) => (
+                <option key={method} value={method}>{method}</option>
+              ))}
+            </select>
+            <select
+              className="role-select-box"
+              value={paymentsPeriodFilter}
+              onChange={(e) => { setPaymentsPeriodFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los periodos</option>
+              {paymentsPeriodOptions.map((period) => (
+                <option key={period} value={period}>{period}</option>
+              ))}
+            </select>
+            <select
+              className="role-select-box"
+              value={paymentsReceiptStatusFilter}
+              onChange={(e) => { setPaymentsReceiptStatusFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los estados de recibo</option>
+              {paymentsReceiptStatusOptions.map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.88em' }}>
+                Desde
+                <input type="date" value={filterFechaDesde} onChange={(e) => { setFilterFechaDesde(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+              <label style={{ fontSize: '0.88em' }}>
+                Hasta
+                <input type="date" value={filterFechaHasta} onChange={(e) => { setFilterFechaHasta(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+            </div>
+            <button type="button" className="button secondary small" onClick={loadPayments} disabled={loadingPayments}>
+              Refrescar
+            </button>
+          </div>
+
+          {paymentsFeedback && <p className="feedback error">{paymentsFeedback}</p>}
+
+          {loadingPayments ? (
+            <p>Cargando pagos...</p>
+          ) : (
+            (() => {
+              const q = paymentsSearch.trim().toLowerCase()
+              const filtered = paymentsReport.filter((row) => {
+                if (paymentsMethodFilter && String(row.metodo || '').trim() !== paymentsMethodFilter) return false
+                if (paymentsPeriodFilter && String(row.periodo || '').trim() !== paymentsPeriodFilter) return false
+                if (paymentsReceiptStatusFilter && String(row.estadoRecibo || '').trim() !== paymentsReceiptStatusFilter) return false
+                if (!q) return true
+                const hay = `${row.titular} ${row.documento} ${row.concepto} ${row.periodo} ${row.metodo} ${row.referencia} ${row.recibo}`.toLowerCase()
+                return hay.includes(q)
+              })
+              const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
+              const exportRows = filtered.map((row) => ({
+                Fecha: row.fecha || '-',
+                Titular: row.titular || '-',
+                Documento: row.documento || '-',
+                Rol: row.rol || '-',
+                Concepto: row.concepto || '-',
+                Periodo: row.periodo || '-',
+                Metodo: row.metodo || '-',
+                Referencia: row.referencia || '-',
+                Valor: row.valor || 0,
+                Recibo: row.recibo || '-',
+                'Estado recibo': row.estadoRecibo || '-',
+                'Estado cargo': row.estadoCargo || '-',
+                'Saldo posterior': Number.isFinite(row.saldoPosterior) ? row.saldoPosterior : '-',
+              }))
+
+              return (
+                <>
+                  <div className="students-table-wrap">
+                    <table className="students-table">
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Titular</th>
+                          <th>Documento</th>
+                          <th>Concepto</th>
+                          <th>Periodo</th>
+                          <th>Metodo</th>
+                          <th>Referencia</th>
+                          <th>Valor</th>
+                          <th>Recibo</th>
+                          <th>Estado recibo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length === 0 && (
+                          <tr>
+                            <td colSpan="10">No hay pagos para los filtros seleccionados.</td>
+                          </tr>
+                        )}
+                        {displayed.map((row) => (
+                          <tr key={row.id}>
+                            <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{row.fecha || '-'}</td>
+                            <td data-label="Titular">{row.titular || '-'}</td>
+                            <td data-label="Documento">{row.documento || '-'}</td>
+                            <td data-label="Concepto">{row.concepto || '-'}</td>
+                            <td data-label="Periodo">{row.periodo || '-'}</td>
+                            <td data-label="Metodo">{row.metodo || '-'}</td>
+                            <td data-label="Referencia">{row.referencia || '-'}</td>
+                            <td data-label="Valor">{Number(row.valor || 0).toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}</td>
+                            <td data-label="Recibo">{row.recibo || 'Pendiente'}</td>
+                            <td data-label="Estado recibo">{row.estadoRecibo || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtered.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                  {canExportExcel && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                      <ExportExcelButton
+                        data={exportRows}
+                        filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'Pagos'}
                         onExportStart={() => setExportingAll(true)}
                         onExportEnd={() => setExportingAll(false)}
                       />

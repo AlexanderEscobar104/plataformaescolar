@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import jsPDF from 'jspdf'
+import { useNavigate } from 'react-router-dom'
 import { db, functions, storage } from '../../firebase'
 import { addDocTracked, setDocTracked, updateDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
 import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 import { savePdfDocument } from '../../utils/nativeLinks'
+import { downloadPaymentReceiptPdf } from '../../utils/paymentReceipts'
 import { fileToDataUrl, guessImageFormat } from '../../utils/pdfImages'
+import { DEFAULT_SMS_TEMPLATES, renderSmsTemplate } from '../../utils/smsTemplates'
 import {
   applyPaymentToCharge,
   buildChargeDocId,
@@ -148,18 +151,72 @@ function buildRecipientOptionLabel(recipient, roleOptions) {
   return `${recipient?.name || 'Titular'} - ${roleLabel}${subgroupLabel}`
 }
 
+function resolveUserPhone(userData) {
+  const profile = userData?.profile || {}
+  const role = String(userData?.role || '').trim().toLowerCase()
+  if (role === 'acudiente') {
+    return String(
+      profile.celular ||
+      userData?.celular ||
+      '',
+    ).trim()
+  }
+
+  return String(
+    profile.celular ||
+    profile.telefono ||
+    userData?.celular ||
+    userData?.telefono ||
+    userData?.phoneNumber ||
+    '',
+  ).trim()
+}
+
+function resolveSmsTemplateBySlug(templates, slug) {
+  const normalizedSlug = String(slug || '').trim()
+  return templates.find((item) => String(item.slug || '').trim() === normalizedSlug)
+    || DEFAULT_SMS_TEMPLATES.find((item) => String(item.slug || '').trim() === normalizedSlug)
+    || null
+}
+
+function formatSmsTargetSummary(target) {
+  if (!target?.phone) {
+    return 'SMS: sin numero disponible'
+  }
+
+  const roleLabel = String(target.role || '').trim().toLowerCase() === 'acudiente'
+    ? 'Acudiente'
+    : 'Titular'
+
+  return `${roleLabel}: ${target.name || 'Destinatario'} - ${target.phone}`
+}
+
+function formatSmsTemplateSummary(templateSlug) {
+  const normalizedSlug = String(templateSlug || '').trim()
+  return `Plantilla: ${normalizedSlug || 'personalizada'}`
+}
+
 function PaymentsPage() {
+  const navigate = useNavigate()
   const { user, userNitRut, hasPermission } = useAuth()
   const canViewPayments = hasPermission(PERMISSION_KEYS.PAYMENTS_VIEW)
   const canManageItems = hasPermission(PERMISSION_KEYS.PAYMENTS_ITEM_COBRO_MANAGE)
   const canManageServices = hasPermission(PERMISSION_KEYS.PAYMENTS_SERVICIOS_COMPLEMENTARIOS_MANAGE)
   const canManagePayments = canManageItems || canManageServices
+  const canSendSms =
+    hasPermission(PERMISSION_KEYS.SMS_SEND) ||
+    hasPermission(PERMISSION_KEYS.MESSAGES_SEND) ||
+    hasPermission(PERMISSION_KEYS.CONFIG_MESSAGES_MANAGE) ||
+    hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
 
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [registeringPayment, setRegisteringPayment] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [students, setStudents] = useState([])
+  const [usersDirectory, setUsersDirectory] = useState({})
+  const [guardianLinks, setGuardianLinks] = useState([])
+  const [smsTemplates, setSmsTemplates] = useState([])
   const [customRoles, setCustomRoles] = useState([])
   const [charges, setCharges] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -180,8 +237,10 @@ function PaymentsPage() {
   const [paymentDrafts, setPaymentDrafts] = useState({})
   const [generatingAll, setGeneratingAll] = useState(false)
   const [issuingReceiptId, setIssuingReceiptId] = useState('')
+  const [sendingSmsKey, setSendingSmsKey] = useState('')
   const [annullingReceiptId, setAnnullingReceiptId] = useState('')
   const [annulConfirmTarget, setAnnulConfirmTarget] = useState(null)
+  const [activeView, setActiveView] = useState('facturacion')
 
   useEffect(() => {
     setCustomDueDate(resolveDefaultDueDate(periodLabel, billingData?.diaCorte))
@@ -204,7 +263,7 @@ function PaymentsPage() {
 
     setLoading(true)
     try {
-      const [usersSnap, empleadosSnap, rolesSnap, chargesSnap, billingSnap, transactionsSnap, cashBoxesSnap, plantelSnap, templatesSnap, receiptsSnap] = await Promise.all([
+      const [usersSnap, empleadosSnap, rolesSnap, chargesSnap, billingSnap, transactionsSnap, cashBoxesSnap, plantelSnap, templatesSnap, receiptsSnap, guardianLinksSnap, smsTemplatesSnap] = await Promise.all([
         getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'empleados'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] })),
         getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] })),
@@ -215,7 +274,14 @@ function PaymentsPage() {
         getDoc(doc(db, 'configuracion', `datosPlantel_${userNitRut}`)).catch(() => null),
         getDocs(query(collection(db, 'certificado_plantillas'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] })),
         getDocs(query(collection(db, 'payments_receipts'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] })),
+        getDocs(query(collection(db, 'student_guardians'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] })),
+        getDocs(query(collection(db, 'sms_templates'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] })),
       ])
+
+      const rawUsersById = {}
+      usersSnap.docs.forEach((docSnapshot) => {
+        rawUsersById[docSnapshot.id] = docSnapshot.data() || {}
+      })
 
       const mappedUsers = usersSnap.docs
         .map((docSnapshot) => {
@@ -282,6 +348,13 @@ function PaymentsPage() {
         .sort((a, b) => String(a.nombreCaja || '').localeCompare(String(b.nombreCaja || '')))
 
       setBillingData(billingSnap?.exists?.() ? billingSnap.data() || null : null)
+      setUsersDirectory(rawUsersById)
+      setGuardianLinks(guardianLinksSnap.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })))
+      setSmsTemplates(
+        smsTemplatesSnap.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+          .filter((item) => String(item.status || 'activo').trim().toLowerCase() === 'activo'),
+      )
       setCustomRoles(rolesSnap.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })))
       setStudents(mappedStudents)
       setCharges(mappedCharges)
@@ -293,6 +366,9 @@ function PaymentsPage() {
     } catch {
       setFeedback('No fue posible cargar la cartera del modulo de pagos.')
       setStudents([])
+      setUsersDirectory({})
+      setGuardianLinks([])
+      setSmsTemplates([])
       setCustomRoles([])
       setCharges([])
       setTransactions([])
@@ -303,7 +379,7 @@ function PaymentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [canViewPayments, selectedRecipientRole, userNitRut])
+  }, [canViewPayments, userNitRut])
 
   useEffect(() => {
     loadData()
@@ -393,6 +469,183 @@ function PaymentsPage() {
       { total: 0, paid: 0, balance: 0 },
     )
   }, [charges, filteredCharges, selectedStudentId])
+
+  const openSmsFromPayment = useCallback(({ charge = null, transaction = null } = {}) => {
+    const chargeData = charge || {}
+    const transactionData = transaction || {}
+    const recipientUid = String(
+      chargeData.recipientUid ||
+      transactionData.recipientUid ||
+      chargeData.studentUid ||
+      transactionData.studentUid ||
+      '',
+    ).trim()
+    const studentUid = String(chargeData.studentUid || transactionData.studentUid || '').trim()
+    const recipientUser = recipientUid ? usersDirectory[recipientUid] || null : null
+
+    let recipientName = String(
+      transactionData.recipientName ||
+      chargeData.recipientName ||
+      transactionData.studentName ||
+      chargeData.studentName ||
+      '',
+    ).trim()
+    let recipientPhone = resolveUserPhone(recipientUser)
+
+    if (studentUid) {
+      const activeGuardianLink = guardianLinks.find((item) =>
+        String(item.studentUid || '').trim() === studentUid &&
+        String(item.status || 'activo').trim().toLowerCase() === 'activo',
+      ) || null
+
+      const guardianUid = String(activeGuardianLink?.guardianUid || '').trim()
+      const guardianUser = guardianUid ? usersDirectory[guardianUid] || null : null
+      const guardianPhone = resolveUserPhone(guardianUser)
+      const guardianName = String(
+        activeGuardianLink?.guardianName ||
+        resolveRecipientName(guardianUser, 'acudiente') ||
+        '',
+      ).trim()
+
+      if (guardianPhone) {
+        recipientName = guardianName || recipientName || 'Acudiente'
+        recipientPhone = guardianPhone
+      }
+    }
+
+    const prefillSms = {
+      sourceModule: 'pagos',
+      campaignName: 'pagos_manual',
+      nombre: recipientName,
+      acudiente: recipientName,
+      estudiante: String(chargeData.studentName || transactionData.studentName || '').trim(),
+      concepto: String(chargeData.conceptName || '').trim(),
+      periodo: String(chargeData.periodLabel || '').trim(),
+      saldo: formatCurrency(chargeData.balance),
+      valor: formatCurrency(transactionData.amount || chargeData.totalAmount),
+      fecha_vencimiento: formatHumanDate(chargeData.dueDate),
+      numero_recibo: String(transactionData.officialNumber || '').trim(),
+      plantel: resolvePlantelName(plantelData),
+      recipientsRaw: recipientPhone ? `${recipientName || 'Titular'}|${recipientPhone}` : '',
+    }
+
+    navigate('/dashboard/sms/enviar', {
+      state: { prefillSms },
+    })
+  }, [guardianLinks, navigate, plantelData, usersDirectory])
+
+  const resolveSmsTargetFromPayment = useCallback(({ charge = null, transaction = null } = {}) => {
+    const chargeData = charge || {}
+    const transactionData = transaction || {}
+    const recipientUid = String(
+      chargeData.recipientUid ||
+      transactionData.recipientUid ||
+      chargeData.studentUid ||
+      transactionData.studentUid ||
+      '',
+    ).trim()
+    const studentUid = String(chargeData.studentUid || transactionData.studentUid || '').trim()
+    const recipientUser = recipientUid ? usersDirectory[recipientUid] || null : null
+
+    const normalizedRecipientRole = String(
+      chargeData.recipientRole ||
+      transactionData.recipientRole ||
+      recipientUser?.role ||
+      '',
+    ).trim().toLowerCase()
+
+    if (studentUid) {
+      const activeGuardianLink = guardianLinks.find((item) =>
+        String(item.studentUid || '').trim() === studentUid &&
+        String(item.status || 'activo').trim().toLowerCase() === 'activo',
+      ) || null
+
+      const guardianUid = String(activeGuardianLink?.guardianUid || '').trim()
+      const guardianUser = guardianUid ? usersDirectory[guardianUid] || null : null
+      const guardianPhone = resolveUserPhone(guardianUser)
+      const guardianName = String(
+        activeGuardianLink?.guardianName ||
+        resolveRecipientName(guardianUser, 'acudiente') ||
+        '',
+      ).trim()
+
+      if (guardianPhone) {
+        return {
+          phone: guardianPhone,
+          name: guardianName || 'Acudiente',
+          role: 'acudiente',
+        }
+      }
+    }
+
+    const recipientPhone = resolveUserPhone(recipientUser)
+    if (recipientPhone) {
+      return {
+        phone: recipientPhone,
+        name: String(
+          chargeData.recipientName ||
+          transactionData.recipientName ||
+          resolveRecipientName(recipientUser, normalizedRecipientRole || 'titular') ||
+          'Titular',
+        ).trim(),
+        role: normalizedRecipientRole || 'titular',
+      }
+    }
+
+    return null
+  }, [guardianLinks, usersDirectory])
+
+  const sendQuickSmsFromPayment = useCallback(async ({ charge = null, transaction = null, templateSlug = '' } = {}) => {
+    const target = resolveSmsTargetFromPayment({ charge, transaction })
+    if (!target?.phone) {
+      setFeedback('No se encontro un numero celular del acudiente o titular para este pago.')
+      return
+    }
+
+    const template = resolveSmsTemplateBySlug(smsTemplates, templateSlug)
+    if (!template?.body) {
+      setFeedback('No se encontro la plantilla SMS para este envio rapido.')
+      return
+    }
+
+    const chargeData = charge || {}
+    const transactionData = transaction || {}
+    const smsVariables = {
+      nombre: target.name,
+      acudiente: target.name,
+      estudiante: String(chargeData.studentName || transactionData.studentName || '').trim() || 'estudiante',
+      concepto: String(chargeData.conceptName || '').trim() || 'sin concepto',
+      periodo: String(chargeData.periodLabel || '').trim(),
+      saldo: formatCurrency(chargeData.balance),
+      valor: formatCurrency(transactionData.amount || chargeData.totalAmount),
+      fecha_vencimiento: formatHumanDate(chargeData.dueDate),
+      numero_recibo: String(transactionData.officialNumber || '').trim(),
+      plantel: resolvePlantelName(plantelData),
+      link_pago: '',
+    }
+
+    const smsText = renderSmsTemplate(template.body, smsVariables)
+    const smsKey = `${String(templateSlug || '').trim()}__${String(transactionData.id || chargeData.id || '').trim()}`
+
+    try {
+      setSendingSmsKey(smsKey)
+      setFeedback('')
+      const sendSmsHablame = httpsCallable(functions, 'sendSmsHablame')
+      await sendSmsHablame({
+        campaignName: `pagos_${templateSlug}`,
+        sourceModule: 'pagos',
+        phone: target.phone,
+        text: smsText,
+        recipientName: target.name,
+        templateSlug,
+      })
+      setFeedback(`SMS enviado correctamente a ${target.name}.`)
+    } catch {
+      setFeedback('No fue posible enviar el SMS rapido desde pagos.')
+    } finally {
+      setSendingSmsKey('')
+    }
+  }, [guardianLinks, plantelData, resolveSmsTargetFromPayment, smsTemplates])
 
   const loadBillingSources = useCallback(async () => {
     const [itemsSnap, servicesSnap] = await Promise.all([
@@ -696,6 +949,16 @@ function PaymentsPage() {
       const matchingCharge = charges.find((charge) => charge.id === transaction.chargeId)
       const receiptDoc = await getDoc(doc(db, 'payments_receipts', transaction.id)).catch(() => null)
       const receiptData = receiptDoc?.exists?.() ? receiptDoc.data() || {} : {}
+      await downloadPaymentReceiptPdf({
+        transaction,
+        matchingCharge,
+        receiptData,
+        plantelData,
+        receiptSignatures,
+        userNitRut,
+        cashBox: activeCashBox,
+      })
+      return
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
       const pageWidth = pdf.internal.pageSize.getWidth()
       const pageHeight = pdf.internal.pageSize.getHeight()
@@ -829,8 +1092,8 @@ function PaymentsPage() {
     return (
       <section className="dashboard-module-shell settings-module-shell">
         <div className="settings-module-card chat-settings-card">
-          <h3>Pagos no disponibles</h3>
-          <p>No tienes permisos para consultar pagos.</p>
+          <h3>Facturacion no disponible</h3>
+          <p>No tienes permisos para consultar facturacion y recibos.</p>
         </div>
       </section>
     )
@@ -840,9 +1103,9 @@ function PaymentsPage() {
     <section className="dashboard-module-shell settings-module-shell">
       <div className="dashboard-module-hero">
         <div className="dashboard-module-hero-copy">
-          <span className="dashboard-module-eyebrow">Pagos</span>
-          <h2>Cartera por titulares</h2>
-          <p>Genera cargos reales para estudiantes y otros roles, registra pagos o abonos, y emite recibos oficiales por titular.</p>
+          <span className="dashboard-module-eyebrow">Facturacion</span>
+          <h2>Facturacion y recibos por titulares</h2>
+          <p>Genera cargos por periodo, registra recaudos y administra recibos oficiales descargables para estudiantes y otros titulares.</p>
           {feedback && <p className="feedback">{feedback}</p>}
         </div>
         <div className="dashboard-module-hero-note">
@@ -854,14 +1117,14 @@ function PaymentsPage() {
 
       <div className="guardian-portal-stats">
         <article className="settings-module-card guardian-portal-stat-card">
-          <h3>Total</h3>
+          <h3>Facturado</h3>
           <p>{formatCurrency(summary.total)}</p>
-          <small>Cartera generada</small>
+          <small>Cargos generados</small>
         </article>
         <article className="settings-module-card guardian-portal-stat-card">
           <h3>Pagado</h3>
           <p>{formatCurrency(summary.paid)}</p>
-          <small>Pagos y abonos registrados</small>
+          <small>Recaudos y abonos registrados</small>
         </article>
         <article className="settings-module-card guardian-portal-stat-card">
           <h3>Saldo</h3>
@@ -870,11 +1133,31 @@ function PaymentsPage() {
         </article>
       </div>
 
+      <div className="students-toolbar guardian-portal-toolbar" style={{ marginTop: '1.25rem' }}>
+        <div className="payments-toolbar-heading" style={{ flex: 1 }}>
+          <h3>Vista del modulo</h3>
+          <p>Cambia entre facturacion, pagos recibidos y recibos desde una sola pantalla.</p>
+        </div>
+        <div className="member-module-actions">
+          <button type="button" className={`button ${activeView === 'facturacion' ? '' : 'secondary'}`} onClick={() => setActiveView('facturacion')}>
+            Facturacion ({filteredCharges.length})
+          </button>
+          <button type="button" className={`button ${activeView === 'pagos' ? '' : 'secondary'}`} onClick={() => setActiveView('pagos')}>
+            Pagos recibidos ({filteredTransactions.length})
+          </button>
+          <button type="button" className={`button ${activeView === 'recibos' ? '' : 'secondary'}`} onClick={() => setActiveView('recibos')}>
+            Recibos ({filteredTransactions.length})
+          </button>
+        </div>
+      </div>
+
+      {activeView === 'facturacion' && (
+        <>
       <div className="payments-generation-grid">
         <div className="students-toolbar guardian-portal-toolbar">
           <div className="payments-toolbar-heading">
-            <h3>Generar Cartera</h3>
-            <p>Usa el periodo y la fecha de vencimiento del titular seleccionado.</p>
+            <h3>Generar facturacion</h3>
+            <p>Crea cargos para el titular seleccionado usando el periodo y la fecha de vencimiento definidos.</p>
           </div>
           <label>
             <span>Rol</span>
@@ -907,14 +1190,14 @@ function PaymentsPage() {
           </label>
           <div className="member-module-actions">
             <button type="button" className="button" onClick={handleGenerateCharges} disabled={generating || !selectedStudentId || !canManagePayments}>
-              {generating ? 'Generando...' : 'Generar cartera'}
+              {generating ? 'Generando...' : 'Generar facturacion'}
             </button>
           </div>
         </div>
 
         <div className="students-toolbar guardian-portal-toolbar">
           <div className="payments-toolbar-heading">
-            <h3>Generar Cartera Masiva</h3>
+            <h3>Generar facturacion masiva</h3>
             <p>Aplica el periodo y la fecha de vencimiento definidos en este panel a todos los titulares filtrados.</p>
           </div>
           <label>
@@ -966,7 +1249,7 @@ function PaymentsPage() {
           </label>
           <div className="member-module-actions">
             <button type="button" className="button secondary" onClick={handleGenerateAllCharges} disabled={generatingAll || studentsForMassGeneration.length === 0 || !canManagePayments}>
-              {generatingAll ? 'Generando cartera masiva...' : 'Generar cartera masiva'}
+              {generatingAll ? 'Generando facturacion masiva...' : 'Generar facturacion masiva'}
             </button>
           </div>
         </div>
@@ -974,15 +1257,15 @@ function PaymentsPage() {
 
 
       <div className="settings-module-card chat-settings-card">
-        <h3>Automatizacion de cobro</h3>
+        <h3>Automatizacion de facturacion y cobro</h3>
         <p>Los recordatorios para acudientes ahora se generan automaticamente todos los dias desde una tarea programada del backend.</p>
         <p>
-          La generacion masiva crea o actualiza la cartera del periodo y la fecha de vencimiento configurados en su propio panel para todos los titulares visibles del rol elegido. Para estudiantes puedes segmentar ademas por grupo y subgrupo.
+          La generacion masiva crea o actualiza la facturacion del periodo y la fecha de vencimiento configurados en su propio panel para todos los titulares visibles del rol elegido. Para estudiantes puedes segmentar ademas por grupo y subgrupo.
         </p>
       </div>
 
       <div className="settings-module-card chat-settings-card">
-        <h3>Estados y recibos</h3>
+        <h3>Estados de facturacion y recibos</h3>
         <p>El recibo oficial se crea automaticamente al aplicar un pago. Si una transaccion aun no lo tiene, el boton `Emitir comprobante` lo genera y descarga el PDF.</p>
         <p>El estado del cargo cambia de `pendiente` a `abonado` cuando recibe un pago parcial, a `pagado` cuando el saldo llega a cero, y a `vencido` cuando la fecha de vencimiento ya paso sin pago completo.</p>
       </div>
@@ -1006,9 +1289,9 @@ function PaymentsPage() {
 
       <div className="students-table-wrap">
         {loading ? (
-          <p>Cargando cartera...</p>
+          <p>Cargando facturacion...</p>
         ) : filteredCharges.length === 0 ? (
-          <p>No hay cargos generados para este filtro.</p>
+          <p>No hay cargos facturados para este filtro.</p>
         ) : (
           <table className="students-table">
             <thead>
@@ -1021,6 +1304,7 @@ function PaymentsPage() {
                 <th>Saldo</th>
                 <th>Estado</th>
                 <th>Registrar pago</th>
+                {canSendSms ? <th>SMS</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -1032,6 +1316,8 @@ function PaymentsPage() {
                   notes: '',
                 }
                 const latestTransaction = latestTransactionByCharge.get(charge.id) || null
+                const smsTarget = resolveSmsTargetFromPayment({ charge, transaction: latestTransaction })
+                const quickSmsTemplateSlug = 'recordatorio_pago_proximo'
                 const receiptStatus = String(latestTransaction?.receiptStatus || 'activo').trim().toLowerCase()
                 const chargeStatus = String(charge.resolvedStatus || charge.status || '').trim().toLowerCase()
                 const canAnnulReceipt = chargeStatus !== 'anulado'
@@ -1086,6 +1372,29 @@ function PaymentsPage() {
                         </button>
                       </div>
                     </td>
+                    {canSendSms ? (
+                      <td data-label="SMS">
+                        <div className="member-module-actions" style={{ justifyContent: 'flex-start' }}>
+                          <button
+                            type="button"
+                            className="button secondary small"
+                            onClick={() => sendQuickSmsFromPayment({ charge, transaction: latestTransaction, templateSlug: quickSmsTemplateSlug })}
+                            disabled={sendingSmsKey === `${quickSmsTemplateSlug}__${latestTransaction?.id || charge.id}`}
+                          >
+                            {sendingSmsKey === `${quickSmsTemplateSlug}__${latestTransaction?.id || charge.id}` ? 'Enviando...' : 'SMS recordatorio'}
+                          </button>
+                          <button
+                            type="button"
+                            className="button secondary small"
+                            onClick={() => openSmsFromPayment({ charge, transaction: latestTransaction })}
+                          >
+                            Personalizar
+                          </button>
+                        </div>
+                        <small className="payments-sms-target">{formatSmsTargetSummary(smsTarget)}</small>
+                        <small className="payments-sms-target">{formatSmsTemplateSummary(quickSmsTemplateSlug)}</small>
+                      </td>
+                    ) : null}
                   </tr>
                 )
               })}
@@ -1095,13 +1404,15 @@ function PaymentsPage() {
       </div>
 
       <div className="settings-module-card chat-settings-card">
-        <h3>Comprobantes emitibles</h3>
+        <h3>Recibos descargables</h3>
         {filteredTransactions.length === 0 ? (
-          <p>No hay pagos registrados para emitir comprobantes.</p>
+          <p>No hay pagos registrados para emitir recibos.</p>
         ) : (
           <div className="guardian-message-list">
             {filteredTransactions.slice(0, 12).map((transaction) => {
               const matchingCharge = charges.find((charge) => charge.id === transaction.chargeId)
+              const smsTarget = resolveSmsTargetFromPayment({ charge: matchingCharge, transaction })
+              const quickSmsTemplateSlug = 'pago_realizado'
               const chargeStatus = String(matchingCharge?.resolvedStatus || matchingCharge?.status || '').trim().toLowerCase()
               const receiptStatus = String(transaction.receiptStatus || 'activo').trim().toLowerCase()
               return (
@@ -1117,7 +1428,28 @@ function PaymentsPage() {
                     Recibo: {transaction.officialNumber || 'Pendiente'} · Estado: {receiptStatus === 'anulado' ? 'Anulado' : 'Activo'}
                   </small>
                   <small>Referencia: {transaction.reference || '-'}</small>
+                  {canSendSms ? <small className="payments-sms-target">{formatSmsTargetSummary(smsTarget)}</small> : null}
+                  {canSendSms ? <small className="payments-sms-target">{formatSmsTemplateSummary(quickSmsTemplateSlug)}</small> : null}
                   <div className="member-module-actions">
+                    {canSendSms ? (
+                      <button
+                        type="button"
+                        className="button secondary small"
+                        onClick={() => sendQuickSmsFromPayment({ charge: matchingCharge, transaction, templateSlug: quickSmsTemplateSlug })}
+                        disabled={sendingSmsKey === `${quickSmsTemplateSlug}__${transaction.id}`}
+                      >
+                        {sendingSmsKey === `${quickSmsTemplateSlug}__${transaction.id}` ? 'Enviando...' : 'SMS pago'}
+                      </button>
+                    ) : null}
+                    {canSendSms ? (
+                      <button
+                        type="button"
+                        className="button secondary small"
+                        onClick={() => openSmsFromPayment({ charge: matchingCharge, transaction })}
+                      >
+                        Personalizar
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="button small danger"
@@ -1141,6 +1473,145 @@ function PaymentsPage() {
           </div>
         )}
       </div>
+        </>
+      )}
+
+      {activeView === 'pagos' && (
+        <div className="settings-module-card chat-settings-card">
+          <h3>Pagos recibidos</h3>
+          {filteredTransactions.length === 0 ? (
+            <p>No hay pagos registrados para la vista actual.</p>
+          ) : (
+            <div className="guardian-message-list">
+              {filteredTransactions.map((transaction) => {
+                const matchingCharge = charges.find((charge) => charge.id === transaction.chargeId)
+                const smsTarget = resolveSmsTargetFromPayment({ charge: matchingCharge, transaction })
+                const quickSmsTemplateSlug = 'pago_realizado'
+                const chargeStatus = String(matchingCharge?.resolvedStatus || matchingCharge?.status || '').trim().toLowerCase()
+                const receiptStatus = String(transaction.receiptStatus || 'activo').trim().toLowerCase()
+                return (
+                  <article key={transaction.id} className="guardian-message-card">
+                    <header>
+                      <strong>{transaction.recipientName || transaction.studentName || 'Titular'}</strong>
+                      <span>{formatDateTime(transaction.createdAt)}</span>
+                    </header>
+                    <p>
+                      Pago registrado por <strong>{formatCurrency(transaction.amount)}</strong> via {transaction.method || 'metodo no especificado'}.
+                    </p>
+                    <small>Concepto: {matchingCharge?.conceptName || 'Cargo asociado'}</small>
+                    <small>Referencia: {transaction.reference || '-'}</small>
+                    <small>Estado del recibo: {receiptStatus === 'anulado' ? 'Anulado' : 'Activo'}</small>
+                    {canSendSms ? <small className="payments-sms-target">{formatSmsTargetSummary(smsTarget)}</small> : null}
+                    {canSendSms ? <small className="payments-sms-target">{formatSmsTemplateSummary(quickSmsTemplateSlug)}</small> : null}
+                    <div className="member-module-actions">
+                      {canSendSms ? (
+                        <button
+                          type="button"
+                          className="button secondary small"
+                          onClick={() => sendQuickSmsFromPayment({ charge: matchingCharge, transaction, templateSlug: quickSmsTemplateSlug })}
+                          disabled={sendingSmsKey === `${quickSmsTemplateSlug}__${transaction.id}`}
+                        >
+                          {sendingSmsKey === `${quickSmsTemplateSlug}__${transaction.id}` ? 'Enviando...' : 'SMS pago'}
+                        </button>
+                      ) : null}
+                      {canSendSms ? (
+                        <button
+                          type="button"
+                          className="button secondary small"
+                          onClick={() => openSmsFromPayment({ charge: matchingCharge, transaction })}
+                        >
+                          Personalizar
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="button small danger"
+                        onClick={() => handleRequestAnnul({ charge: matchingCharge, transaction })}
+                        disabled={annullingReceiptId === transaction.id || chargeStatus === 'anulado'}
+                      >
+                        {annullingReceiptId === transaction.id ? 'Anulando...' : chargeStatus === 'anulado' || receiptStatus === 'anulado' ? 'Anulado' : 'Anular'}
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeView === 'recibos' && (
+        <div className="settings-module-card chat-settings-card">
+          <h3>Recibos descargables</h3>
+          {filteredTransactions.length === 0 ? (
+            <p>No hay pagos registrados para emitir recibos.</p>
+          ) : (
+            <div className="guardian-message-list">
+              {filteredTransactions.slice(0, 12).map((transaction) => {
+                const matchingCharge = charges.find((charge) => charge.id === transaction.chargeId)
+                const smsTarget = resolveSmsTargetFromPayment({ charge: matchingCharge, transaction })
+                const quickSmsTemplateSlug = 'pago_realizado'
+                const chargeStatus = String(matchingCharge?.resolvedStatus || matchingCharge?.status || '').trim().toLowerCase()
+                const receiptStatus = String(transaction.receiptStatus || 'activo').trim().toLowerCase()
+                return (
+                  <article key={transaction.id} className="guardian-message-card">
+                    <header>
+                      <strong>{transaction.recipientName || transaction.studentName || 'Titular'}</strong>
+                      <span>{formatDateTime(transaction.createdAt)}</span>
+                    </header>
+                    <p>
+                      Pago registrado por <strong>{formatCurrency(transaction.amount)}</strong> via {transaction.method || 'metodo no especificado'}.
+                    </p>
+                  <small>
+                    Recibo: {transaction.officialNumber || 'Pendiente'} Â· Estado: {receiptStatus === 'anulado' ? 'Anulado' : 'Activo'}
+                  </small>
+                  <small>Referencia: {transaction.reference || '-'}</small>
+                  {canSendSms ? <small className="payments-sms-target">{formatSmsTargetSummary(smsTarget)}</small> : null}
+                  {canSendSms ? <small className="payments-sms-target">{formatSmsTemplateSummary(quickSmsTemplateSlug)}</small> : null}
+                  <div className="member-module-actions">
+                      {canSendSms ? (
+                        <button
+                          type="button"
+                          className="button secondary small"
+                          onClick={() => sendQuickSmsFromPayment({ charge: matchingCharge, transaction, templateSlug: quickSmsTemplateSlug })}
+                          disabled={sendingSmsKey === `${quickSmsTemplateSlug}__${transaction.id}`}
+                        >
+                          {sendingSmsKey === `${quickSmsTemplateSlug}__${transaction.id}` ? 'Enviando...' : 'SMS pago'}
+                        </button>
+                      ) : null}
+                      {canSendSms ? (
+                        <button
+                          type="button"
+                          className="button secondary small"
+                          onClick={() => openSmsFromPayment({ charge: matchingCharge, transaction })}
+                        >
+                          Personalizar
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="button small danger"
+                        onClick={() => handleRequestAnnul({ charge: matchingCharge, transaction })}
+                        disabled={annullingReceiptId === transaction.id || chargeStatus === 'anulado'}
+                      >
+                        {annullingReceiptId === transaction.id ? 'Anulando...' : chargeStatus === 'anulado' || receiptStatus === 'anulado' ? 'Anulado' : 'Anular'}
+                      </button>
+                      <button
+                        type="button"
+                        className="button small"
+                        onClick={() => issueReceipt(transaction)}
+                        disabled={issuingReceiptId === transaction.id}
+                      >
+                        {issuingReceiptId === transaction.id ? 'Emitiendo...' : 'Emitir comprobante'}
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {annulConfirmTarget && (
         <div className="modal-overlay" role="presentation">

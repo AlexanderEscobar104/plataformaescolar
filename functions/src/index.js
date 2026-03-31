@@ -16,9 +16,232 @@ const INVALID_TOKEN_ERRORS = new Set([
 ]);
 const cachedMailers = new Map();
 const STUDENT_BILLING_COLLECTION = 'estado_cuenta_estudiantes';
+const DEFAULT_SMS_TEMPLATES = [
+  {
+    slug: 'bienvenida',
+    name: 'Bienvenida',
+    module: 'general',
+    category: 'bienvenida',
+    body: 'Hola {{nombre}}, te damos la bienvenida a {{plantel}}. Ya puedes ingresar a EduPleace para consultar tu informacion.',
+    variables: ['nombre', 'plantel'],
+  },
+  {
+    slug: 'recordatorio_pago_proximo',
+    name: 'Recordatorio de pago proximo',
+    module: 'pagos',
+    category: 'recordatorio',
+    body: 'Hola {{acudiente}}, el pago de {{concepto}} de {{estudiante}} vence el {{fecha_vencimiento}}. Saldo pendiente: {{saldo}}.',
+    variables: ['acudiente', 'concepto', 'estudiante', 'fecha_vencimiento', 'saldo'],
+  },
+  {
+    slug: 'pago_vencido',
+    name: 'Pago vencido',
+    module: 'pagos',
+    category: 'cobranza',
+    body: 'Hola {{acudiente}}, el pago de {{concepto}} de {{estudiante}} ya esta vencido. Saldo actual: {{saldo}}.',
+    variables: ['acudiente', 'concepto', 'estudiante', 'saldo'],
+  },
+  {
+    slug: 'pago_realizado',
+    name: 'Pago realizado',
+    module: 'pagos',
+    category: 'confirmacion',
+    body: 'Hola {{acudiente}}, registramos tu pago por {{valor}} para {{concepto}}. Recibo: {{numero_recibo}}. Gracias por tu pago.',
+    variables: ['acudiente', 'concepto', 'numero_recibo', 'valor'],
+  },
+  {
+    slug: 'pago_aplicado',
+    name: 'Pago aplicado',
+    module: 'pagos',
+    category: 'confirmacion',
+    body: 'Hola {{acudiente}}, se aplico un pago al concepto {{concepto}} de {{estudiante}}. Saldo restante: {{saldo}}.',
+    variables: ['acudiente', 'concepto', 'estudiante', 'saldo'],
+  },
+];
 
 function normalizeTenantNit(value) {
   return String(value || '').trim();
+}
+
+function normalizeIdentifier(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function safeAttendanceKey(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function buildAttendanceDocId(nitRut, dateIso, uid) {
+  return `asistencia_${safeAttendanceKey(nitRut || 'global')}_${safeAttendanceKey(dateIso)}_${safeAttendanceKey(uid)}`;
+}
+
+function pickFirstValue(source, keys) {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return value;
+    }
+  }
+  return '';
+}
+
+function parseAttendanceEventDate(rawValue) {
+  const raw = String(rawValue || '').trim();
+  if (!raw) return null;
+
+  const normalized = raw.replace(/\//g, '-').replace('T', ' ');
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (!match) return null;
+
+  const [, year, month, day, hour = '00', minute = '00', second = '00'] = match;
+  return {
+    isoDate: `${year}-${month}-${day}`,
+    isoDateTime: `${year}-${month}-${day}T${hour}:${minute}:${second}`,
+    year: Number(year),
+    month: Number(month),
+    day: Number(day),
+    hour: Number(hour),
+    minute: Number(minute),
+    second: Number(second),
+  };
+}
+
+function buildTimestampFromParts(parts) {
+  if (!parts) return admin.firestore.FieldValue.serverTimestamp();
+
+  const utcDate = new Date(Date.UTC(
+    parts.year,
+    Math.max(parts.month - 1, 0),
+    parts.day,
+    parts.hour + 5,
+    parts.minute,
+    parts.second,
+  ));
+
+  if (Number.isNaN(utcDate.getTime())) {
+    return admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  return admin.firestore.Timestamp.fromDate(utcDate);
+}
+
+function resolveAttendanceMarkType(payload) {
+  const rawType = normalizeIdentifier(
+    pickFirstValue(payload, [
+      'matchType',
+      'verifyType',
+      'recognitionType',
+      'openType',
+      'type',
+      'recordType',
+    ]),
+  );
+
+  if (rawType.includes('face') || rawType.includes('rostro')) return 'rostro';
+  if (rawType.includes('finger') || rawType.includes('huella')) return 'huella';
+  if (rawType.includes('rfid') || rawType.includes('card') || rawType.includes('tarjeta') || rawType.includes('ic')) return 'rfid';
+  return 'lector';
+}
+
+function resolveUserDisplayName(userData) {
+  const profile = userData?.profile || {};
+  const role = String(userData?.role || '').trim().toLowerCase();
+
+  if (role === 'estudiante') {
+    const full = `${profile.primerNombre || ''} ${profile.segundoNombre || ''} ${profile.primerApellido || ''} ${profile.segundoApellido || ''}`
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (full) return full;
+  }
+
+  const profileName = `${profile.nombres || ''} ${profile.apellidos || ''}`.replace(/\s+/g, ' ').trim();
+  if (profileName) return profileName;
+
+  return String(userData?.name || '').trim() || 'Usuario';
+}
+
+function resolveUserMatchCandidates(userData) {
+  const profile = userData?.profile || {};
+  return {
+    employeeIc: [
+      profile.employeeIc,
+      userData.employeeIc,
+      profile.employeeIC,
+      userData.employeeIC,
+      profile.icCardNumber,
+      userData.icCardNumber,
+      profile.cardNumber,
+      userData.cardNumber,
+    ].map(normalizeIdentifier).filter(Boolean),
+    numeroDocumento: [
+      profile.numeroDocumento,
+      userData.numeroDocumento,
+    ].map(normalizeIdentifier).filter(Boolean),
+    devicePersonId: [
+      profile.devicePersonId,
+      userData.devicePersonId,
+      profile.personId,
+      userData.personId,
+    ].map(normalizeIdentifier).filter(Boolean),
+  };
+}
+
+async function findAttendanceUserByIdentifier({ nitRut, personId, personIdField }) {
+  const normalizedPersonId = normalizeIdentifier(personId);
+  if (!nitRut || !normalizedPersonId) return null;
+
+  const snapshot = await db.collection('users')
+    .where('nitRut', '==', nitRut)
+    .get();
+
+  for (const docSnapshot of snapshot.docs) {
+    const userData = docSnapshot.data() || {};
+    const candidates = resolveUserMatchCandidates(userData);
+    const preferredCandidates = Array.isArray(candidates[personIdField]) ? candidates[personIdField] : [];
+    const fallbackCandidates = [...candidates.employeeIc, ...candidates.numeroDocumento, ...candidates.devicePersonId];
+    const allCandidates = preferredCandidates.length > 0 ? preferredCandidates : fallbackCandidates;
+
+    if (allCandidates.includes(normalizedPersonId)) {
+      return {
+        id: docSnapshot.id,
+        data: userData,
+      };
+    }
+  }
+
+  return null;
+}
+
+async function writeAttendanceDeviceLog(data) {
+  await db.collection('attendance_device_logs').add({
+    ...data,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+async function writeAttendanceDeviceRawRequest(data) {
+  await db.collection('attendance_device_raw_requests').add({
+    ...data,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+function buildAttendanceEventFingerprint({ nitRut, personId, eventDateRaw, attendanceDateIso, matchType, sourcePath }) {
+  const resolvedDateKey = String(eventDateRaw || '').trim() || String(attendanceDateIso || '').trim();
+  const basis = [
+    String(nitRut || '').trim(),
+    normalizeIdentifier(personId),
+    resolvedDateKey,
+    String(matchType || '').trim().toLowerCase(),
+    String(sourcePath || '').trim().toLowerCase(),
+  ].join('|');
+
+  return crypto.createHash('sha1').update(basis).digest('hex');
 }
 
 async function getAuthenticatedUserProfile(context) {
@@ -69,7 +292,7 @@ function resolveChargeStatus(charge) {
   return explicitStatus || 'pendiente';
 }
 
-function classifyReminderType(charge, baseDate = new Date()) {
+function classifyReminderType(charge, baseDate = new Date(), reminderLeadDays = 3) {
   const status = resolveChargeStatus(charge);
   if (status === 'pagado' || status === 'anulado') return '';
 
@@ -83,9 +306,12 @@ function classifyReminderType(charge, baseDate = new Date()) {
     `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, '0')}-${String(baseDate.getDate()).padStart(2, '0')}T00:00:00`,
   );
   const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const normalizedLeadDays = Number.isInteger(Number(reminderLeadDays))
+    ? Math.min(Math.max(Number(reminderLeadDays), 0), 30)
+    : 3;
 
   if (diffDays < 0) return 'vencido';
-  if (diffDays <= 3) return 'por_vencer';
+  if (diffDays <= normalizedLeadDays) return 'por_vencer';
   return '';
 }
 
@@ -104,6 +330,11 @@ function buildReminderDocId(chargeId, guardianUid, reminderType, isoDate) {
   ]
     .filter(Boolean)
     .join('__');
+}
+
+function resolvePaymentReminderRoute(recipientRole) {
+  const role = String(recipientRole || '').trim().toLowerCase();
+  return role === 'acudiente' ? '/dashboard/acudiente/pagos' : '/dashboard/pagos';
 }
 
 function formatCurrency(value) {
@@ -175,6 +406,256 @@ async function getWhatsAppConfigByNit(nitRut) {
     throw new functions.https.HttpsError('failed-precondition', 'La configuracion de WhatsApp esta incompleta.');
   }
   return data;
+}
+
+function getSmsConfigRefByNit(nitRut) {
+  return db.collection('configuracion').doc(`sms_hablame_${nitRut}`);
+}
+
+async function getSmsConfigByNit(nitRut, options = {}) {
+  const { requireEnabled = false, requireApiKey = false } = options;
+  const snapshot = await getSmsConfigRefByNit(nitRut).get();
+  if (!snapshot.exists) {
+    if (requireEnabled || requireApiKey) {
+      throw new functions.https.HttpsError('failed-precondition', 'El plantel no tiene configuracion SMS.');
+    }
+    return null;
+  }
+
+  const data = snapshot.data() || {};
+  if (requireEnabled && !data.enabled) {
+    throw new functions.https.HttpsError('failed-precondition', 'El canal SMS del plantel esta inactivo.');
+  }
+  if (requireApiKey && !String(data.apiKey || '').trim()) {
+    throw new functions.https.HttpsError('failed-precondition', 'La configuracion SMS no tiene API key.');
+  }
+  return data;
+}
+
+function sanitizeSmsText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function serializeSmsSettings(data = {}) {
+  return {
+    enabled: Boolean(data.enabled),
+    campaignName: String(data.campaignName || 'automaticos').trim() || 'automaticos',
+    testMode: Boolean(data.testMode),
+    testPhone: String(data.testPhone || '').trim(),
+    defaultCountryCode: String(data.defaultCountryCode || '57').replace(/\D+/g, '') || '57',
+    priority: Boolean(data.priority),
+    certificate: Boolean(data.certificate),
+    flash: Boolean(data.flash),
+    hasApiKey: Boolean(String(data.apiKey || '').trim()),
+    provider: 'hablame_sms',
+  };
+}
+
+function applySmsTestMode(messages = [], settings = {}) {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const testModeEnabled = Boolean(settings?.testMode);
+  const testPhone = normalizePhoneNumber(settings?.testPhone, settings?.defaultCountryCode || '57');
+
+  if (!testModeEnabled) {
+    return {
+      enabled: false,
+      testPhone: '',
+      messages: safeMessages,
+    };
+  }
+
+  if (!testPhone) {
+    throw new Error('El modo prueba SMS esta activo pero no hay un telefono de prueba configurado.');
+  }
+
+  return {
+    enabled: true,
+    testPhone,
+    messages: safeMessages.map((item) => {
+      const originalPhone = normalizePhoneNumber(item?.to, settings?.defaultCountryCode || '57');
+      const originalName = String(item?.recipientName || '').trim() || 'Destinatario';
+      const originalText = sanitizeSmsText(item?.text);
+      const testPrefix = `[PRUEBA para ${originalName}${originalPhone ? ` - ${originalPhone}` : ''}] `;
+      return {
+        ...item,
+        to: testPhone,
+        text: sanitizeSmsText(`${testPrefix}${originalText}`),
+        originalPhone,
+        originalText,
+      };
+    }),
+  };
+}
+
+function getDefaultSmsTemplateBySlug(slug) {
+  const normalizedSlug = String(slug || '').trim();
+  return DEFAULT_SMS_TEMPLATES.find((item) => item.slug === normalizedSlug) || null;
+}
+
+function renderSmsTemplateBody(body, variables = {}) {
+  const safeVariables = variables && typeof variables === 'object' ? variables : {};
+  return String(body || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
+    const normalizedKey = String(key || '').trim();
+    const value = safeVariables[normalizedKey];
+    return value === undefined || value === null ? `{{${normalizedKey}}}` : String(value);
+  });
+}
+
+async function getSmsTemplateBySlug(nitRut, slug, cache = new Map()) {
+  const safeNit = normalizeTenantNit(nitRut);
+  const safeSlug = String(slug || '').trim();
+  const cacheKey = `${safeNit}__${safeSlug}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+  let template = null;
+  if (safeNit && safeSlug) {
+    const snapshot = await db.collection('sms_templates')
+      .where('nitRut', '==', safeNit)
+      .where('slug', '==', safeSlug)
+      .limit(1)
+      .get();
+    if (!snapshot.empty) {
+      template = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+    }
+  }
+
+  if (!template) {
+    template = getDefaultSmsTemplateBySlug(safeSlug);
+  }
+
+  cache.set(cacheKey, template);
+  return template;
+}
+
+function resolveUserSmsPhone(userData) {
+  const profile = userData?.profile || {};
+  const smsConsent = profile.autorizaMensajesTexto;
+  if (smsConsent === false) return '';
+  const role = String(userData?.role || '').trim().toLowerCase();
+
+  if (role === 'acudiente') {
+    return String(
+      profile.celular ||
+      userData?.celular ||
+      ''
+    ).trim();
+  }
+
+  return String(
+    profile.celular ||
+    profile.telefono ||
+    userData?.celular ||
+    userData?.telefono ||
+    userData?.phoneNumber ||
+    ''
+  ).trim();
+}
+
+async function sendSmsBatchViaHablame({
+  nitRut,
+  campaignName = '',
+  messages = [],
+  createdByUid = 'system',
+  createdByName = 'Sistema automatico',
+  sourceModule = 'general',
+  templateSlug = '',
+}) {
+  const settings = await getSmsConfigByNit(nitRut, { requireEnabled: true, requireApiKey: true });
+  const normalizedMessages = (Array.isArray(messages) ? messages : [])
+    .map((item) => ({
+      to: normalizePhoneNumber(item?.to, settings.defaultCountryCode),
+      text: sanitizeSmsText(item?.text),
+      recipientUid: String(item?.recipientUid || '').trim(),
+      recipientName: String(item?.recipientName || '').trim() || 'Destinatario',
+      recipientRole: String(item?.recipientRole || '').trim() || 'contacto',
+      variables: item?.variables && typeof item.variables === 'object' ? item.variables : {},
+    }))
+    .filter((item) => item.to && item.text);
+
+  const testModeResult = applySmsTestMode(normalizedMessages, settings);
+  const deliveryMessages = testModeResult.messages;
+
+  if (deliveryMessages.length === 0) {
+    return { success: false, sentCount: 0, skipped: true };
+  }
+
+  const requestPayload = {
+    priority: Boolean(settings.priority),
+    certificate: Boolean(settings.certificate),
+    campaignName: String(campaignName || settings.campaignName || 'automaticos').trim() || 'automaticos',
+    flash: Boolean(settings.flash),
+    messages: deliveryMessages.map((item) => ({
+      to: item.to,
+      text: item.text,
+    })),
+  };
+
+  let responseData = {};
+  let status = 'enviado';
+  let errorMessage = '';
+
+  try {
+    const response = await fetch('https://www.hablame.co/api/sms/v5/send', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'X-Hablame-Key': String(settings.apiKey || '').trim(),
+      },
+      body: JSON.stringify(requestPayload),
+    });
+
+    responseData = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      status = 'fallido';
+      errorMessage = String(responseData?.message || responseData?.error || 'La API de SMS rechazo el envio.').trim();
+      throw new Error(errorMessage);
+    }
+  } catch (error) {
+    status = 'fallido';
+    errorMessage = errorMessage || String(error?.message || 'No fue posible enviar el SMS.');
+  }
+
+  await Promise.all(
+    deliveryMessages.map((item) =>
+      db.collection('sms_messages').add({
+        nitRut,
+        provider: 'hablame_sms',
+        campaignName: requestPayload.campaignName,
+        recipientUid: item.recipientUid,
+        recipientName: item.recipientName,
+        recipientRole: item.recipientRole,
+        recipientPhone: item.to,
+        originalRecipientPhone: item.originalPhone || item.to,
+        templateSlug: String(templateSlug || '').trim(),
+        sourceModule,
+        messageBody: item.text,
+        originalMessageBody: item.originalText || item.text,
+        variables: item.variables,
+        requestPayload,
+        responsePayload: responseData,
+        status,
+        errorMessage,
+        testMode: Boolean(testModeResult.enabled),
+        testPhone: testModeResult.testPhone || '',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdByUid,
+        createdByName,
+      }),
+    ),
+  );
+
+  if (status === 'fallido') {
+    throw new Error(errorMessage || 'No fue posible enviar el SMS.');
+  }
+
+  return {
+    success: true,
+    sentCount: deliveryMessages.length,
+    response: responseData,
+    testMode: Boolean(testModeResult.enabled),
+    testPhone: testModeResult.testPhone || '',
+  };
 }
 
 async function getWhatsAppConfigByVerifyToken(verifyToken) {
@@ -509,6 +990,170 @@ exports.sendPushOnNewNotification = functions.firestore.document('notifications/
   });
 });
 
+exports.sendSmsOnNewPaymentReceipt = functions.firestore.document('payments_receipts/{receiptId}').onCreate(async (snapshot) => {
+  const receipt = snapshot.data() || {};
+  const nitRut = normalizeTenantNit(receipt.nitRut || '');
+  const chargeId = String(receipt.chargeId || '').trim();
+  const studentUid = String(receipt.studentUid || '').trim();
+
+  if (!nitRut) {
+    return null;
+  }
+
+  try {
+    const [chargeSnap, guardianLinksSnap, smsTemplate] = await Promise.all([
+      chargeId ? db.collection(STUDENT_BILLING_COLLECTION).doc(chargeId).get() : Promise.resolve(null),
+      studentUid
+        ? db.collection('student_guardians').where('studentUid', '==', studentUid).where('status', '==', 'activo').get()
+        : Promise.resolve({ docs: [] }),
+      getSmsTemplateBySlug(nitRut, 'pago_realizado'),
+    ]);
+
+    if (!smsTemplate) {
+      return null;
+    }
+
+    const charge = chargeSnap?.exists ? { id: chargeSnap.id, ...chargeSnap.data() } : {};
+    const userIds = new Set();
+    const addUserId = (value) => {
+      const normalized = String(value || '').trim();
+      if (normalized) userIds.add(normalized);
+    };
+
+    addUserId(receipt.recipientUid);
+    addUserId(receipt.studentUid);
+    addUserId(charge.recipientUid);
+    addUserId(charge.studentUid);
+
+    (guardianLinksSnap?.docs || []).forEach((docSnapshot) => {
+      const data = docSnapshot.data() || {};
+      addUserId(data.guardianUid);
+    });
+
+    const userSnapshots = await Promise.all(
+      Array.from(userIds).map((uid) => db.collection('users').doc(uid).get()),
+    );
+    const usersById = new Map();
+    userSnapshots.forEach((userSnapshot) => {
+      if (userSnapshot.exists) {
+        usersById.set(userSnapshot.id, userSnapshot.data() || {});
+      }
+    });
+
+    const recipients = [];
+    const seenRecipientUids = new Set();
+    const addRecipient = ({ uid, role, name, source = 'receipt_recipient' }) => {
+      const normalizedUid = String(uid || '').trim();
+      if (!normalizedUid || seenRecipientUids.has(normalizedUid)) return;
+      seenRecipientUids.add(normalizedUid);
+      recipients.push({
+        uid: normalizedUid,
+        role: String(role || 'usuario').trim().toLowerCase() || 'usuario',
+        name: String(name || '').trim() || 'Usuario',
+        source,
+      });
+    };
+
+    const chargeRecipientUid = String(
+      receipt.recipientUid ||
+      charge.recipientUid ||
+      receipt.studentUid ||
+      charge.studentUid ||
+      '',
+    ).trim();
+    if (chargeRecipientUid) {
+      const recipientUser = usersById.get(chargeRecipientUid) || {};
+      addRecipient({
+        uid: chargeRecipientUid,
+        role: String(receipt.recipientRole || charge.recipientRole || recipientUser.role || 'usuario').trim().toLowerCase(),
+        name:
+          String(receipt.recipientName || '').trim() ||
+          String(charge.recipientName || '').trim() ||
+          String(recipientUser.name || '').trim() ||
+          String(recipientUser.email || '').trim() ||
+          'Usuario',
+        source: 'receipt_recipient',
+      });
+    }
+
+    (guardianLinksSnap?.docs || []).forEach((docSnapshot) => {
+      const data = docSnapshot.data() || {};
+      const guardianUid = String(data.guardianUid || '').trim();
+      if (!guardianUid) return;
+
+      const guardianUser = usersById.get(guardianUid) || {};
+      addRecipient({
+        uid: guardianUid,
+        role: 'acudiente',
+        name:
+          String(data.guardianName || '').trim() ||
+          String(guardianUser.name || '').trim() ||
+          String(guardianUser.email || '').trim() ||
+          'Acudiente',
+        source: 'student_guardian',
+      });
+    });
+
+    if (recipients.length === 0) {
+      return null;
+    }
+
+    const smsMessages = recipients
+      .map((recipient) => {
+        const recipientUser = usersById.get(recipient.uid) || {};
+        const recipientPhone = resolveUserSmsPhone(recipientUser);
+        if (!recipientPhone) return null;
+
+        const smsVariables = {
+          nombre: recipient.name,
+          acudiente: recipient.name,
+          estudiante: String(receipt.studentName || charge.studentName || '').trim() || 'estudiante',
+          concepto: String(receipt.conceptName || charge.conceptName || '').trim() || 'sin concepto',
+          periodo: String(receipt.periodLabel || charge.periodLabel || '').trim(),
+          saldo: formatCurrency(charge.balance),
+          valor: formatCurrency(receipt.amount || charge.lastPaymentAmount || 0),
+          fecha_vencimiento: formatHumanDate(charge.dueDate || receipt.dueDate || ''),
+          numero_recibo: String(receipt.officialNumber || snapshot.id || '').trim(),
+          plantel: String(receipt.plantelNombreComercial || receipt.plantelRazonSocial || '').trim(),
+          link_pago: '',
+        };
+
+        return {
+          to: recipientPhone,
+          recipientUid: recipient.uid,
+          recipientName: recipient.name,
+          recipientRole: recipient.role,
+          text: renderSmsTemplateBody(smsTemplate.body, smsVariables),
+          variables: smsVariables,
+        };
+      })
+      .filter(Boolean);
+
+    if (smsMessages.length === 0) {
+      return null;
+    }
+
+    await sendSmsBatchViaHablame({
+      nitRut,
+      campaignName: 'automaticos',
+      messages: smsMessages,
+      createdByUid: String(receipt.issuedByUid || 'system').trim() || 'system',
+      createdByName: String(receipt.issuedByName || 'Sistema automatico').trim() || 'Sistema automatico',
+      sourceModule: 'pagos',
+      templateSlug: 'pago_realizado',
+    });
+  } catch (error) {
+    console.error('sendSmsOnNewPaymentReceipt failed', {
+      receiptId: snapshot.id,
+      nitRut,
+      chargeId,
+      error: String(error?.message || error),
+    });
+  }
+
+  return null;
+});
+
 exports.createQrLoginSession = functions.https.onCall(async (data) => {
   const now = Date.now();
   const expiresAt = admin.firestore.Timestamp.fromMillis(now + QR_LOGIN_SESSION_TTL_MS);
@@ -679,6 +1324,8 @@ exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, contex
   const result = await db.runTransaction(async (transaction) => {
     const transactionRef = db.collection('payments_transactions').doc(transactionId);
     const receiptRef = db.collection('payments_receipts').doc(transactionId);
+    const tenantPlantelRef = db.collection('configuracion').doc(`datosPlantel_${nitRut}`);
+    const fallbackPlantelRef = db.collection('configuracion').doc('datosPlantel');
     const [transactionSnap, existingReceiptSnap] = await Promise.all([
       transaction.get(transactionRef),
       transaction.get(receiptRef),
@@ -699,6 +1346,7 @@ exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, contex
       return {
         officialNumber: String(existingReceipt.officialNumber || '').trim(),
         consecutiveNumber: Number(existingReceipt.consecutiveNumber) || 0,
+        serieInstitucional: String(existingReceipt.serieInstitucional || '').trim(),
         cajaNombre: String(existingReceipt.cajaNombre || '').trim(),
         resolucionNombre: String(existingReceipt.resolucionNombre || '').trim(),
         alreadyIssued: true,
@@ -712,9 +1360,11 @@ exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, contex
 
     const chargeRef = db.collection(STUDENT_BILLING_COLLECTION).doc(chargeId);
     const billingRef = db.collection('configuracion').doc(`datos_cobro_${nitRut}`);
-    const [chargeSnap, billingSnap] = await Promise.all([
+    const [chargeSnap, billingSnap, tenantPlantelSnap, fallbackPlantelSnap] = await Promise.all([
       transaction.get(chargeRef),
       transaction.get(billingRef),
+      transaction.get(tenantPlantelRef),
+      transaction.get(fallbackPlantelRef),
     ]);
 
     if (!chargeSnap.exists) {
@@ -725,6 +1375,9 @@ exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, contex
     }
 
     const chargeData = chargeSnap.data() || {};
+    const plantelData = tenantPlantelSnap.exists
+      ? tenantPlantelSnap.data() || {}
+      : (fallbackPlantelSnap.exists ? fallbackPlantelSnap.data() || {} : {});
     const chargeNit = normalizeTenantNit(chargeData.nitRut || '');
     if (chargeNit && chargeNit !== nitRut) {
       throw new functions.https.HttpsError('permission-denied', 'El cargo asociado no pertenece a tu plantel.');
@@ -807,6 +1460,14 @@ exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, contex
           String(cashBox.resolucionNombre || '').trim() ||
           String(cashBox.resolucion || '').trim() ||
           String(resolution.resolucion || resolution.nombre || '').trim(),
+        serieInstitucional:
+          String(plantelData.serieRecibos || plantelData.serieDocumental || '').trim().toUpperCase(),
+        observacionPlantel:
+          String(plantelData.observacionRecibos || plantelData.receiptObservation || '').trim(),
+        plantelRazonSocial: String(plantelData.razonSocial || '').trim(),
+        plantelNombreComercial: String(plantelData.nombreComercial || '').trim(),
+        representanteLegal: String(plantelData.representanteLegal || '').trim(),
+        documentoRepresentanteLegal: String(plantelData.documentoRepresentanteLegal || '').trim(),
         officialNumber,
         consecutiveNumber: nextNumber,
         status: 'activo',
@@ -829,6 +1490,8 @@ exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, contex
     return {
       officialNumber,
       consecutiveNumber: nextNumber,
+      serieInstitucional:
+        String(plantelData.serieRecibos || plantelData.serieDocumental || '').trim().toUpperCase(),
       cajaNombre: String(cashBox.nombreCaja || '').trim(),
       resolucionNombre:
         String(cashBox.resolucionNombre || '').trim() ||
@@ -920,6 +1583,213 @@ exports.annulPaymentReceipt = functions.https.onCall(async (data, context) => {
   });
 
   return result;
+});
+
+exports.getSmsSettings = functions.https.onCall(async (_data, context) => {
+  const { nitRut } = await getAuthenticatedUserProfile(context);
+  const settings = await getSmsConfigByNit(nitRut);
+  return serializeSmsSettings(settings || {});
+});
+
+exports.saveSmsSettings = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName } = await getAuthenticatedUserProfile(context);
+
+  const payload = {
+    enabled: Boolean(data?.enabled),
+    campaignName: String(data?.campaignName || 'automaticos').trim() || 'automaticos',
+    testMode: Boolean(data?.testMode),
+    testPhone: normalizePhoneNumber(data?.testPhone, data?.defaultCountryCode || '57'),
+    defaultCountryCode: String(data?.defaultCountryCode || '57').replace(/\D+/g, '') || '57',
+    priority: Boolean(data?.priority),
+    certificate: Boolean(data?.certificate),
+    flash: Boolean(data?.flash),
+    provider: 'hablame_sms',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: uid,
+    updatedByName: displayName,
+  };
+
+  const apiKey = String(data?.apiKey || '').trim();
+  if (apiKey) {
+    payload.apiKey = apiKey;
+  }
+
+  await getSmsConfigRefByNit(nitRut).set(payload, { merge: true });
+  const savedSnapshot = await getSmsConfigRefByNit(nitRut).get();
+  return serializeSmsSettings(savedSnapshot.data() || {});
+});
+
+exports.seedSmsTemplates = functions.https.onCall(async (_data, context) => {
+  const { uid, nitRut, displayName } = await getAuthenticatedUserProfile(context);
+  const snapshot = await db.collection('sms_templates').where('nitRut', '==', nitRut).get();
+  const existingSlugs = new Set(
+    snapshot.docs
+      .map((docSnapshot) => String(docSnapshot.data()?.slug || '').trim())
+      .filter(Boolean),
+  );
+
+  const batch = db.batch();
+  let created = 0;
+
+  DEFAULT_SMS_TEMPLATES.forEach((template) => {
+    if (existingSlugs.has(template.slug)) return;
+    const ref = db.collection('sms_templates').doc();
+    batch.set(ref, {
+      nitRut,
+      channel: 'sms',
+      name: template.name,
+      slug: template.slug,
+      module: template.module,
+      category: template.category,
+      body: template.body,
+      variables: template.variables,
+      status: 'activo',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdByUid: uid,
+      createdByName: displayName,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedByUid: uid,
+    });
+    created += 1;
+  });
+
+  if (created > 0) {
+    await batch.commit();
+  }
+
+  return { success: true, created };
+});
+
+exports.sendSmsHablame = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName } = await getAuthenticatedUserProfile(context);
+  const settings = await getSmsConfigByNit(nitRut, { requireEnabled: true, requireApiKey: true });
+
+  const explicitMessages = Array.isArray(data?.messages) ? data.messages : [];
+  const singleMessage =
+    data?.phone || data?.to || data?.text || data?.message
+      ? [{
+          to: data?.phone || data?.to || '',
+          text: data?.text || data?.message || '',
+          recipientName: data?.recipientName || '',
+          templateSlug: data?.templateSlug || '',
+          sourceModule: data?.sourceModule || 'general',
+        }]
+      : [];
+
+  const normalizedMessages = [...explicitMessages, ...singleMessage]
+    .map((item) => ({
+      to: normalizePhoneNumber(item?.to, settings.defaultCountryCode),
+      text: sanitizeSmsText(item?.text),
+      recipientName: String(item?.recipientName || '').trim() || 'Destinatario',
+      templateSlug: String(item?.templateSlug || '').trim(),
+      sourceModule: String(item?.sourceModule || 'general').trim() || 'general',
+    }))
+    .filter((item) => item.to && item.text);
+
+  const testModeResult = applySmsTestMode(normalizedMessages, settings);
+  const deliveryMessages = testModeResult.messages;
+
+  if (deliveryMessages.length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Debes indicar al menos un telefono y un texto valido.');
+  }
+
+  const requestPayload = {
+    priority: Boolean(data?.priority ?? settings.priority),
+    certificate: Boolean(data?.certificate ?? settings.certificate),
+    campaignName: String(data?.campaignName || settings.campaignName || 'automaticos').trim() || 'automaticos',
+    flash: Boolean(data?.flash ?? settings.flash),
+    messages: deliveryMessages.map((item) => ({
+      to: item.to,
+      text: item.text,
+    })),
+  };
+
+  let responseData = {};
+  let status = 'enviado';
+  let errorMessage = '';
+
+  try {
+    const response = await fetch('https://www.hablame.co/api/sms/v5/send', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'X-Hablame-Key': String(settings.apiKey || '').trim(),
+      },
+      body: JSON.stringify(requestPayload),
+    });
+
+    responseData = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      status = 'fallido';
+      errorMessage = String(responseData?.message || responseData?.error || 'La API de SMS rechazo el envio.').trim();
+      throw new functions.https.HttpsError('internal', errorMessage);
+    }
+  } catch (error) {
+    status = 'fallido';
+    errorMessage = errorMessage || String(error?.message || 'No fue posible enviar el SMS.');
+    await Promise.all(
+      deliveryMessages.map((item) =>
+        db.collection('sms_messages').add({
+          nitRut,
+          provider: 'hablame_sms',
+          campaignName: requestPayload.campaignName,
+          recipientPhone: item.to,
+          originalRecipientPhone: item.originalPhone || item.to,
+          recipientName: item.recipientName,
+          templateSlug: item.templateSlug,
+          sourceModule: item.sourceModule,
+          messageBody: item.text,
+          originalMessageBody: item.originalText || item.text,
+          requestPayload,
+          responsePayload: responseData,
+          status,
+          errorMessage,
+          testMode: Boolean(testModeResult.enabled),
+          testPhone: testModeResult.testPhone || '',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdByUid: uid,
+          createdByName: displayName,
+        }),
+      ),
+    );
+    throw error;
+  }
+
+  await Promise.all(
+    deliveryMessages.map((item) =>
+      db.collection('sms_messages').add({
+        nitRut,
+        provider: 'hablame_sms',
+        campaignName: requestPayload.campaignName,
+        recipientPhone: item.to,
+        originalRecipientPhone: item.originalPhone || item.to,
+        recipientName: item.recipientName,
+        templateSlug: item.templateSlug,
+        sourceModule: item.sourceModule,
+        messageBody: item.text,
+        originalMessageBody: item.originalText || item.text,
+        requestPayload,
+        responsePayload: responseData,
+        status,
+        errorMessage: '',
+        testMode: Boolean(testModeResult.enabled),
+        testPhone: testModeResult.testPhone || '',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdByUid: uid,
+        createdByName: displayName,
+      }),
+    ),
+  );
+
+  return {
+    success: true,
+    status,
+    sentCount: deliveryMessages.length,
+    response: responseData,
+    testMode: Boolean(testModeResult.enabled),
+    testPhone: testModeResult.testPhone || '',
+  };
 });
 
 exports.sendWhatsAppMessage = functions.https.onCall(async (data, context) => {
@@ -1215,6 +2085,227 @@ exports.whatsappWebhook = functions.https.onRequest(async (req, res) => {
   }
 });
 
+exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  if (!['GET', 'POST'].includes(req.method)) {
+    res.status(405).json({ ok: false, message: 'Metodo no permitido.' });
+    return;
+  }
+
+  const bodyPayload = req.body && typeof req.body === 'object' ? req.body : {};
+  const nestedPayload = bodyPayload.data && typeof bodyPayload.data === 'object' ? bodyPayload.data : {};
+  const payload = {
+    ...bodyPayload,
+    ...nestedPayload,
+    ...req.query,
+  };
+  const sourcePath = String(req.get('x-device-route') || req.path || '').trim();
+
+  const token = String(payload.token || req.query.token || '').trim();
+  if (!token) {
+    res.status(401).json({ ok: false, message: 'Falta token de integracion.' });
+    return;
+  }
+
+  try {
+    const configSnapshot = await db.collection('configuracion')
+      .where('endpointToken', '==', token)
+      .limit(1)
+      .get();
+
+    if (configSnapshot.empty) {
+      res.status(401).json({ ok: false, message: 'Token invalido.' });
+      return;
+    }
+
+    const configDoc = configSnapshot.docs[0];
+    const config = configDoc.data() || {};
+    const nitRut = normalizeTenantNit(config.nitRut || '');
+
+    if (String(config.module || '').trim() !== 'attendance_device') {
+      res.status(403).json({ ok: false, message: 'El token no pertenece a un lector de asistencia.' });
+      return;
+    }
+
+    if (String(config.status || 'activo').trim().toLowerCase() !== 'activo') {
+      res.status(403).json({ ok: false, message: 'El lector esta inactivo en la plataforma.' });
+      return;
+    }
+
+    const personId = String(pickFirstValue(payload, [
+      'employeeIc',
+      'employeeIC',
+      'employee_ic',
+      'employeeIcNo',
+      'employee_ic_no',
+      'icCardNumber',
+      'ic_card_number',
+      'cardNumber',
+      'card_number',
+      'personId',
+      'PersonId',
+      'person_id',
+      'personid',
+      'employeeId',
+      'employee_id',
+      'personnelId',
+      'personnel_id',
+      'id',
+      'ID',
+      'userId',
+    ])).trim();
+
+    if (!personId) {
+      res.status(202).json({ ok: true, ignored: true, reason: 'sin_person_id' });
+      return;
+    }
+
+    const eventDateParts = parseAttendanceEventDate(
+      pickFirstValue(payload, [
+        'passageTime',
+        'pass_time',
+        'recordTime',
+        'record_time',
+        'captureTime',
+        'capture_time',
+        'time',
+        'timestamp',
+      ]),
+    );
+    const eventDateRaw = eventDateParts?.isoDateTime || String(pickFirstValue(payload, ['passageTime', 'recordTime', 'time', 'timestamp'])).trim();
+    const matchType = resolveAttendanceMarkType(payload);
+
+    const userMatch = await findAttendanceUserByIdentifier({
+      nitRut,
+      personId,
+      personIdField: String(config.personIdField || 'employeeIc').trim(),
+    });
+
+    if (!userMatch) {
+      res.status(202).json({ ok: true, ignored: true, reason: 'usuario_no_encontrado' });
+      return;
+    }
+
+    const userData = userMatch.data || {};
+    const profile = userData.profile || {};
+    const role = String(userData.role || '').trim().toLowerCase();
+    const now = new Date();
+    const fallbackIsoDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const attendanceDateIso = eventDateParts?.isoDate || fallbackIsoDate;
+    const attendanceDocId = buildAttendanceDocId(nitRut, attendanceDateIso, userMatch.id);
+    const attendanceRef = db.collection('asistencias').doc(attendanceDocId);
+    const existingAttendance = await attendanceRef.get();
+    const readerName = String(config.deviceLabel || 'Lector de asistencia').trim() || 'Lector de asistencia';
+    const userName = resolveUserDisplayName(userData);
+    const eventFingerprint = buildAttendanceEventFingerprint({
+      nitRut,
+      personId,
+      eventDateRaw,
+      attendanceDateIso,
+      matchType,
+      sourcePath,
+    });
+    const rawRequestRef = db.collection('attendance_device_raw_requests').doc(eventFingerprint);
+    const logRef = db.collection('attendance_device_logs').doc(eventFingerprint);
+    const [existingRawRequest, existingLog] = await Promise.all([
+      rawRequestRef.get(),
+      logRef.get(),
+    ]);
+
+    if (existingRawRequest.exists || existingLog.exists) {
+      res.status(200).json({
+        ok: true,
+        status: 'duplicado',
+        uid: userMatch.id,
+        personId,
+        attendanceDateIso,
+      });
+      return;
+    }
+
+    await attendanceRef.set({
+      nitRut,
+      uid: userMatch.id,
+      fecha: attendanceDateIso,
+      role,
+      grado: role === 'estudiante' ? String(profile.grado || '').trim() : '',
+      grupo: role === 'estudiante' ? String(profile.grupo || '').trim() : '',
+      asistencia: 'Si',
+      tipoMarcacion: matchType,
+      marcadoPorUid: 'attendance_device',
+      marcadoPorNombre: readerName,
+      marcadoPorNumeroDocumento: '',
+      marcadoEn: admin.firestore.FieldValue.serverTimestamp(),
+      dispositivoId: configDoc.id,
+      dispositivoEtiqueta: readerName,
+      dispositivoIp: String(config.deviceIp || payload.deviceIp || payload.ip || '').trim(),
+      deviceEventAtRaw: eventDateRaw,
+      deviceEventAt: buildTimestampFromParts(eventDateParts),
+      personIdRegistrado: personId,
+      userName,
+      rawPayload: payload,
+    }, { merge: true });
+
+    await rawRequestRef.set({
+      fingerprint: eventFingerprint,
+      nitRut,
+      token,
+      configDocId: configDoc.id,
+      status: existingAttendance.exists ? 'actualizado' : 'creado',
+      requestMethod: req.method,
+      path: sourcePath,
+      query: req.query || {},
+      body: bodyPayload,
+      normalizedPayload: payload,
+      headers: {
+        'content-type': String(req.get('content-type') || '').trim(),
+        'user-agent': String(req.get('user-agent') || '').trim(),
+        host: String(req.get('host') || '').trim(),
+      },
+      ip: String(req.ip || '').trim(),
+      personId,
+      uid: userMatch.id,
+      attendanceDateIso,
+      matchType,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await logRef.set({
+      fingerprint: eventFingerprint,
+      nitRut,
+      status: existingAttendance.exists ? 'actualizado' : 'creado',
+      requestMethod: req.method,
+      path: sourcePath,
+      personId,
+      uid: userMatch.id,
+      userName,
+      matchType,
+      attendanceDateIso,
+      payload,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    res.status(200).json({
+      ok: true,
+      status: existingAttendance.exists ? 'actualizado' : 'creado',
+      uid: userMatch.id,
+      personId,
+      attendanceDateIso,
+      matchType,
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: 'No fue posible procesar la marcacion.' });
+  }
+});
+
 exports.sendScheduledPaymentReminders = functions.pubsub
   .schedule('0 7 * * *')
   .timeZone('America/Bogota')
@@ -1222,11 +2313,12 @@ exports.sendScheduledPaymentReminders = functions.pubsub
     const today = new Date();
     const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-    const [chargesSnap, linksSnap, usersSnap, remindersSnap] = await Promise.all([
+    const [chargesSnap, linksSnap, usersSnap, remindersSnap, billingSettingsSnap] = await Promise.all([
       db.collection(STUDENT_BILLING_COLLECTION).get(),
       db.collection('student_guardians').where('status', '==', 'activo').get(),
       db.collection('users').get(),
       db.collection('payments_reminders').where('date', '==', todayIso).get(),
+      db.collection('configuracion').get(),
     ]);
 
     const usersById = new Map();
@@ -1245,36 +2337,97 @@ exports.sendScheduledPaymentReminders = functions.pubsub
     });
 
     const sentReminderIds = new Set(remindersSnap.docs.map((docSnapshot) => String(docSnapshot.id || '').trim()).filter(Boolean));
+    const billingSettingsByNit = new Map();
+    const smsTemplateCache = new Map();
+    billingSettingsSnap.docs.forEach((docSnapshot) => {
+      const docId = String(docSnapshot.id || '').trim();
+      if (!docId.startsWith('datos_cobro_')) return;
+      const nit = normalizeTenantNit(docId.slice('datos_cobro_'.length));
+      if (!nit) return;
+      billingSettingsByNit.set(nit, docSnapshot.data() || {});
+    });
 
     let sentCount = 0;
     for (const chargeDoc of chargesSnap.docs) {
       const charge = { id: chargeDoc.id, ...chargeDoc.data() };
-      const reminderType = classifyReminderType(charge, today);
+      const chargeNit = normalizeTenantNit(charge.nitRut || '');
+      const billingSettings = billingSettingsByNit.get(chargeNit) || {};
+      const automaticNotificationsEnabled = typeof billingSettings.notificacionesCobroAutomaticas === 'boolean'
+        ? billingSettings.notificacionesCobroAutomaticas
+        : true;
+      if (!automaticNotificationsEnabled) continue;
+
+      const reminderLeadDaysRaw = billingSettings.diasRecordatorioCobro;
+      const reminderLeadDays = Number.isInteger(Number(reminderLeadDaysRaw))
+        ? Math.min(Math.max(Number(reminderLeadDaysRaw), 0), 30)
+        : 3;
+      const reminderType = classifyReminderType(charge, today, reminderLeadDays);
       if (!reminderType) continue;
 
-      const guardians = guardianLinksByStudent.get(String(charge.studentUid || '').trim()) || [];
-      if (guardians.length === 0) continue;
-
-      const chargeNit = normalizeTenantNit(charge.nitRut || '');
       const title = reminderType === 'vencido' ? 'Cobro vencido' : 'Cobro proximo a vencer';
       const body =
         reminderType === 'vencido'
           ? `El cargo ${charge.conceptName || 'sin concepto'} de ${charge.studentName || 'estudiante'} se encuentra vencido. Saldo pendiente: ${formatCurrency(charge.balance)}.`
           : `El cargo ${charge.conceptName || 'sin concepto'} de ${charge.studentName || 'estudiante'} vence el ${formatHumanDate(charge.dueDate)}. Saldo pendiente: ${formatCurrency(charge.balance)}.`;
 
+      const recipients = [];
+      const seenRecipientUids = new Set();
+      const addRecipient = ({ uid, role, name, guardianUid = '', source = 'charge_recipient' }) => {
+        const normalizedUid = String(uid || '').trim();
+        if (!normalizedUid || seenRecipientUids.has(normalizedUid)) return;
+        seenRecipientUids.add(normalizedUid);
+        recipients.push({
+          uid: normalizedUid,
+          role: String(role || 'usuario').trim().toLowerCase() || 'usuario',
+          name: String(name || '').trim() || 'Usuario',
+          guardianUid: String(guardianUid || '').trim(),
+          source,
+        });
+      };
+
+      const chargeRecipientUid = String(charge.recipientUid || charge.studentUid || '').trim();
+      if (chargeRecipientUid) {
+        const recipientUser = usersById.get(chargeRecipientUid) || {};
+        addRecipient({
+          uid: chargeRecipientUid,
+          role: String(charge.recipientRole || recipientUser.role || 'usuario').trim().toLowerCase(),
+          name:
+            String(charge.recipientName || '').trim() ||
+            String(recipientUser.name || '').trim() ||
+            String(recipientUser.email || '').trim() ||
+            'Usuario',
+          source: 'charge_recipient',
+        });
+      }
+
+      const guardians = guardianLinksByStudent.get(String(charge.studentUid || '').trim()) || [];
       for (const guardian of guardians) {
         const guardianUid = String(guardian.guardianUid || '').trim();
         if (!guardianUid) continue;
 
-        const reminderDocId = buildReminderDocId(charge.id, guardianUid, reminderType, todayIso);
-        if (sentReminderIds.has(reminderDocId)) continue;
-
         const guardianUser = usersById.get(guardianUid) || {};
-        const guardianName =
-          String(guardian.guardianName || '').trim() ||
-          String(guardianUser.name || '').trim() ||
-          String(guardianUser.email || '').trim() ||
-          'Acudiente';
+        addRecipient({
+          uid: guardianUid,
+          role: 'acudiente',
+          name:
+            String(guardian.guardianName || '').trim() ||
+            String(guardianUser.name || '').trim() ||
+            String(guardianUser.email || '').trim() ||
+            'Acudiente',
+          guardianUid,
+          source: 'student_guardian',
+        });
+      }
+
+      if (recipients.length === 0) continue;
+
+      const smsTemplateSlug = reminderType === 'vencido' ? 'pago_vencido' : 'recordatorio_pago_proximo';
+      const smsTemplate = await getSmsTemplateBySlug(chargeNit, smsTemplateSlug, smsTemplateCache);
+      const smsMessages = [];
+
+      for (const recipient of recipients) {
+        const reminderDocId = buildReminderDocId(charge.id, recipient.uid, reminderType, todayIso);
+        if (sentReminderIds.has(reminderDocId)) continue;
 
         const batch = db.batch();
         batch.set(db.collection('payments_reminders').doc(reminderDocId), {
@@ -1284,30 +2437,34 @@ exports.sendScheduledPaymentReminders = functions.pubsub
           date: todayIso,
           chargeId: charge.id,
           studentUid: String(charge.studentUid || '').trim(),
-          guardianUid,
+          guardianUid: recipient.guardianUid || '',
+          recipientUid: recipient.uid,
+          recipientRole: recipient.role,
+          recipientName: recipient.name,
+          deliverySource: recipient.source,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           source: 'scheduled_function',
         });
         batch.set(db.collection('notifications').doc(), {
           nitRut: chargeNit,
-          recipientUid: guardianUid,
-          recipientName: guardianName,
-          recipientRole: 'acudiente',
+          recipientUid: recipient.uid,
+          recipientName: recipient.name,
+          recipientRole: recipient.role,
           title,
           body,
           read: false,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           createdByUid: 'system',
           createdByName: 'Sistema automatico',
-          targetRoles: ['acudiente'],
-          route: '/dashboard/acudiente/pagos',
+          targetRoles: [recipient.role],
+          route: resolvePaymentReminderRoute(recipient.role),
         });
         batch.set(db.collection('messages').doc(), {
           nitRut: chargeNit,
           senderUid: 'system',
           senderName: 'Sistema automatico',
-          recipientUid: guardianUid,
-          recipientName: guardianName,
+          recipientUid: recipient.uid,
+          recipientName: recipient.name,
           subject: title,
           body,
           read: false,
@@ -1320,8 +2477,53 @@ exports.sendScheduledPaymentReminders = functions.pubsub
         });
         await batch.commit();
 
+        const recipientUser = usersById.get(recipient.uid) || {};
+        const recipientPhone = resolveUserSmsPhone(recipientUser);
+        if (smsTemplate && recipientPhone) {
+          const smsVariables = {
+            nombre: recipient.name,
+            acudiente: recipient.role === 'acudiente' ? recipient.name : '',
+            estudiante: String(charge.studentName || '').trim() || 'estudiante',
+            concepto: String(charge.conceptName || '').trim() || 'sin concepto',
+            periodo: String(charge.periodLabel || '').trim(),
+            saldo: formatCurrency(charge.balance),
+            valor: formatCurrency(charge.totalAmount),
+            fecha_vencimiento: formatHumanDate(charge.dueDate),
+            plantel: '',
+            link_pago: '',
+          };
+          smsMessages.push({
+            to: recipientPhone,
+            recipientUid: recipient.uid,
+            recipientName: recipient.name,
+            recipientRole: recipient.role,
+            text: renderSmsTemplateBody(smsTemplate.body, smsVariables),
+            variables: smsVariables,
+          });
+        }
+
         sentReminderIds.add(reminderDocId);
         sentCount += 1;
+      }
+
+      if (smsMessages.length > 0) {
+        try {
+          await sendSmsBatchViaHablame({
+            nitRut: chargeNit,
+            campaignName: 'automaticos',
+            messages: smsMessages,
+            createdByUid: 'system',
+            createdByName: 'Sistema automatico',
+            sourceModule: 'pagos',
+            templateSlug: smsTemplateSlug,
+          });
+        } catch (error) {
+          console.error('sendScheduledPaymentReminders sms failed', {
+            chargeId: charge.id,
+            nitRut: chargeNit,
+            error: String(error?.message || error),
+          });
+        }
       }
     }
 

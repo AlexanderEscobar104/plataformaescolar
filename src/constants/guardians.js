@@ -26,10 +26,15 @@ const EMPTY_GUARDIAN_FORM = {
   nombres: '',
   apellidos: '',
   telefono: '',
+  celular: '',
   direccion: '',
+  emailPersonal: '',
   email: '',
   password: '',
   parentescoPrincipal: 'Madre',
+  autorizaWhatsApp: 'si',
+  autorizaMensajesTexto: 'si',
+  autorizaCorreos: 'si',
   estado: 'activo',
 }
 

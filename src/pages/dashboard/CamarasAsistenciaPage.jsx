@@ -1,687 +1,403 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { addDoc, collection, deleteDoc, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { useEffect, useMemo, useState } from 'react'
+import { doc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { db, firebaseConfig } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { GRADE_OPTIONS, GROUP_OPTIONS } from '../../constants/academicOptions'
-import { PERMISSION_KEYS, ROLE_OPTIONS, buildAllRoleOptions } from '../../utils/permissions'
+import { setDocTracked } from '../../services/firestoreProxy'
+import { PERMISSION_KEYS } from '../../utils/permissions'
 
-const DEFAULT_HLS_BASE = String(import.meta.env.VITE_MEDIAMTX_HLS_BASE || '').trim()
-const DEFAULT_WEBRTC_BASE = String(import.meta.env.VITE_MEDIAMTX_WEBRTC_BASE || '').trim()
+const FUNCTIONS_REGION = 'us-central1'
 
-const trimSlash = (value) => String(value || '').replace(/\/+$/, '')
-const sanitizeKey = (value) => String(value || '')
-  .trim()
-  .toLowerCase()
-  .replace(/\s+/g, '-')
-  .replace(/[^a-z0-9-_]/g, '')
-  .replace(/-+/g, '-')
-  .replace(/^-+|-+$/g, '')
-
-const buildHlsUrl = (base, key) => {
-  if (!base || !key) return ''
-  return `${trimSlash(base)}/${key}/index.m3u8`
+const EMPTY_SETTINGS = {
+  deviceLabel: 'Lector principal',
+  manufacturer: 'HYZH',
+  deviceIp: '',
+  protocolType: 'mqtt',
+  personIdField: 'employeeIc',
+  connectionMode: 'bridge',
+  bridgeBaseUrl: '',
+  status: 'activo',
+  endpointToken: '',
+  notes: '',
 }
 
-const buildWebrtcUrl = (base, key) => {
-  if (!base || !key) return ''
-  return `${trimSlash(base)}/${key}/`
+function buildEndpointToken() {
+  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(18)
+    window.crypto.getRandomValues(bytes)
+    return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
+  }
+
+  return `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
 }
 
-const guessStreamKeyFromRtsp = (rtspUrl) => {
-  const raw = String(rtspUrl || '').trim()
-  if (!raw) return ''
-  const channelMatch = raw.match(/channel=(\d+)/i)
-  const subtypeMatch = raw.match(/subtype=(\d+)/i)
-  try {
-    const parsed = new URL(raw)
-    const hostPart = sanitizeKey(parsed.hostname || 'cam')
-    const channelPart = channelMatch ? `ch${channelMatch[1]}` : 'ch1'
-    const subtypePart = subtypeMatch ? `s${subtypeMatch[1]}` : 's0'
-    return sanitizeKey(`${hostPart}-${channelPart}-${subtypePart}`)
-  } catch {
-    return sanitizeKey(`cam-${channelMatch?.[1] || '1'}-${subtypeMatch?.[1] || '0'}`)
-  }
+function buildEndpointUrl(token) {
+  const projectId = String(firebaseConfig.projectId || '').trim()
+  const safeToken = String(token || '').trim()
+  if (!projectId || !safeToken) return ''
+  return `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net/attendanceDevicePush?token=${encodeURIComponent(safeToken)}`
 }
 
-const getAutoBaseUrls = () => {
-  if (typeof window === 'undefined') return { hlsBase: DEFAULT_HLS_BASE, webrtcBase: DEFAULT_WEBRTC_BASE }
-  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
-  const host = window.location.hostname
-  return {
-    hlsBase: DEFAULT_HLS_BASE || `${protocol}//${host}:8888`,
-    webrtcBase: DEFAULT_WEBRTC_BASE || `${protocol}//${host}:8889`,
-  }
+function buildSamplePayload(personIdField) {
+  const samplePersonId = personIdField === 'devicePersonId'
+    ? 'LECTOR-100245'
+    : personIdField === 'employeeIc'
+      ? 'CARD-778899'
+      : '1084579614'
+  return JSON.stringify(
+    {
+      personId: samplePersonId,
+      name: 'Alex',
+      passageTime: '2026-03-27 09:19:40',
+      matchType: 'face',
+      deviceIp: '192.168.20.17',
+    },
+    null,
+    2,
+  )
 }
 
-const normalizeWebrtcViewerUrl = (value) => {
-  const raw = String(value || '').trim()
-  if (!raw) return ''
-  try {
-    const parsed = new URL(raw)
-    if (!parsed.pathname.endsWith('/')) parsed.pathname = `${parsed.pathname}/`
-    return parsed.toString()
-  } catch {
-    return raw.endsWith('/') ? raw : `${raw}/`
-  }
-}
-
-const buildSuggestedStreamKey = ({ aplicaPara, grado, grupo, urlCamara, streamKey }) => {
-  const manual = sanitizeKey(streamKey)
-  if (manual) return manual
-
-  const role = sanitizeKey(aplicaPara)
-  const g = sanitizeKey(grado)
-  const gr = sanitizeKey(grupo)
-
-  if (role === 'estudiante' && g && gr) {
-    return sanitizeKey(`${role}-${g}-${gr}`)
-  }
-  if (role && role !== 'estudiante') {
-    return role
-  }
-
-  return guessStreamKeyFromRtsp(urlCamara)
-}
-
-const createRandomSuffix = () => Math.random().toString(36).slice(2, 7)
-
-const buildMediaFields = (input, { forceRandom = false } = {}) => {
-  const baseKey = buildSuggestedStreamKey({ ...input, streamKey: '' })
-  if (!baseKey) return null
-
-  const existingKey = sanitizeKey(input?.streamKey)
-  const streamKey = forceRandom || !existingKey
-    ? sanitizeKey(`${baseKey}-${createRandomSuffix()}`)
-    : existingKey
-
-  const { hlsBase, webrtcBase } = getAutoBaseUrls()
-  return {
-    streamKey,
-    urlHls: buildHlsUrl(hlsBase, streamKey),
-    urlWebrtc: buildWebrtcUrl(webrtcBase, streamKey),
-  }
-}
-
-const syncMediamtxPath = async ({ streamKey, urlCamara }) => {
-  const safeKey = sanitizeKey(streamKey)
-  const safeSource = String(urlCamara || '').trim()
-  if (!safeKey || !safeSource) {
-    return { ok: false, reason: 'Faltan stream key o URL RTSP.' }
-  }
-
-  try {
-    const response = await fetch('/__local/mediamtx/path', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamKey: safeKey, urlCamara: safeSource }),
-    })
-    const json = await response.json().catch(() => ({}))
-    if (!response.ok || !json?.ok) {
-      return { ok: false, reason: json?.message || `HTTP ${response.status}` }
-    }
-    return { ok: true, updated: Boolean(json.updated) }
-  } catch (error) {
-    return { ok: false, reason: error?.message || 'Error de red al actualizar mediamtx.yml.' }
-  }
+function trimTrailingSlash(value) {
+  return String(value || '').trim().replace(/\/+$/, '')
 }
 
 function CamarasAsistenciaPage() {
   const { user, userNitRut, hasPermission } = useAuth()
-  const canManage = hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
-  const [rows, setRows] = useState([])
+  const canManage =
+    hasPermission(PERMISSION_KEYS.ASISTENCIA_CONFIG_MANAGE) ||
+    hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE) ||
+    hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
+
+  const [form, setForm] = useState(EMPTY_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
   const [feedback, setFeedback] = useState('')
-  const [search, setSearch] = useState('')
-  const [editingRow, setEditingRow] = useState(null)
-  const [rowToDelete, setRowToDelete] = useState(null)
-  const [roleOptions, setRoleOptions] = useState(ROLE_OPTIONS)
-  const [preview, setPreview] = useState({ hls: '', webrtc: '' })
-  const [previewMode, setPreviewMode] = useState('none')
-  const [previewStatus, setPreviewStatus] = useState('')
-  const [previewTesting, setPreviewTesting] = useState(false)
 
-  const [form, setForm] = useState({
-    urlCamara: '',
-    aplicaPara: 'estudiante',
-    grado: '',
-    grupo: '',
-    streamKey: '',
-    urlHls: '',
-    urlWebrtc: '',
-    estado: 'activo',
-  })
-
-  const loadRows = useCallback(async () => {
-    setLoading(true)
-    try {
-      const snapshot = await getDocs(query(collection(db, 'camaras_asistencia'), where('nitRut', '==', userNitRut)))
-      const mapped = snapshot.docs
-        .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
-        .sort((a, b) => String(a.aplicaPara || '').localeCompare(String(b.aplicaPara || '')) || String(a.grado || '').localeCompare(String(b.grado || '')) || String(a.grupo || '').localeCompare(String(b.grupo || '')))
-      setRows(mapped)
-    } finally {
-      setLoading(false)
-    }
-  }, [userNitRut])
+  const endpointUrl = useMemo(() => buildEndpointUrl(form.endpointToken), [form.endpointToken])
+  const bridgeBaseUrl = useMemo(() => trimTrailingSlash(form.bridgeBaseUrl), [form.bridgeBaseUrl])
+  const bridgePushPath = useMemo(
+    () => `/attendanceDevicePush?token=${encodeURIComponent(String(form.endpointToken || '').trim())}`,
+    [form.endpointToken],
+  )
+  const bridgeForwardUrl = useMemo(
+    () => (bridgeBaseUrl ? `${bridgeBaseUrl}${bridgePushPath}` : ''),
+    [bridgeBaseUrl, bridgePushPath],
+  )
+  const settingsDocId = useMemo(
+    () => (userNitRut ? `attendance_device_${String(userNitRut).trim()}` : ''),
+    [userNitRut],
+  )
 
   useEffect(() => {
-    if (!userNitRut) return
-    loadRows()
-  }, [loadRows, userNitRut])
-
-  useEffect(() => {
-    if (!userNitRut) return
-    let isMounted = true
-    const loadRoles = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, 'roles'))
-        const custom = snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
-        if (isMounted) setRoleOptions(buildAllRoleOptions(custom))
-      } catch {
-        if (isMounted) setRoleOptions(ROLE_OPTIONS)
-      }
-    }
-    loadRoles()
-    return () => {
-      isMounted = false
-    }
-  }, [userNitRut])
-
-  const resetForm = () => {
-    setEditingRow(null)
-    setForm({
-      urlCamara: '',
-      aplicaPara: 'estudiante',
-      grado: '',
-      grupo: '',
-      streamKey: '',
-      urlHls: '',
-      urlWebrtc: '',
-      estado: 'activo',
-    })
-  }
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    const generatedMedia = buildMediaFields(form)
-    const effectiveForm = generatedMedia ? { ...form, ...generatedMedia } : form
-
-    if (generatedMedia) {
-      setForm((prev) => ({ ...prev, ...generatedMedia }))
-    }
-
-    if (!effectiveForm.urlCamara.trim() || !effectiveForm.aplicaPara) {
-      setFeedback('Debes completar URL de camara y aplica para.')
-      return
-    }
-    if (effectiveForm.aplicaPara === 'estudiante' && (!effectiveForm.grado || !effectiveForm.grupo)) {
-      setFeedback('Para estudiantes debes seleccionar grado y grupo.')
-      return
-    }
-    if (!effectiveForm.streamKey.trim()) {
-      setFeedback('Debes completar stream key para MediaMTX.')
-      return
-    }
-
-    try {
-      setSaving(true)
-      const payload = {
-        nitRut: userNitRut,
-        urlCamara: effectiveForm.urlCamara.trim(),
-        aplicaPara: effectiveForm.aplicaPara,
-        grado: effectiveForm.aplicaPara === 'estudiante' ? effectiveForm.grado : '',
-        grupo: effectiveForm.aplicaPara === 'estudiante' ? effectiveForm.grupo : '',
-        streamKey: sanitizeKey(effectiveForm.streamKey),
-        urlHls: effectiveForm.urlHls.trim(),
-        urlWebrtc: normalizeWebrtcViewerUrl(effectiveForm.urlWebrtc),
-        estado: effectiveForm.estado,
-      }
-
-      const syncResult = await syncMediamtxPath({ streamKey: payload.streamKey, urlCamara: payload.urlCamara })
-      if (!syncResult.ok) {
-        setFeedback(`No fue posible actualizar mediamtx.yml: ${syncResult.reason}`)
+    const loadSettings = async () => {
+      if (!userNitRut) {
+        setLoading(false)
         return
       }
 
-      if (editingRow) {
-        await updateDoc(doc(db, 'camaras_asistencia', editingRow.id), {
-          ...payload,
+      try {
+        setLoading(true)
+        const snapshot = await getDoc(doc(db, 'configuracion', settingsDocId))
+        if (snapshot.exists()) {
+          const data = snapshot.data() || {}
+          setForm({
+            deviceLabel: data.deviceLabel || 'Lector principal',
+            manufacturer: data.manufacturer || 'HYZH',
+            deviceIp: data.deviceIp || '',
+            protocolType: data.protocolType || 'mqtt',
+            personIdField: data.personIdField || 'employeeIc',
+            connectionMode: data.connectionMode || 'bridge',
+            bridgeBaseUrl: data.bridgeBaseUrl || '',
+            status: data.status || 'activo',
+            endpointToken: data.endpointToken || buildEndpointToken(),
+            notes: data.notes || '',
+          })
+        } else {
+          setForm((previous) => ({
+            ...previous,
+            endpointToken: previous.endpointToken || buildEndpointToken(),
+          }))
+        }
+      } catch {
+        setFeedback('No fue posible cargar la configuracion del lector de asistencia.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadSettings()
+  }, [settingsDocId, userNitRut])
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+
+    if (!canManage) {
+      setFeedback('No tienes permisos para configurar lectores de asistencia.')
+      return
+    }
+
+    if (!userNitRut || !settingsDocId) {
+      setFeedback('No fue posible identificar el plantel para guardar esta configuracion.')
+      return
+    }
+
+    const token = String(form.endpointToken || '').trim() || buildEndpointToken()
+
+    try {
+      setSaving(true)
+      setFeedback('')
+      await setDocTracked(
+        doc(db, 'configuracion', settingsDocId),
+        {
+          nitRut: userNitRut,
+          module: 'attendance_device',
+          deviceLabel: String(form.deviceLabel || '').trim(),
+          manufacturer: String(form.manufacturer || 'HYZH').trim(),
+          deviceIp: String(form.deviceIp || '').trim(),
+          protocolType: String(form.protocolType || 'mqtt').trim(),
+          personIdField: String(form.personIdField || 'employeeIc').trim(),
+          connectionMode: String(form.connectionMode || 'bridge').trim(),
+          bridgeBaseUrl,
+          bridgePushPath,
+          bridgeForwardUrl,
+          status: String(form.status || 'activo').trim(),
+          endpointToken: token,
+          endpointUrl: buildEndpointUrl(token),
+          notes: String(form.notes || '').trim(),
           updatedAt: serverTimestamp(),
           updatedByUid: user?.uid || '',
-        })
-        setFeedback('Camara actualizada correctamente.')
-      } else {
-        await addDoc(collection(db, 'camaras_asistencia'), {
-          ...payload,
-          createdAt: serverTimestamp(),
-          createdByUid: user?.uid || '',
-        })
-        setFeedback('Camara registrada correctamente.')
-      }
+        },
+        { merge: true },
+      )
 
-      resetForm()
-      await loadRows()
+      setForm((previous) => ({ ...previous, endpointToken: token }))
+      setFeedback('Configuracion del lector guardada correctamente.')
     } catch {
-      setFeedback('No fue posible guardar la camara.')
+      setFeedback('No fue posible guardar la configuracion del lector.')
     } finally {
       setSaving(false)
     }
   }
 
-  const confirmDelete = async () => {
-    if (!rowToDelete) return
-    try {
-      setDeleting(true)
-      await deleteDoc(doc(db, 'camaras_asistencia', rowToDelete.id))
-      setFeedback('Camara eliminada correctamente.')
-      setRowToDelete(null)
-      await loadRows()
-    } catch {
-      setFeedback('No fue posible eliminar la camara.')
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter((item) => {
-      const haystack = `${item.aplicaPara || ''} ${item.grado || ''} ${item.grupo || ''} ${item.streamKey || ''} ${item.urlCamara || ''} ${item.urlHls || ''} ${item.urlWebrtc || ''} ${item.estado || ''}`.toLowerCase()
-      return haystack.includes(q)
-    })
-  }, [rows, search])
-
-  const testHlsWithDom = async (url) => new Promise((resolve) => {
-    if (!url) {
-      resolve({ ok: false, reason: 'Sin URL HLS.' })
-      return
-    }
-    const video = document.createElement('video')
-    video.muted = true
-    video.playsInline = true
-    video.preload = 'metadata'
-    video.crossOrigin = 'anonymous'
-
-    let done = false
-    const finish = (result) => {
-      if (done) return
-      done = true
-      clearTimeout(timeout)
-      video.removeAttribute('src')
-      video.load()
-      resolve(result)
-    }
-
-    const timeout = window.setTimeout(() => {
-      finish({ ok: false, reason: 'Timeout leyendo HLS.' })
-    }, 8000)
-
-    video.onloadedmetadata = () => finish({ ok: true })
-    video.oncanplay = () => finish({ ok: true })
-    video.onerror = () => finish({ ok: false, reason: 'Error cargando HLS.' })
-    video.src = url
-    video.load()
-  })
-
-  const testWebrtcIframeWithDom = async (url) => new Promise((resolve) => {
-    if (!url) {
-      resolve({ ok: false, reason: 'Sin URL WebRTC.' })
-      return
-    }
-    let done = false
-    const frame = document.createElement('iframe')
-    frame.style.position = 'fixed'
-    frame.style.left = '-99999px'
-    frame.style.top = '-99999px'
-    frame.style.width = '1px'
-    frame.style.height = '1px'
-    frame.style.opacity = '0'
-
-    const finish = (result) => {
-      if (done) return
-      done = true
-      clearTimeout(timeout)
-      frame.remove()
-      resolve(result)
-    }
-
-    const timeout = window.setTimeout(() => {
-      finish({ ok: false, reason: 'Timeout abriendo visor WebRTC.' })
-    }, 7000)
-
-    frame.onload = () => finish({ ok: true })
-    frame.onerror = () => finish({ ok: false, reason: 'Error cargando visor WebRTC.' })
-    frame.src = url
-    document.body.appendChild(frame)
-  })
-
-  const handlePreviewProbe = async ({ hls, webrtc, streamKey, urlCamara }) => {
-    const normalizedWebrtc = normalizeWebrtcViewerUrl(webrtc)
-    const normalizedHls = String(hls || '').trim()
-    setPreview({ hls: normalizedHls, webrtc: normalizedWebrtc })
-    setPreviewStatus('Probando visor automaticamente...')
-    setPreviewTesting(true)
-    setPreviewMode('none')
-
-    try {
-      if (streamKey && urlCamara) {
-        const syncResult = await syncMediamtxPath({ streamKey, urlCamara })
-        if (!syncResult.ok) {
-          setPreviewStatus(`No se pudo actualizar mediamtx.yml: ${syncResult.reason}`)
-        }
-      }
-
-      const hlsResult = await testHlsWithDom(normalizedHls)
-      if (hlsResult.ok) {
-        setPreviewMode('hls')
-        setPreviewStatus('HLS funcional.')
-        return
-      }
-
-      const webrtcResult = await testWebrtcIframeWithDom(normalizedWebrtc)
-      if (webrtcResult.ok) {
-        setPreviewMode('webrtc')
-        setPreviewStatus(`HLS fallo (${hlsResult.reason || 'sin detalle'}) y WebRTC cargo.`)
-        return
-      }
-
-      setPreviewMode('none')
-      setPreviewStatus(`No se pudo abrir visor. HLS: ${hlsResult.reason || 'error'} | WebRTC: ${webrtcResult.reason || 'error'}`)
-    } finally {
-      setPreviewTesting(false)
-    }
+  if (!canManage) {
+    return (
+      <section>
+        <h2>Lectores de asistencia</h2>
+        <p className="feedback error">No tienes permiso para administrar este modulo.</p>
+      </section>
+    )
   }
 
   return (
-    <section className="evaluations-page">
-      <div className="students-header">
-        <div>
-          <h2>Camaras de asistencia</h2>
-          <p>Configura RTSP, rol objetivo y visor MediaMTX (HLS/WebRTC).</p>
+    <section className="dashboard-module-shell settings-module-shell">
+      <div className="dashboard-module-hero">
+        <div className="dashboard-module-hero-copy">
+          <span className="dashboard-module-eyebrow">Asistencia automatica</span>
+          <h2>Lectores de asistencia</h2>
+          <p>Conecta tu lector HYZH para que la asistencia se marque automaticamente cuando detecte a la persona.</p>
+        </div>
+        <div className="dashboard-module-hero-note">
+          <strong>{form.status === 'activo' ? 'Activo' : 'Inactivo'}</strong>
+          <span>Estado del lector</span>
+          <small>{form.deviceIp || 'Sin IP configurada'}</small>
         </div>
       </div>
 
-      {feedback && <p className="feedback">{feedback}</p>}
+      {feedback && <p className={`feedback ${feedback.includes('correctamente') ? 'success' : 'error'}`}>{feedback}</p>}
 
-      {canManage && (
-        <div className="home-left-card evaluations-card">
-          <h3>{editingRow ? 'Editar camara' : 'Nueva camara'}</h3>
+      <div className="home-left-card evaluations-card">
+        <h3>Configuracion principal</h3>
+        {loading ? (
+          <p>Cargando configuracion...</p>
+        ) : (
           <form className="form evaluation-create-form" onSubmit={handleSubmit}>
             <fieldset className="form-fieldset" disabled={saving}>
-              <label htmlFor="cam-url" className="evaluation-field-full">
-                URL RTSP de camara
+              <label>
+                Nombre del lector
                 <input
-                  id="cam-url"
                   type="text"
-                  value={form.urlCamara}
-                  onChange={(event) => {
-                    const nextUrl = event.target.value
-                    setForm((prev) => {
-                      const next = { ...prev, urlCamara: nextUrl }
-                      const media = buildMediaFields(next)
-                      return media ? { ...next, ...media } : next
-                    })
-                  }}
-                  placeholder="rtsp://usuario:clave@ip:puerto/..."
+                  value={form.deviceLabel}
+                  onChange={(event) => setForm((previous) => ({ ...previous, deviceLabel: event.target.value }))}
+                  placeholder="Ej: Entrada principal"
                 />
               </label>
 
-              <label htmlFor="cam-aplica">
-                Aplica para
+              <label>
+                Fabricante
+                <input
+                  type="text"
+                  value={form.manufacturer}
+                  onChange={(event) => setForm((previous) => ({ ...previous, manufacturer: event.target.value }))}
+                />
+              </label>
+
+              <label>
+                IP del dispositivo
+                <input
+                  type="text"
+                  value={form.deviceIp}
+                  onChange={(event) => setForm((previous) => ({ ...previous, deviceIp: event.target.value }))}
+                  placeholder="Ej: 192.168.20.17"
+                />
+              </label>
+
+              <label>
+                Protocolo configurado en el lector
                 <select
-                  id="cam-aplica"
-                  value={form.aplicaPara}
-                  onChange={(event) => {
-                    const nextRole = event.target.value
-                    setForm((prev) => {
-                      const next = {
-                        ...prev,
-                        aplicaPara: nextRole,
-                        grado: nextRole === 'estudiante' ? prev.grado : '',
-                        grupo: nextRole === 'estudiante' ? prev.grupo : '',
-                      }
-                      const media = buildMediaFields(next, { forceRandom: true })
-                      return media ? { ...next, ...media } : next
-                    })
-                  }}
+                  value={form.protocolType}
+                  onChange={(event) => setForm((previous) => ({ ...previous, protocolType: event.target.value }))}
                 >
-                  {roleOptions.map((role) => (
-                    <option key={role.value} value={role.value}>{role.label}</option>
-                  ))}
+                  <option value="mqtt">MQTT</option>
+                  <option value="http">HTTP</option>
+                  <option value="otro">Otro</option>
                 </select>
               </label>
 
-              {form.aplicaPara === 'estudiante' && (
-                <>
-                  <label htmlFor="cam-grado">
-                    Grado
-                    <select
-                      id="cam-grado"
-                      value={form.grado}
-                      onChange={(event) => {
-                        const nextGrade = event.target.value
-                        setForm((prev) => {
-                          const next = { ...prev, grado: nextGrade }
-                          const media = buildMediaFields(next)
-                          return media ? { ...next, ...media } : next
-                        })
-                      }}
-                    >
-                      <option value="">Selecciona grado</option>
-                      {GRADE_OPTIONS.map((item) => (
-                        <option key={item} value={item}>{item}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label htmlFor="cam-grupo">
-                    Grupo
-                    <select
-                      id="cam-grupo"
-                      value={form.grupo}
-                      onChange={(event) => {
-                        const nextGroup = event.target.value
-                        setForm((prev) => {
-                          const next = { ...prev, grupo: nextGroup }
-                          const media = buildMediaFields(next)
-                          return media ? { ...next, ...media } : next
-                        })
-                      }}
-                    >
-                      <option value="">Selecciona grupo</option>
-                      {GROUP_OPTIONS.map((item) => (
-                        <option key={item} value={item}>{item}</option>
-                      ))}
-                    </select>
-                  </label>
-                </>
-              )}
+              <label>
+                Campo para relacionar Person Id
+                <select
+                  value={form.personIdField}
+                  onChange={(event) => setForm((previous) => ({ ...previous, personIdField: event.target.value }))}
+                >
+                  <option value="employeeIc">employeeIc del usuario</option>
+                  <option value="numeroDocumento">Documento del usuario</option>
+                  <option value="devicePersonId">Campo tecnico devicePersonId</option>
+                </select>
+              </label>
 
-              <label htmlFor="cam-estado">
+              <label>
+                Modo de conexion
+                <select
+                  value={form.connectionMode}
+                  onChange={(event) => setForm((previous) => ({ ...previous, connectionMode: event.target.value }))}
+                >
+                  <option value="bridge">Puente local HTTP</option>
+                  <option value="direct">Directo a Cloud Functions</option>
+                </select>
+              </label>
+
+              <label>
                 Estado
-                <select id="cam-estado" value={form.estado} onChange={(event) => setForm((prev) => ({ ...prev, estado: event.target.value }))}>
+                <select
+                  value={form.status}
+                  onChange={(event) => setForm((previous) => ({ ...previous, status: event.target.value }))}
+                >
                   <option value="activo">Activo</option>
                   <option value="inactivo">Inactivo</option>
                 </select>
               </label>
 
-              <div className="modal-actions evaluation-field-full">
-                <button
-                  type="button"
-                  className="button secondary"
-                  onClick={() => handlePreviewProbe({
-                    hls: form.urlHls,
-                    webrtc: form.urlWebrtc,
-                    streamKey: form.streamKey,
-                    urlCamara: form.urlCamara,
-                  })}
-                >
-                  {previewTesting ? 'Probando...' : 'Probar visor'}
-                </button>
-                {editingRow && (
-                  <button type="button" className="button secondary" onClick={resetForm}>
-                    Cancelar
+              <label className="evaluation-field-full">
+                Token secreto del endpoint
+                <div className="modal-actions" style={{ justifyContent: 'flex-start', marginBottom: '8px' }}>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => setForm((previous) => ({ ...previous, endpointToken: buildEndpointToken() }))}
+                  >
+                    Regenerar token
                   </button>
-                )}
+                </div>
+                <input
+                  type="text"
+                  value={form.endpointToken}
+                  onChange={(event) => setForm((previous) => ({ ...previous, endpointToken: event.target.value }))}
+                />
+              </label>
+
+              <label className="evaluation-field-full">
+                URL para Third-party server address
+                <textarea rows={3} value={endpointUrl} readOnly />
+              </label>
+
+              {form.connectionMode === 'bridge' && (
+                <>
+                  <label className="evaluation-field-full">
+                    URL base del puente local
+                    <input
+                      type="text"
+                      value={form.bridgeBaseUrl}
+                      onChange={(event) => setForm((previous) => ({ ...previous, bridgeBaseUrl: event.target.value }))}
+                      placeholder="Ej: http://192.168.20.3:3000"
+                    />
+                  </label>
+
+                  <label className="evaluation-field-full">
+                    Push address para el lector
+                    <textarea rows={2} value={bridgePushPath} readOnly />
+                  </label>
+
+                  <label className="evaluation-field-full">
+                    URL final usando puente
+                    <textarea rows={3} value={bridgeForwardUrl} readOnly />
+                  </label>
+                </>
+              )}
+
+              <label className="evaluation-field-full">
+                Notas internas
+                <textarea
+                  rows={3}
+                  value={form.notes}
+                  onChange={(event) => setForm((previous) => ({ ...previous, notes: event.target.value }))}
+                  placeholder="Ej: usar Person Id igual al documento del estudiante o empleado."
+                />
+              </label>
+
+              <div className="modal-actions evaluation-field-full">
                 <button type="submit" className="button" disabled={saving}>
-                  {saving ? 'Guardando...' : editingRow ? 'Guardar cambios' : 'Crear camara'}
+                  {saving ? 'Guardando...' : 'Guardar configuracion'}
                 </button>
               </div>
             </fieldset>
           </form>
-        </div>
-      )}
-
-      <div className="home-left-card evaluations-card">
-        <h3>Visor MediaMTX</h3>
-        {previewStatus && <p className="feedback">{previewStatus}</p>}
-        <div style={{ minHeight: '260px', border: '1px solid #d7e6f5', borderRadius: '10px', overflow: 'hidden', background: '#f7fbff' }}>
-          {previewMode === 'webrtc' ? (
-            <iframe
-              title="Visor WebRTC"
-              src={normalizeWebrtcViewerUrl(preview.webrtc)}
-              style={{ width: '100%', height: '330px', border: '0' }}
-              allow="camera; microphone; autoplay; fullscreen"
-            />
-          ) : previewMode === 'hls' ? (
-            <video
-              src={preview.hls}
-              controls
-              autoPlay
-              muted
-              playsInline
-              style={{ width: '100%', height: '330px', background: '#000' }}
-            />
-          ) : (
-            <div style={{ padding: '16px', color: '#4a6988' }}>Usa "Probar visor" para abrir HLS/WebRTC.</div>
-          )}
-        </div>
-        {(preview.webrtc || preview.hls) && (
-          <div className="modal-actions" style={{ marginTop: '10px', justifyContent: 'flex-start' }}>
-            <a
-              className="button secondary"
-              href={normalizeWebrtcViewerUrl(preview.webrtc) || preview.hls}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Abrir visor en nueva pestana
-            </a>
-          </div>
         )}
       </div>
 
-      <div className="home-left-card evaluations-card" style={{ width: '100%' }}>
-        <h3>Lista de camaras</h3>
-        <div className="students-toolbar">
-          <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar por rol, grado, grupo, stream, URL o estado"
-          />
+      <div className="home-left-card evaluations-card" style={{ marginTop: '16px' }}>
+        <h3>Como configurarlo en el dispositivo</h3>
+        <div className="guardian-message-list">
+          <article className="guardian-message-card" style={{ cursor: 'default' }}>
+            <header>
+              <strong>{form.connectionMode === 'bridge' ? 'Modo puente' : 'Modo directo'}</strong>
+            </header>
+            <p>
+              {form.connectionMode === 'bridge'
+                ? 'Usa un PC de la misma red del lector con el puente local activo.'
+                : 'El lector intentara conectar directamente con Cloud Functions.'}
+            </p>
+          </article>
+          <article className="guardian-message-card" style={{ cursor: 'default' }}>
+            <header>
+              <strong>Paso 2</strong>
+            </header>
+            <p>
+              {form.connectionMode === 'bridge'
+                ? 'En el HYZH configura `HTTP server address` con la URL base del puente y `Push address` con la ruta mostrada arriba.'
+                : 'Pega la URL completa del endpoint en `Third-party server address` o `Push address`, segun el menu del equipo.'}
+            </p>
+          </article>
+          <article className="guardian-message-card" style={{ cursor: 'default' }}>
+            <header>
+              <strong>Paso 3</strong>
+            </header>
+            <p>Configura el identificador del lector igual a `employeeIc` del usuario o al campo tecnico elegido aqui.</p>
+          </article>
+          <article className="guardian-message-card" style={{ cursor: 'default' }}>
+            <header>
+              <strong>Paso 4</strong>
+            </header>
+            <p>Cuando el lector detecte rostro, huella o tarjeta, la plataforma registrara la asistencia del dia automaticamente.</p>
+          </article>
         </div>
-
-        {loading ? (
-          <p>Cargando camaras...</p>
-        ) : (
-          <div className="students-table-wrap">
-            <table className="students-table">
-              <thead>
-                <tr>
-                  <th>RTSP</th>
-                  <th>Aplica para</th>
-                  <th>Grado</th>
-                  <th>Grupo</th>
-                  <th>Stream</th>
-                  <th>Estado</th>
-                  {canManage && <th>Acciones</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.length === 0 && (
-                  <tr>
-                    <td colSpan={canManage ? 7 : 6}>No hay camaras registradas.</td>
-                  </tr>
-                )}
-                {filteredRows.map((item) => (
-                  <tr key={item.id}>
-                    <td data-label="RTSP">{item.urlCamara}</td>
-                    <td data-label="Aplica para">{item.aplicaPara || '-'}</td>
-                    <td data-label="Grado">{item.grado || '-'}</td>
-                    <td data-label="Grupo">{item.grupo || '-'}</td>
-                    <td data-label="Stream">{item.streamKey || '-'}</td>
-                    <td data-label="Estado">{item.estado}</td>
-                    {canManage && (
-                      <td data-label="Acciones" className="student-actions">
-                        <button
-                          type="button"
-                          className="button small secondary"
-                          onClick={() => handlePreviewProbe({
-                            hls: item.urlHls || '',
-                            webrtc: item.urlWebrtc || '',
-                            streamKey: item.streamKey || '',
-                            urlCamara: item.urlCamara || '',
-                          })}
-                        >
-                          Ver visor
-                        </button>
-                        <button
-                          type="button"
-                          className="button small"
-                          onClick={() => {
-                            setEditingRow(item)
-                            setForm({
-                              urlCamara: item.urlCamara || '',
-                              aplicaPara: item.aplicaPara || 'estudiante',
-                              grado: item.grado || '',
-                              grupo: item.grupo || '',
-                              streamKey: item.streamKey || '',
-                              urlHls: item.urlHls || '',
-                              urlWebrtc: normalizeWebrtcViewerUrl(item.urlWebrtc || ''),
-                              estado: item.estado || 'activo',
-                            })
-                          }}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="button small danger"
-                          onClick={() => setRowToDelete(item)}
-                        >
-                          Eliminar
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
-      {rowToDelete && (
-        <div className="modal-overlay" role="presentation">
-          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Confirmar eliminacion">
-            <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={() => setRowToDelete(null)}>
-              x
-            </button>
-            <h3>Confirmar eliminacion</h3>
-            <p>Deseas eliminar esta camara de asistencia?</p>
-            <div className="modal-actions">
-              <button type="button" className="button danger" disabled={deleting} onClick={confirmDelete}>
-                {deleting ? 'Eliminando...' : 'Si, eliminar'}
-              </button>
-              <button type="button" className="button secondary" disabled={deleting} onClick={() => setRowToDelete(null)}>
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="home-left-card evaluations-card" style={{ marginTop: '16px' }}>
+        <h3>Payload esperado</h3>
+        <p style={{ marginTop: 0 }}>
+          El endpoint acepta multiples variantes, pero este es el formato recomendado para pruebas y diagnostico.
+        </p>
+        <textarea rows={8} value={buildSamplePayload(form.personIdField)} readOnly />
+      </div>
     </section>
   )
 }

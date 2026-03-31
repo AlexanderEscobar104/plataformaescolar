@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collection, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
+import { collection, doc, getCountFromServer, getDocs, limit, orderBy, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { setDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
 import AnnouncementDisplay from '../../components/AnnouncementDisplay'
 import { matchesAnnouncementAudience, shouldShowAnnouncementOnHome } from '../../utils/announcements'
+import { matchesStudentAudience } from '../../utils/studentAudience'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom']
 
@@ -84,12 +85,51 @@ function DashboardHomePage() {
     const loadData = async () => {
       setLoading(true)
       try {
+        const pendingTasksCountPromise = getCountFromServer(
+          query(
+            collection(db, 'tareas'),
+            where('nitRut', '==', tenantNitRut),
+            where('status', '==', 'pendiente'),
+          ),
+        )
+          .then((r) => r.data().count)
+          .catch(() => null)
+
+        const pendingEvalsCountPromise = getCountFromServer(
+          query(
+            collection(db, 'evaluaciones'),
+            where('nitRut', '==', tenantNitRut),
+          ),
+        )
+          .then((r) => r.data().count)
+          .catch(() => null)
+
         const queries = [
-          getDocs(query(collection(db, 'eventos'), where('nitRut', '==', tenantNitRut))),
-          getDocs(query(collection(db, 'circulares'), where('nitRut', '==', tenantNitRut))),
-          getDocs(query(collection(db, 'tareas'), where('nitRut', '==', tenantNitRut))),
-          getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', tenantNitRut))),
-          getDocs(query(collection(db, 'anuncios'), where('nitRut', '==', tenantNitRut), where('status', '==', 'activo'))),
+          getDocs(
+            query(
+              collection(db, 'eventos'),
+              where('nitRut', '==', tenantNitRut),
+              orderBy('eventDate', 'desc'),
+              limit(200),
+            ),
+          ),
+          getDocs(
+            query(
+              collection(db, 'circulares'),
+              where('nitRut', '==', tenantNitRut),
+              orderBy('createdAt', 'desc'),
+              limit(200),
+            ),
+          ),
+          getDocs(
+            query(
+              collection(db, 'anuncios'),
+              where('nitRut', '==', tenantNitRut),
+              where('status', '==', 'activo'),
+              orderBy('createdAt', 'desc'),
+              limit(200),
+            ),
+          ),
         ]
         if (canRespondAttendance && user?.uid) {
           queries.push(
@@ -112,10 +152,10 @@ function DashboardHomePage() {
         }
 
         const results = await Promise.all(queries)
-        const [eventsSnapshot, circularsSnapshot, tareasSnapshot, evaluacionesSnapshot, anunciosSnapshot] = results
-        const attendanceSnapshot = canRespondAttendance && user?.uid ? results[5] : null
-        const intentosSnapshot = canRespondAttendance && user?.uid ? results[6] : null
-        const serviciosSnapshot = canRespondAttendance && user?.uid ? results[7] : null
+        const [eventsSnapshot, circularsSnapshot, anunciosSnapshot] = results
+        const attendanceSnapshot = canRespondAttendance && user?.uid ? results[3] : null
+        const intentosSnapshot = canRespondAttendance && user?.uid ? results[4] : null
+        const serviciosSnapshot = canRespondAttendance && user?.uid ? results[5] : null
 
         // Mis Servicios
         if (serviciosSnapshot) {
@@ -152,6 +192,7 @@ function DashboardHomePage() {
         const mappedEvents = eventsSnapshot.docs
           .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
           .filter((item) => typeof item.eventDate === 'string' && item.eventDate.trim() !== '')
+          .filter((item) => userRole !== 'estudiante' || matchesStudentAudience(item, userProfile?.grado || '', userProfile?.grupo || ''))
         setEvents(mappedEvents)
 
         // Circulars
@@ -168,6 +209,7 @@ function DashboardHomePage() {
             }
             return true
           })
+          .filter((item) => userRole !== 'estudiante' || matchesStudentAudience(item, userProfile?.grado || '', userProfile?.grupo || ''))
           .sort((a, b) => {
             const bValue = b.createdAt?.toMillis?.() || 0
             const aValue = a.createdAt?.toMillis?.() || 0
@@ -187,42 +229,12 @@ function DashboardHomePage() {
           setEventAttendanceByEventId({})
         }
 
-        // Pending tasks: status === 'pendiente'
-        const pendingTasksCount = tareasSnapshot.docs.filter((d) => {
-          const data = d.data()
-          if ((data.status || 'pendiente') !== 'pendiente') return false
-          if (userRole === 'estudiante' || userRole === 'aspirante') {
-            const grade = String(data.grade || '').trim()
-            const group = String(data.group || '').trim().toUpperCase()
-            const myGrade = String(userProfile?.grado || '').trim()
-            const myGroup = String(userProfile?.grupo || '').trim().toUpperCase()
-            if (grade !== myGrade || group !== myGroup) return false
-          }
-          return true
-        }).length
-        setPendingTasks(pendingTasksCount)
-
-        // Pending evaluations: dueDate >= today and user has no completed attempt
-        const completedEvalIds = new Set(
-          (intentosSnapshot?.docs || [])
-            .filter((d) => d.data().status === 'completado' || d.data().completedAt)
-            .map((d) => d.data().evaluacionId || d.data().evaluationId || '')
-        )
-        const pendingEvalsCount = evaluacionesSnapshot.docs.filter((d) => {
-          const data = d.data()
-          const dueDate = data.dueDate || ''
-          if (dueDate < today || completedEvalIds.has(d.id)) return false
-          
-          if (userRole === 'estudiante' || userRole === 'aspirante') {
-            const grade = String(data.grade || '').trim()
-            const group = String(data.group || '').trim().toUpperCase()
-            const myGrade = String(userProfile?.grado || '').trim()
-            const myGroup = String(userProfile?.grupo || '').trim().toUpperCase()
-            if (grade !== myGrade || group !== myGroup) return false
-          }
-          return true
-        }).length
-        setPendingEvaluations(pendingEvalsCount)
+        const [pendingTasksCount, pendingEvalsCount] = await Promise.all([
+          pendingTasksCountPromise,
+          pendingEvalsCountPromise,
+        ])
+        if (typeof pendingTasksCount === 'number') setPendingTasks(pendingTasksCount)
+        if (typeof pendingEvalsCount === 'number') setPendingEvaluations(pendingEvalsCount)
       } finally {
         setLoading(false)
       }

@@ -1,12 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
+import { GRADE_OPTIONS, GROUP_OPTIONS } from '../../constants/academicOptions'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
-import { deleteDocTracked } from '../../services/firestoreProxy'
+import { deleteDocTracked, setDocTracked, updateDocTracked } from '../../services/firestoreProxy'
+
+function resolvePromotionDefaults(student) {
+  const currentYear = new Date().getFullYear()
+  const currentGrade = Number.parseInt(String(student?.grado || '').trim(), 10)
+  const maxGrade = Math.max(...GRADE_OPTIONS.map((item) => Number.parseInt(item, 10)).filter(Number.isFinite))
+  const hasNumericGrade = Number.isFinite(currentGrade)
+  const canPromote = hasNumericGrade && currentGrade < maxGrade
+
+  return {
+    academicYear: String(currentYear),
+    result: canPromote ? 'promovido' : 'graduado',
+    nextGrade: canPromote ? String(currentGrade + 1) : String(student?.grado || ''),
+    nextGroup: String(student?.grupo || 'A').trim() || 'A',
+    notes: '',
+  }
+}
 
 function StudentsListPage() {
   const [currentPage, setCurrentPage] = useState(1)
@@ -25,6 +42,9 @@ function StudentsListPage() {
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
   const [studentToDelete, setStudentToDelete] = useState(null)
+  const [promotionTarget, setPromotionTarget] = useState(null)
+  const [promoting, setPromoting] = useState(false)
+  const [promotionForm, setPromotionForm] = useState(() => resolvePromotionDefaults(null))
   const [flashMessage, setFlashMessage] = useState('')
 
   const loadStudents = useCallback(async () => {
@@ -125,6 +145,175 @@ function StudentsListPage() {
       setFlashMessage('No fue posible eliminar el estudiante.')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const openPromotionModal = (student) => {
+    setPromotionTarget(student)
+    setPromotionForm(resolvePromotionDefaults(student))
+  }
+
+  const closePromotionModal = () => {
+    if (promoting) return
+    setPromotionTarget(null)
+    setPromotionForm(resolvePromotionDefaults(null))
+  }
+
+  const handlePromotionFieldChange = (field, value) => {
+    setPromotionForm((previous) => {
+      const next = { ...previous, [field]: value }
+      if (field === 'result') {
+        if (value === 'repitente' && promotionTarget) {
+          next.nextGrade = String(promotionTarget.grado || '')
+          next.nextGroup = String(promotionTarget.grupo || 'A')
+        }
+        if ((value === 'graduado' || value === 'retirado') && promotionTarget) {
+          next.nextGrade = ''
+          next.nextGroup = ''
+        }
+        if (value === 'promovido' && promotionTarget) {
+          const defaults = resolvePromotionDefaults(promotionTarget)
+          next.nextGrade = defaults.nextGrade
+          next.nextGroup = defaults.nextGroup
+        }
+      }
+      return next
+    })
+  }
+
+  const handlePromoteStudent = async () => {
+    if (!canEditStudents) {
+      setFlashMessage('No tienes permiso para promover estudiantes.')
+      return
+    }
+    if (!promotionTarget || !userNitRut) return
+
+    const academicYear = String(promotionForm.academicYear || '').trim()
+    const result = String(promotionForm.result || '').trim().toLowerCase()
+    const notes = String(promotionForm.notes || '').trim()
+    const nextGradeInput = String(promotionForm.nextGrade || '').trim()
+    const nextGroupInput = String(promotionForm.nextGroup || '').trim().toUpperCase()
+
+    if (!academicYear) {
+      setFlashMessage('Debes indicar el año academico que se esta cerrando.')
+      return
+    }
+
+    if (result === 'promovido' && (!nextGradeInput || !nextGroupInput)) {
+      setFlashMessage('Debes indicar el nuevo grado y grupo para continuar.')
+      return
+    }
+
+    try {
+      setPromoting(true)
+      const studentRef = doc(db, 'users', promotionTarget.id)
+      const studentSnapshot = await getDoc(studentRef)
+      if (!studentSnapshot.exists()) {
+        throw new Error('El estudiante ya no existe o no pudo cargarse.')
+      }
+
+      const studentData = studentSnapshot.data() || {}
+      const profile = studentData.profile || {}
+      const infoComplementaria = profile.informacionComplementaria || {}
+      const currentGrade = String(profile.grado || promotionTarget.grado || '').trim()
+      const currentGroup = String(profile.grupo || promotionTarget.grupo || '').trim().toUpperCase()
+      const currentState = String(infoComplementaria.estado || profile.estado || 'activo').trim().toLowerCase()
+      const historyDocId = `${String(userNitRut).trim()}__${promotionTarget.id}__${academicYear}`
+      const historyRef = doc(db, 'student_academic_history', historyDocId)
+      const historySnapshot = await getDoc(historyRef)
+
+      if (historySnapshot.exists()) {
+        throw new Error(`Ya existe un cierre academico ${academicYear} para este estudiante.`)
+      }
+
+      const promotedToGrade = result === 'promovido'
+        ? nextGradeInput
+        : result === 'repitente'
+          ? currentGrade
+          : ''
+      const promotedToGroup = result === 'promovido'
+        ? nextGroupInput
+        : result === 'repitente'
+          ? currentGroup
+          : ''
+      const nextAcademicYear = /^\d{4}$/.test(academicYear) ? String(Number(academicYear) + 1) : ''
+      const nowIso = new Date().toISOString()
+      const snapshot = {
+        nombreCompleto: promotionTarget.nombreCompleto || studentData.name || '',
+        numeroDocumento: profile.numeroDocumento || promotionTarget.numeroDocumento || '',
+        grado: currentGrade,
+        grupo: currentGroup,
+        estado: currentState || 'activo',
+      }
+
+      await setDocTracked(historyRef, {
+        studentUid: promotionTarget.id,
+        academicYear,
+        grade: currentGrade,
+        group: currentGroup,
+        status: 'cerrado',
+        promotionStatus: result,
+        promotedToGrade,
+        promotedToGroup,
+        closedAt: serverTimestamp(),
+        closedAtIso: nowIso,
+        closedByUid: String(user?.uid || '').trim(),
+        notes,
+        source: 'students_list_promotion',
+        snapshot,
+      })
+
+      const nextInfoComplementaria = {
+        ...infoComplementaria,
+        ultimoAnioCerrado: academicYear,
+        ultimoResultadoPromocion: result,
+        ultimaPromocionAt: nowIso,
+        academicYearActual: result === 'promovido' || result === 'repitente' ? nextAcademicYear : academicYear,
+        estado:
+          result === 'graduado'
+            ? 'graduado'
+            : result === 'retirado'
+              ? 'retirado'
+              : 'activo',
+      }
+
+      const nextProfile = {
+        ...profile,
+        grado:
+          result === 'promovido'
+            ? promotedToGrade
+            : result === 'repitente'
+              ? currentGrade
+              : currentGrade,
+        grupo:
+          result === 'promovido'
+            ? promotedToGroup
+            : result === 'repitente'
+              ? currentGroup
+              : currentGroup,
+        informacionComplementaria: nextInfoComplementaria,
+      }
+
+      await updateDocTracked(studentRef, {
+        profile: nextProfile,
+      })
+
+      setFlashMessage(
+        result === 'promovido'
+          ? `Promocion registrada. ${promotionTarget.nombreCompleto} pasa a ${promotedToGrade}${promotedToGroup}.`
+          : result === 'repitente'
+            ? `Cierre academico registrado. ${promotionTarget.nombreCompleto} continuara en ${currentGrade}${currentGroup}.`
+            : result === 'graduado'
+              ? `Cierre academico registrado. ${promotionTarget.nombreCompleto} fue marcado como graduado.`
+              : `Cierre academico registrado. ${promotionTarget.nombreCompleto} fue marcado como retirado.`,
+      )
+      setPromotionTarget(null)
+      setPromotionForm(resolvePromotionDefaults(null))
+      await loadStudents()
+    } catch (error) {
+      setFlashMessage(String(error?.message || 'No fue posible registrar la promocion del estudiante.'))
+    } finally {
+      setPromoting(false)
     }
   }
 
@@ -238,6 +427,16 @@ function StudentsListPage() {
                         </svg>
                       </button>
                     )}
+                    {canEditStudents && (
+                      <button
+                        type="button"
+                        className="button secondary small"
+                        onClick={() => openPromotionModal(student)}
+                        title="Promover o cerrar año"
+                      >
+                        Promover
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -298,6 +497,117 @@ function StudentsListPage() {
                 className="button secondary"
                 disabled={deleting}
                 onClick={() => setStudentToDelete(null)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {promotionTarget && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Promover estudiante" style={{ width: 'min(100%, 720px)' }}>
+            <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={closePromotionModal}>
+              x
+            </button>
+            <h3>Promover estudiante</h3>
+            <p>
+              Cierra el año academico de <strong>{promotionTarget.nombreCompleto}</strong> y registra su nuevo estado sin perder el historico.
+            </p>
+
+            <div className="form role-form" style={{ marginTop: '12px' }}>
+              <label>
+                Año academico que se cierra
+                <input
+                  type="text"
+                  value={promotionForm.academicYear}
+                  onChange={(event) => handlePromotionFieldChange('academicYear', event.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+                  placeholder="2026"
+                  disabled={promoting}
+                />
+              </label>
+
+              <label>
+                Resultado del cierre
+                <select
+                  value={promotionForm.result}
+                  onChange={(event) => handlePromotionFieldChange('result', event.target.value)}
+                  disabled={promoting}
+                >
+                  <option value="promovido">Promovido</option>
+                  <option value="repitente">Repitente</option>
+                  <option value="graduado">Graduado</option>
+                  <option value="retirado">Retirado</option>
+                </select>
+              </label>
+
+              {(promotionForm.result === 'promovido' || promotionForm.result === 'repitente') && (
+                <>
+                  <label>
+                    Nuevo grado activo
+                    <select
+                      value={promotionForm.nextGrade}
+                      onChange={(event) => handlePromotionFieldChange('nextGrade', event.target.value)}
+                      disabled={promoting || promotionForm.result === 'repitente'}
+                    >
+                      <option value="">Selecciona</option>
+                      {GRADE_OPTIONS.map((grade) => (
+                        <option key={grade} value={grade}>
+                          {grade}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Nuevo grupo activo
+                    <select
+                      value={promotionForm.nextGroup}
+                      onChange={(event) => handlePromotionFieldChange('nextGroup', event.target.value)}
+                      disabled={promoting || promotionForm.result === 'repitente'}
+                    >
+                      <option value="">Selecciona</option>
+                      {GROUP_OPTIONS.map((group) => (
+                        <option key={group} value={group}>
+                          {group}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
+
+              <label>
+                Observaciones del cierre
+                <textarea
+                  rows="3"
+                  value={promotionForm.notes}
+                  onChange={(event) => handlePromotionFieldChange('notes', event.target.value)}
+                  placeholder="Observaciones opcionales sobre la promocion o cierre"
+                  disabled={promoting}
+                />
+              </label>
+            </div>
+
+            <p style={{ marginTop: '12px' }}>
+              Grado actual: <strong>{promotionTarget.grado || '-'}</strong> · Grupo actual: <strong>{promotionTarget.grupo || '-'}</strong>
+            </p>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="button"
+                disabled={promoting}
+                onClick={handlePromoteStudent}
+              >
+                {promoting ? 'Guardando...' : 'Guardar cierre academico'}
+              </button>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={promoting}
+                onClick={closePromotionModal}
               >
                 Cancelar
               </button>

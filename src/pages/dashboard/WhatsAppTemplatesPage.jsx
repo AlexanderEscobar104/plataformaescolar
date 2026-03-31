@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { addDocTracked, updateDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
@@ -20,23 +20,72 @@ const WHATSAPP_VARIABLE_HELP = [
   '{{estudiante}}',
   '{{grado}}',
   '{{etapa}}',
+  '{{plantel}}',
+]
+
+const DEFAULT_WHATSAPP_TEMPLATES = [
+  {
+    key: 'admisiones_bienvenida',
+    name: 'Bienvenida admisiones',
+    module: 'admisiones',
+    category: 'utilidad',
+    language: 'es',
+    body: 'Hola {{acudiente}}, te damos la bienvenida a {{plantel}}. El proceso de {{estudiante}} para grado {{grado}} ya fue registrado.',
+    variables: ['acudiente', 'plantel', 'estudiante', 'grado'],
+  },
+  {
+    key: 'admisiones_etapa',
+    name: 'Actualizacion etapa admisiones',
+    module: 'admisiones',
+    category: 'recordatorio',
+    language: 'es',
+    body: 'Hola {{acudiente}}, el proceso de {{estudiante}} en {{plantel}} esta en la etapa {{etapa}}.',
+    variables: ['acudiente', 'estudiante', 'plantel', 'etapa'],
+  },
+  {
+    key: 'pagos_recordatorio',
+    name: 'Recordatorio de pago',
+    module: 'pagos',
+    category: 'recordatorio',
+    language: 'es',
+    body: 'Hola {{acudiente}}, en {{plantel}} el cargo {{concepto}} de {{estudiante}} para {{periodo}} tiene saldo {{saldo}} y vence el {{fecha_vencimiento}}.',
+    variables: ['acudiente', 'plantel', 'concepto', 'estudiante', 'periodo', 'saldo', 'fecha_vencimiento'],
+  },
+  {
+    key: 'pagos_confirmacion',
+    name: 'Confirmacion de pago',
+    module: 'pagos',
+    category: 'utilidad',
+    language: 'es',
+    body: 'Hola {{acudiente}}, registramos en {{plantel}} el pago de {{valor}} para {{concepto}} de {{estudiante}}.',
+    variables: ['acudiente', 'plantel', 'valor', 'concepto', 'estudiante'],
+  },
+  {
+    key: 'general_informativo',
+    name: 'Mensaje informativo general',
+    module: 'general',
+    category: 'utilidad',
+    language: 'es',
+    body: 'Hola {{acudiente}}, {{plantel}} te comparte una novedad relacionada con {{estudiante}}.',
+    variables: ['acudiente', 'plantel', 'estudiante'],
+  },
 ]
 
 const WHATSAPP_MODULE_VARIABLES = {
   admisiones: {
     title: 'Variables de Admisiones',
-    variables: ['{{acudiente}}', '{{estudiante}}', '{{grado}}', '{{etapa}}'],
-    example: 'Hola {{acudiente}}, el proceso de {{estudiante}} para grado {{grado}} esta en etapa {{etapa}}.',
+    variables: ['{{acudiente}}', '{{estudiante}}', '{{grado}}', '{{etapa}}', '{{plantel}}'],
+    example: 'Hola {{acudiente}}, el proceso de {{estudiante}} para grado {{grado}} en {{plantel}} esta en etapa {{etapa}}.',
   },
   pagos: {
     title: 'Variables de Pagos',
-    variables: ['{{acudiente}}', '{{estudiante}}', '{{concepto}}', '{{periodo}}', '{{saldo}}', '{{valor}}', '{{fecha_vencimiento}}', '{{recibo}}', '{{estado}}'],
-    example: 'Hola {{acudiente}}, el cargo {{concepto}} de {{estudiante}} para el periodo {{periodo}} tiene saldo {{saldo}} y vence el {{fecha_vencimiento}}.',
+    variables: ['{{acudiente}}', '{{estudiante}}', '{{concepto}}', '{{periodo}}', '{{saldo}}', '{{valor}}', '{{fecha_vencimiento}}', '{{recibo}}', '{{estado}}', '{{plantel}}'],
+    example: 'Hola {{acudiente}}, en {{plantel}} el cargo {{concepto}} de {{estudiante}} para el periodo {{periodo}} tiene saldo {{saldo}} y vence el {{fecha_vencimiento}}.',
   },
   general: {
     title: 'Variables Generales',
-    variables: ['{{acudiente}}', '{{estudiante}}'],
-    example: 'Hola {{acudiente}}, te compartimos una novedad relacionada con {{estudiante}}.',
+    variables: ['{{acudiente}}', '{{estudiante}}', '{{plantel}}'],
+    example: 'Hola {{acudiente}}, {{plantel}} te comparte una novedad relacionada con {{estudiante}}.',
   },
 }
 
@@ -51,6 +100,16 @@ function extractTemplateVariables(body) {
   )
 }
 
+function formatTemplateCategoryLabel(value) {
+  const normalized = String(value || '').trim()
+  if (!normalized) return 'General'
+  return normalized
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
 function WhatsAppTemplatesPage() {
   const { user, userNitRut, hasPermission } = useAuth()
   const canViewModule = hasPermission(PERMISSION_KEYS.WHATSAPP_MODULE_VIEW)
@@ -63,6 +122,8 @@ function WhatsAppTemplatesPage() {
   const [feedback, setFeedback] = useState('')
   const [search, setSearch] = useState('')
   const [helpModalOpen, setHelpModalOpen] = useState(false)
+  const [quickCreatingKey, setQuickCreatingKey] = useState('')
+  const [plantelName, setPlantelName] = useState('')
 
   const typedVariables = useMemo(
     () =>
@@ -101,6 +162,28 @@ function WhatsAppTemplatesPage() {
     loadTemplates()
   }, [canViewModule, userNitRut])
 
+  useEffect(() => {
+    const loadPlantelName = async () => {
+      if (!userNitRut) {
+        setPlantelName('')
+        return
+      }
+
+      try {
+        let snapshot = await getDoc(doc(db, 'configuracion', `datosPlantel_${String(userNitRut).trim()}`))
+        if (!snapshot.exists()) {
+          snapshot = await getDoc(doc(db, 'configuracion', 'datosPlantel'))
+        }
+        const data = snapshot.exists() ? snapshot.data() || {} : {}
+        setPlantelName(String(data.nombreComercial || data.razonSocial || '').trim())
+      } catch {
+        setPlantelName('')
+      }
+    }
+
+    loadPlantelName()
+  }, [userNitRut])
+
   const filteredTemplates = useMemo(() => {
     const term = String(search || '').trim().toLowerCase()
     return templates.filter((item) => {
@@ -108,6 +191,26 @@ function WhatsAppTemplatesPage() {
       return !term || haystack.includes(term)
     })
   }, [search, templates])
+
+  const existingQuickTemplateKeys = useMemo(
+    () => new Set(
+      templates.map((item) => [
+        String(item.name || '').trim().toLowerCase(),
+        String(item.module || '').trim().toLowerCase(),
+        String(item.category || '').trim().toLowerCase(),
+      ].join('__')),
+    ),
+    [templates],
+  )
+
+  const groupedDefaultTemplates = useMemo(() => {
+    return DEFAULT_WHATSAPP_TEMPLATES.reduce((accumulator, template) => {
+      const groupKey = String(template.module || 'general').trim() || 'general'
+      if (!accumulator[groupKey]) accumulator[groupKey] = []
+      accumulator[groupKey].push(template)
+      return accumulator
+    }, {})
+  }, [])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -188,6 +291,49 @@ function WhatsAppTemplatesPage() {
     })
   }
 
+  const handleCreateDefaultTemplate = async (template) => {
+    if (!canManageTemplates) {
+      setFeedback('No tienes permisos para gestionar plantillas de WhatsApp.')
+      return
+    }
+
+    const templateKey = [
+      String(template?.name || '').trim().toLowerCase(),
+      String(template?.module || '').trim().toLowerCase(),
+      String(template?.category || '').trim().toLowerCase(),
+    ].join('__')
+
+    if (existingQuickTemplateKeys.has(templateKey)) {
+      setFeedback(`La plantilla ${template.name} ya existe.`)
+      return
+    }
+
+    try {
+      setQuickCreatingKey(String(template.key || template.name || '').trim())
+      setFeedback('')
+      await addDocTracked(collection(db, 'whatsapp_templates'), {
+        nitRut: userNitRut,
+        name: String(template.name || '').trim(),
+        module: String(template.module || 'general').trim(),
+        category: String(template.category || 'utilidad').trim(),
+        language: String(template.language || 'es').trim(),
+        body: String(template.body || '').trim(),
+        variables: Array.isArray(template.variables) ? template.variables : [],
+        status: 'activo',
+        createdAt: serverTimestamp(),
+        createdByUid: user?.uid || '',
+        updatedAt: serverTimestamp(),
+        updatedByUid: user?.uid || '',
+      })
+      setFeedback(`Plantilla ${template.name} creada correctamente.`)
+      await loadTemplates()
+    } catch {
+      setFeedback(`No fue posible crear la plantilla ${template.name}.`)
+    } finally {
+      setQuickCreatingKey('')
+    }
+  }
+
   if (!canViewModule) {
     return (
       <section>
@@ -213,6 +359,43 @@ function WhatsAppTemplatesPage() {
       </div>
 
       {feedback && <p className={`feedback ${feedback.includes('correctamente') ? 'success' : 'error'}`}>{feedback}</p>}
+
+      <div className="home-left-card evaluations-card" style={{ marginBottom: '16px' }}>
+        <h3>Creacion rapida</h3>
+        <p style={{ marginTop: '6px' }}>Genera automaticamente plantillas sugeridas de WhatsApp por modulo.</p>
+        <div className="guardian-message-list" style={{ marginTop: '16px' }}>
+          {Object.entries(groupedDefaultTemplates).map(([moduleName, moduleTemplates]) => (
+            <article key={moduleName} className="guardian-message-card" style={{ cursor: 'default' }}>
+              <header>
+                <strong>{formatTemplateCategoryLabel(moduleName)}</strong>
+                <span>{moduleTemplates.length} sugeridas</span>
+              </header>
+              <div className="member-module-actions" style={{ marginTop: '10px' }}>
+                {moduleTemplates.map((template) => {
+                  const templateKey = [
+                    String(template.name || '').trim().toLowerCase(),
+                    String(template.module || '').trim().toLowerCase(),
+                    String(template.category || '').trim().toLowerCase(),
+                  ].join('__')
+                  const alreadyExists = existingQuickTemplateKeys.has(templateKey)
+                  const actionKey = String(template.key || template.name || '').trim()
+                  return (
+                    <button
+                      key={actionKey}
+                      type="button"
+                      className={`button small ${alreadyExists ? 'secondary' : ''}`}
+                      onClick={() => handleCreateDefaultTemplate(template)}
+                      disabled={alreadyExists || quickCreatingKey === actionKey}
+                    >
+                      {alreadyExists ? `${template.name} creada` : quickCreatingKey === actionKey ? 'Creando...' : `Crear ${template.name}`}
+                    </button>
+                  )
+                })}
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
 
       <div className="admissions-detail-grid">
         <div className="home-left-card evaluations-card">
@@ -268,6 +451,9 @@ function WhatsAppTemplatesPage() {
                 </small>
                 <small className="template-helper-text">
                   Variables sugeridas para este modulo: {activeVariableHelp.variables.join(', ')}.
+                </small>
+                <small className="template-helper-text">
+                  Sugerencia: agrega el nombre comercial del plantel {plantelName ? `(${plantelName})` : ''} usando <code>{'{{plantel}}'}</code> para identificar claramente el remitente.
                 </small>
               </label>
               <label className="evaluation-field-full">

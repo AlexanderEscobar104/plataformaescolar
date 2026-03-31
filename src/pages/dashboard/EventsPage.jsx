@@ -10,6 +10,7 @@ import OperationStatusModal from '../../components/OperationStatusModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
+import { buildStudentAudienceOptions, summarizeStudentAudience } from '../../utils/studentAudience'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom']
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
@@ -91,6 +92,10 @@ function EventsPage() {
   const [eventDate, setEventDate] = useState(toIsoDate(new Date()))
   const [existingImages, setExistingImages] = useState([])
   const [newImages, setNewImages] = useState([])
+  const [targetGrades, setTargetGrades] = useState([])
+  const [targetStudentSubgroups, setTargetStudentSubgroups] = useState([])
+  const [gradeOptions, setGradeOptions] = useState([])
+  const [studentSubgroupOptions, setStudentSubgroupOptions] = useState([])
 
   const loadEvents = useCallback(async () => {
     setLoading(true)
@@ -111,11 +116,16 @@ function EventsPage() {
       setAttendanceResponses(mappedResponses)
 
       const map = {}
+      const usersRaw = []
       usersSnapshot.docs.forEach((docSnapshot) => {
         const data = docSnapshot.data()
         map[docSnapshot.id] = data
+        usersRaw.push(data)
       })
       setUsersMap(map)
+      const audienceOptions = buildStudentAudienceOptions(usersRaw)
+      setGradeOptions(audienceOptions.grades)
+      setStudentSubgroupOptions(audienceOptions.subgroups)
     } finally {
       setLoading(false)
     }
@@ -201,6 +211,8 @@ function EventsPage() {
     setEventDate(toIsoDate(new Date()))
     setExistingImages([])
     setNewImages([])
+    setTargetGrades([])
+    setTargetStudentSubgroups([])
   }
 
   const handleNewImagesChange = (event) => {
@@ -212,6 +224,24 @@ function EventsPage() {
       return
     }
     setNewImages(pickedFiles)
+  }
+
+  const toggleTargetGrade = (grade) => {
+    const normalized = String(grade || '').trim().toUpperCase()
+    setTargetGrades((prev) => (
+      prev.includes(normalized)
+        ? prev.filter((item) => item !== normalized)
+        : [...prev, normalized]
+    ))
+  }
+
+  const toggleTargetSubgroup = (subgroupKey) => {
+    const normalized = String(subgroupKey || '').trim().toUpperCase()
+    setTargetStudentSubgroups((prev) => (
+      prev.includes(normalized)
+        ? prev.filter((item) => item !== normalized)
+        : [...prev, normalized]
+    ))
   }
 
   const removeExistingImage = (imagePath) => {
@@ -260,6 +290,8 @@ function EventsPage() {
           title: title.trim(),
           description: description.trim(),
           eventDate,
+          targetGrades: targetGrades.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
+          targetStudentSubgroups: targetStudentSubgroups.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           images: [...existingImages, ...uploadedImages],
           nitRut: userNitRut,
           updatedAt: serverTimestamp(),
@@ -270,6 +302,8 @@ function EventsPage() {
           title: title.trim(),
           description: description.trim(),
           eventDate,
+          targetGrades: targetGrades.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
+          targetStudentSubgroups: targetStudentSubgroups.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           images: uploadedImages,
           nitRut: userNitRut,
           createdByUid: user?.uid || '',
@@ -296,6 +330,8 @@ function EventsPage() {
     setEventDate(eventItem.eventDate || toIsoDate(new Date()))
     setExistingImages(Array.isArray(eventItem.images) ? eventItem.images : [])
     setNewImages([])
+    setTargetGrades(Array.isArray(eventItem.targetGrades) ? eventItem.targetGrades : [])
+    setTargetStudentSubgroups(Array.isArray(eventItem.targetStudentSubgroups) ? eventItem.targetStudentSubgroups : [])
     setSelectedDay('')
   }
 
@@ -402,6 +438,40 @@ function EventsPage() {
                 rows={5}
               />
             </label>
+            <div className="settings-module-card chat-settings-card">
+              <h3>Aplica para estudiantes</h3>
+              <p>Si no seleccionas grupos o subgrupos, el evento aplica para todos.</p>
+              <div className="form-grid-2 circular-form-fields">
+                <div>
+                  <strong>Grupos</strong>
+                  {gradeOptions.length === 0 && <p className="feedback">No hay grados disponibles.</p>}
+                  {gradeOptions.map((option) => (
+                    <label key={option.key} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={targetGrades.includes(option.key)}
+                        onChange={() => toggleTargetGrade(option.key)}
+                      />
+                      <span>{option.label} ({option.count})</span>
+                    </label>
+                  ))}
+                </div>
+                <div>
+                  <strong>Subgrupos</strong>
+                  {studentSubgroupOptions.length === 0 && <p className="feedback">No hay subgrupos disponibles.</p>}
+                  {studentSubgroupOptions.map((option) => (
+                    <label key={option.key} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={targetStudentSubgroups.includes(option.key)}
+                        onChange={() => toggleTargetSubgroup(option.key)}
+                      />
+                      <span>{option.label} ({option.count})</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
             <div>
               <DragDropFileInput
                 id="evento-imagenes"
@@ -596,6 +666,7 @@ function EventsPage() {
                   <div key={eventItem.id} className="events-day-item">
                     <strong>{eventItem.title || 'Evento'}</strong>
                     <p>{eventItem.description || 'Sin descripcion.'}</p>
+                    <small>Aplica para: {summarizeStudentAudience(eventItem)}</small>
                     {Array.isArray(eventItem.images) && eventItem.images.length > 0 && (
                       <div className="event-image-grid">
                         {eventItem.images.map((image) => (

@@ -4,6 +4,7 @@ import { db } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import useGuardianPortal from '../../hooks/useGuardianPortal'
 import GuardianStudentSwitcher from '../../components/GuardianStudentSwitcher'
+import { matchesStudentAudience, summarizeStudentAudience } from '../../utils/studentAudience'
 
 function formatDateTime(value) {
   if (!value) return '-'
@@ -21,6 +22,7 @@ function GuardianCircularsPage() {
     error: portalError,
     linkedStudents,
     activeStudentId,
+    activeStudent,
     setActiveStudentId,
   } = useGuardianPortal()
   const [loading, setLoading] = useState(true)
@@ -54,12 +56,15 @@ function GuardianCircularsPage() {
 
   const filteredCirculars = useMemo(() => {
     const normalized = search.trim().toLowerCase()
-    if (!normalized) return circulars
-    return circulars.filter((item) => {
-      const haystack = `${item.subject || ''} ${item.fechaVencimiento || ''}`.toLowerCase()
+    const audienceFiltered = circulars.filter((item) =>
+      matchesStudentAudience(item, activeStudent?.studentGrade || '', activeStudent?.studentGroup || ''),
+    )
+    if (!normalized) return audienceFiltered
+    return audienceFiltered.filter((item) => {
+      const haystack = `${item.subject || ''} ${item.fechaVencimiento || ''} ${summarizeStudentAudience(item)}`.toLowerCase()
       return haystack.includes(normalized)
     })
-  }, [circulars, search])
+  }, [activeStudent?.studentGrade, activeStudent?.studentGroup, circulars, search])
 
   return (
     <section className="dashboard-module-shell settings-module-shell">
@@ -107,13 +112,14 @@ function GuardianCircularsPage() {
                 <th>Asunto</th>
                 <th>Fecha</th>
                 <th>Vencimiento</th>
+                <th>Aplica para</th>
                 <th>Archivo</th>
               </tr>
             </thead>
             <tbody>
               {filteredCirculars.length === 0 && (
                 <tr>
-                  <td colSpan="4">No hay circulares para mostrar.</td>
+                  <td colSpan="5">No hay circulares para mostrar.</td>
                 </tr>
               )}
               {filteredCirculars.map((item) => (
@@ -121,6 +127,7 @@ function GuardianCircularsPage() {
                   <td data-label="Asunto">{item.subject || '-'}</td>
                   <td data-label="Fecha">{formatDateTime(item.createdAt)}</td>
                   <td data-label="Vencimiento">{item.fechaVencimiento || '-'}</td>
+                  <td data-label="Aplica para">{summarizeStudentAudience(item)}</td>
                   <td data-label="Archivo">
                     {item.pdf?.url ? (
                       <a href={item.pdf.url} target="_blank" rel="noreferrer" download className="pdf-download-icon" title="Descargar PDF" aria-label="Descargar PDF">

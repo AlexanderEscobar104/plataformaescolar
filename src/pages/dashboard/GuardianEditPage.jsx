@@ -44,10 +44,15 @@ function GuardianEditPage() {
           nombres: profile.nombres || '',
           apellidos: profile.apellidos || '',
           telefono: profile.telefono || '',
+          celular: profile.celular || '',
           direccion: profile.direccion || '',
+          emailPersonal: profile.emailPersonal || '',
           email: data.email || '',
           password: '',
           parentescoPrincipal: profile.parentescoPrincipal || 'Madre',
+          autorizaWhatsApp: profile.autorizaWhatsApp === false ? 'no' : 'si',
+          autorizaMensajesTexto: profile.autorizaMensajesTexto === false ? 'no' : 'si',
+          autorizaCorreos: profile.autorizaCorreos === false ? 'no' : 'si',
           estado: profile.estado || 'activo',
         })
       } finally {
@@ -89,8 +94,13 @@ function GuardianEditPage() {
           nombres,
           apellidos,
           telefono: form.telefono.trim(),
+          celular: form.celular.trim(),
           direccion: form.direccion.trim(),
+          emailPersonal: form.emailPersonal.trim().toLowerCase(),
           parentescoPrincipal: form.parentescoPrincipal,
+          autorizaWhatsApp: form.autorizaWhatsApp === 'si',
+          autorizaMensajesTexto: form.autorizaMensajesTexto === 'si',
+          autorizaCorreos: form.autorizaCorreos === 'si',
           estado: form.estado || 'activo',
           nitRut: userNitRut,
         },
@@ -195,6 +205,16 @@ function GuardianEditPage() {
                 />
               </label>
 
+              <label htmlFor="guardian-edit-celular">
+                Celular
+                <input
+                  id="guardian-edit-celular"
+                  type="text"
+                  value={form.celular}
+                  onChange={(e) => handleChange('celular', e.target.value)}
+                />
+              </label>
+
               <label htmlFor="guardian-edit-parentesco">
                 Parentesco principal
                 <select
@@ -237,6 +257,54 @@ function GuardianEditPage() {
               Correo de acceso
               <input id="guardian-edit-email" type="email" value={form.email} disabled readOnly />
             </label>
+
+            <label htmlFor="guardian-edit-email-personal">
+              Email personal
+              <input
+                id="guardian-edit-email-personal"
+                type="email"
+                value={form.emailPersonal}
+                onChange={(e) => handleChange('emailPersonal', e.target.value)}
+              />
+            </label>
+
+            <div className="form-grid-2">
+              <label htmlFor="guardian-edit-whatsapp">
+                Desea recibir mensajes de WhatsApp
+                <select
+                  id="guardian-edit-whatsapp"
+                  value={form.autorizaWhatsApp}
+                  onChange={(e) => handleChange('autorizaWhatsApp', e.target.value)}
+                >
+                  <option value="si">Si</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+
+              <label htmlFor="guardian-edit-sms">
+                Desea recibir mensajes de texto
+                <select
+                  id="guardian-edit-sms"
+                  value={form.autorizaMensajesTexto}
+                  onChange={(e) => handleChange('autorizaMensajesTexto', e.target.value)}
+                >
+                  <option value="si">Si</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+
+              <label htmlFor="guardian-edit-correos">
+                Autoriza el envio de correos
+                <select
+                  id="guardian-edit-correos"
+                  value={form.autorizaCorreos}
+                  onChange={(e) => handleChange('autorizaCorreos', e.target.value)}
+                >
+                  <option value="si">Si</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+            </div>
 
             {formError && <p className="feedback error">{formError}</p>}
 

@@ -60,7 +60,21 @@ import GuardianProfilePage from './pages/dashboard/GuardianProfilePage'
 import GuardianTasksPage from './pages/dashboard/GuardianTasksPage'
 import GuardianEvaluationsPage from './pages/dashboard/GuardianEvaluationsPage'
 import GuardianSchedulePage from './pages/dashboard/GuardianSchedulePage'
+import GuardianVotacionesPage from './pages/dashboard/GuardianVotacionesPage'
+import GuardianEncuestasPage from './pages/dashboard/GuardianEncuestasPage'
 import PaymentsPage from './pages/dashboard/PaymentsPage'
+import VotacionesPage from './pages/dashboard/VotacionesPage'
+import EncuestasPage from './pages/dashboard/EncuestasPage'
+import DesempenoDashboardPage from './pages/dashboard/DesempenoDashboardPage'
+import DesempenoPeriodosPage from './pages/dashboard/DesempenoPeriodosPage'
+import DesempenoPlantillasPage from './pages/dashboard/DesempenoPlantillasPage'
+import DesempenoAsignacionesPage from './pages/dashboard/DesempenoAsignacionesPage'
+import DesempenoEvaluacionesPage from './pages/dashboard/DesempenoEvaluacionesPage'
+import DesempenoResultadosPage from './pages/dashboard/DesempenoResultadosPage'
+import DesempenoPlanesMejoraPage from './pages/dashboard/DesempenoPlanesMejoraPage'
+import DesempenoHistorialPage from './pages/dashboard/DesempenoHistorialPage'
+import DesempenoReportesPage from './pages/dashboard/DesempenoReportesPage'
+import DesempenoMiDesempenoPage from './pages/dashboard/DesempenoMiDesempenoPage'
 import TipoEmpleadosPage from './pages/dashboard/TipoEmpleadosPage'
 import DatosCobroPage from './pages/dashboard/DatosCobroPage'
 import ImpuestosPage from './pages/dashboard/ImpuestosPage'
@@ -104,6 +118,10 @@ import WhatsAppInboxPage from './pages/dashboard/WhatsAppInboxPage'
 import WhatsAppTemplatesPage from './pages/dashboard/WhatsAppTemplatesPage'
 import WhatsAppCampaignsPage from './pages/dashboard/WhatsAppCampaignsPage'
 import WhatsAppSettingsPage from './pages/dashboard/WhatsAppSettingsPage'
+import SmsTemplatesPage from './pages/dashboard/SmsTemplatesPage'
+import SmsSettingsPage from './pages/dashboard/SmsSettingsPage'
+import SmsHistoryPage from './pages/dashboard/SmsHistoryPage'
+import SmsSendPage from './pages/dashboard/SmsSendPage'
 
 const PENDING_NATIVE_ROUTE_KEY = 'pending_native_route'
 
@@ -277,6 +295,10 @@ function App() {
           <Route path="whatsapp/plantillas" element={<WhatsAppTemplatesPage />} />
           <Route path="whatsapp/campanas" element={<WhatsAppCampaignsPage />} />
           <Route path="whatsapp/configuracion" element={<WhatsAppSettingsPage />} />
+          <Route path="sms/enviar" element={<SmsSendPage />} />
+          <Route path="sms/historial" element={<SmsHistoryPage />} />
+          <Route path="sms/plantillas" element={<SmsTemplatesPage />} />
+          <Route path="sms/configuracion" element={<SmsSettingsPage />} />
           <Route path="acudientes" element={<GuardiansListPage />} />
           <Route path="acudientes/nuevo" element={<GuardianRegistrationPage />} />
           <Route path="acudientes/editar/:guardianId" element={<GuardianEditPage />} />
@@ -294,6 +316,8 @@ function App() {
           <Route path="acudiente/mensajes" element={<GuardianMessagesPage />} />
           <Route path="acudiente/notificaciones" element={<GuardianNotificationsPage />} />
           <Route path="acudiente/circulares" element={<GuardianCircularsPage />} />
+          <Route path="acudiente/votaciones" element={<GuardianVotacionesPage />} />
+          <Route path="acudiente/encuestas" element={<GuardianEncuestasPage />} />
           <Route path="acudiente/perfil" element={<GuardianProfilePage />} />
           <Route
             path="inasistencias"
@@ -361,6 +385,18 @@ function App() {
           <Route path="circulares" element={<CircularsPage />} />
           <Route path="circulares/nueva" element={<CircularFormPage />} />
           <Route path="circulares/editar/:circularId" element={<CircularFormPage />} />
+          <Route path="votaciones" element={<VotacionesPage />} />
+          <Route path="encuestas" element={<EncuestasPage />} />
+          <Route path="desempeno" element={<DesempenoDashboardPage />} />
+          <Route path="desempeno/periodos" element={<DesempenoPeriodosPage />} />
+          <Route path="desempeno/plantillas" element={<DesempenoPlantillasPage />} />
+          <Route path="desempeno/asignaciones" element={<DesempenoAsignacionesPage />} />
+          <Route path="desempeno/evaluaciones" element={<DesempenoEvaluacionesPage />} />
+          <Route path="desempeno/resultados" element={<DesempenoResultadosPage />} />
+          <Route path="desempeno/planes-mejora" element={<DesempenoPlanesMejoraPage />} />
+          <Route path="desempeno/historial" element={<DesempenoHistorialPage />} />
+          <Route path="desempeno/reportes" element={<DesempenoReportesPage />} />
+          <Route path="desempeno/mi-desempeno" element={<DesempenoMiDesempenoPage />} />
           <Route
             path="datos-plantel"
             element={<PlantelDataPage />}

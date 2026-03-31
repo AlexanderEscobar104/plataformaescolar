@@ -8,6 +8,7 @@ import OperationStatusModal from '../../components/OperationStatusModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
+import { summarizeStudentAudience } from '../../utils/studentAudience'
 
 function formatDate(dateValue) {
 
@@ -90,7 +91,7 @@ function CircularsPage() {
     if (!normalized) return circulars
 
     return circulars.filter((item) => {
-      const haystack = `${item.subject || ''} ${formatDate(item.createdAt)} ${item.fechaVencimiento || ''}`.toLowerCase()
+      const haystack = `${item.subject || ''} ${formatDate(item.createdAt)} ${item.fechaVencimiento || ''} ${summarizeStudentAudience(item)}`.toLowerCase()
       return haystack.includes(normalized)
     })
   }, [search, circulars])
@@ -123,7 +124,7 @@ function CircularsPage() {
           type="text"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar circular por asunto o fecha"
+          placeholder="Buscar circular por asunto, fecha o audiencia"
         />
       </div>
 
@@ -137,6 +138,7 @@ function CircularsPage() {
                 <th>Asunto</th>
                 <th>Fecha</th>
                 <th>Fecha vencimiento</th>
+                <th>Aplica para</th>
                 <th>Archivo</th>
                 {canManageCirculars && <th>Acciones</th>}
               </tr>
@@ -144,7 +146,7 @@ function CircularsPage() {
             <tbody>
               {filteredCirculars.length === 0 && (
                 <tr>
-                  <td colSpan={canManageCirculars ? 5 : 4}>No hay circulares para mostrar.</td>
+                  <td colSpan={canManageCirculars ? 6 : 5}>No hay circulares para mostrar.</td>
                 </tr>
               )}
               {(exportingAll ? filteredCirculars : filteredCirculars.slice((currentPage - 1) * 10, currentPage * 10)).map((item) => (
@@ -152,6 +154,7 @@ function CircularsPage() {
                   <td data-label="Asunto">{item.subject || '-'}</td>
                   <td data-label="Fecha">{formatDate(item.createdAt)}</td>
                   <td data-label="Fecha vencimiento">{item.fechaVencimiento || '-'}</td>
+                  <td data-label="Aplica para">{summarizeStudentAudience(item)}</td>
                   <td data-label="Archivo">
                     {item.pdf?.url ? (
                       <a href={item.pdf.url} target="_blank" rel="noreferrer" download className="pdf-download-icon" title="Descargar PDF">

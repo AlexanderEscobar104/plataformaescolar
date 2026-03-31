@@ -3,6 +3,7 @@ import { auth, firebaseConfig } from '../firebase'
 const QR_PREFIX = 'plataformaescolar-qr-login'
 const CALLABLE_TIMEOUT_MS = 15000
 const FUNCTIONS_REGION = 'us-central1'
+const QR_PAYLOAD_PATTERN = new RegExp(`(${QR_PREFIX}:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+)`, 'i')
 
 function buildFunctionUrl(name) {
   const projectId = String(firebaseConfig.projectId || '').trim()
@@ -74,8 +75,50 @@ function buildQrPayload({ sessionId, sessionKey }) {
   return `${QR_PREFIX}:${sessionId}:${sessionKey}`
 }
 
+function decodeQrCandidate(value) {
+  const normalized = String(value || '').trim()
+  if (!normalized) return ''
+
+  try {
+    return decodeURIComponent(normalized)
+  } catch (_error) {
+    return normalized
+  }
+}
+
+function extractQrPayloadCandidate(rawValue) {
+  const directValue = decodeQrCandidate(rawValue)
+  const directMatch = directValue.match(QR_PAYLOAD_PATTERN)
+  if (directMatch?.[1]) {
+    return directMatch[1]
+  }
+
+  try {
+    const parsedUrl = new URL(directValue)
+    const searchCandidates = [
+      parsedUrl.searchParams.get('data'),
+      parsedUrl.searchParams.get('code'),
+      parsedUrl.searchParams.get('qr'),
+      parsedUrl.hash ? parsedUrl.hash.slice(1) : '',
+      parsedUrl.pathname,
+    ]
+
+    for (const candidate of searchCandidates) {
+      const decodedCandidate = decodeQrCandidate(candidate)
+      const nestedMatch = decodedCandidate.match(QR_PAYLOAD_PATTERN)
+      if (nestedMatch?.[1]) {
+        return nestedMatch[1]
+      }
+    }
+  } catch (_error) {
+    // El valor no es una URL valida; seguimos con la validacion directa.
+  }
+
+  return directValue
+}
+
 function parseQrPayload(rawValue) {
-  const normalizedValue = String(rawValue || '').trim()
+  const normalizedValue = extractQrPayloadCandidate(rawValue)
   const parts = normalizedValue.split(':')
 
   if (parts.length !== 3 || parts[0] !== QR_PREFIX) {

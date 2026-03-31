@@ -55,6 +55,7 @@ function GuardiansListPage() {
             nombres: profile.nombres || '',
             apellidos: profile.apellidos || '',
             email: data.email || '',
+            celular: profile.celular || '',
             telefono: profile.telefono || '',
             direccion: profile.direccion || '',
             parentescoPrincipal: profile.parentescoPrincipal || '',
@@ -87,7 +88,7 @@ function GuardiansListPage() {
     if (!normalized) return guardians
 
     return guardians.filter((guardian) => {
-      const haystack = `${guardian.numeroDocumento} ${guardian.nombres} ${guardian.apellidos} ${guardian.email} ${guardian.telefono} ${guardian.parentescoPrincipal} ${guardian.estado}`.toLowerCase()
+      const haystack = `${guardian.numeroDocumento} ${guardian.nombres} ${guardian.apellidos} ${guardian.email} ${guardian.celular} ${guardian.telefono} ${guardian.parentescoPrincipal} ${guardian.estado}`.toLowerCase()
       return haystack.includes(normalized)
     })
   }, [guardians, search])
@@ -112,6 +113,7 @@ function GuardiansListPage() {
             nombres: guardian.nombres || '',
             apellidos: guardian.apellidos || '',
             telefono: guardian.telefono || '',
+            celular: guardian.celular || '',
             direccion: guardian.direccion || '',
             parentescoPrincipal: guardian.parentescoPrincipal || '',
             estado: nextState,
@@ -194,7 +196,7 @@ function GuardiansListPage() {
                 <th>Nombres</th>
                 <th>Apellidos</th>
                 <th>Correo</th>
-                <th>Telefono</th>
+                <th>Celular</th>
                 <th>Parentesco</th>
                 <th>Vinculos</th>
                 <th>Estado</th>
@@ -213,7 +215,7 @@ function GuardiansListPage() {
                   <td data-label="Nombres">{guardian.nombres || '-'}</td>
                   <td data-label="Apellidos">{guardian.apellidos || '-'}</td>
                   <td data-label="Correo">{guardian.email || '-'}</td>
-                  <td data-label="Telefono">{guardian.telefono || '-'}</td>
+                  <td data-label="Celular">{guardian.celular || '-'}</td>
                   <td data-label="Parentesco">{guardian.parentescoPrincipal || '-'}</td>
                   <td data-label="Vinculos">{guardian.linkedStudentsCount || 0}</td>
                   <td data-label="Estado">{guardian.estado || '-'}</td>

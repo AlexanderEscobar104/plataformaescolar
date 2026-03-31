@@ -264,6 +264,14 @@ function TipoReportesPage() {
           type="button"
           className="button secondary small"
           disabled={saving}
+          onClick={() => createSuggestedType({ nombre: 'Pagos', clave: 'pagos' })}
+        >
+          Crear tipo Pagos
+        </button>
+        <button
+          type="button"
+          className="button secondary small"
+          disabled={saving}
           onClick={() => createSuggestedType({ nombre: 'Permisos solicitados', clave: 'permisos_solicitados' })}
         >
           Crear tipo Permisos solicitados

@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function currentUserPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function currentUserExists() {
+      return isSignedIn() && exists(currentUserPath());
+    }
+
+    function currentUser() {
+      return get(currentUserPath()).data;
+    }
+
+    function currentUserRole() {
+      return currentUser().role is string ? currentUser().role : '';
+    }
+
+    function currentUserNitRut() {
+      return currentUser().nitRut is string
+        ? currentUser().nitRut
+        : (currentUser().profile.nitRut is string ? currentUser().profile.nitRut : '');
+    }
+
+    function tenantPermissionsDocId(nitRut) {
+      return 'permisosRoles_' + nitRut;
+    }
+
+    function tenantPermissionList(nitRut) {
+      return get(/databases/$(database)/documents/configuracion/$(tenantPermissionsDocId(nitRut))).data.roles[currentUserRole()];
+    }
+
+    function hasTenantPermission(nitRut, permissionKey) {
+      return currentUserExists()
+        && nitRut is string
+        && nitRut.size() > 0
+        && currentUserNitRut() == nitRut
+        && exists(/databases/$(database)/documents/configuracion/$(tenantPermissionsDocId(nitRut)))
+        && tenantPermissionList(nitRut) is list
+        && permissionKey in tenantPermissionList(nitRut);
+    }
+
+    function canManageSms(nitRut) {
+      return hasTenantPermission(nitRut, 'config_messages_manage')
+        || hasTenantPermission(nitRut, 'permissions_manage');
+    }
+
+    function isValidSmsTemplate(data) {
+      return data.nitRut is string
+        && data.nitRut.size() > 0
+        && data.slug is string
+        && data.slug.matches('^[a-z0-9_]+$')
+        && data.name is string
+        && data.name.size() > 0
+        && data.body is string
+        && data.body.size() > 0
+        && (!('module' in data) || data.module is string)
+        && (!('category' in data) || data.category is string)
+        && (!('status' in data) || data.status is string)
+        && (!('variables' in data) || data.variables is list);
+    }
+
+    match /sms_templates/{templateId} {
+      allow read: if resource.data.nitRut is string
+        && canManageSms(resource.data.nitRut);
+
+      allow create: if isValidSmsTemplate(request.resource.data)
+        && canManageSms(request.resource.data.nitRut);
+
+      allow update: if resource.data.nitRut is string
+        && request.resource.data.nitRut == resource.data.nitRut
+        && isValidSmsTemplate(request.resource.data)
+        && canManageSms(resource.data.nitRut);
+
+      allow delete: if resource.data.nitRut is string
+        && canManageSms(resource.data.nitRut);
+    }
+
+    match /sms_messages/{messageId} {
+      allow read: if resource.data.nitRut is string
+        && canManageSms(resource.data.nitRut);
+
+      allow create, update, delete: if false;
+    }
+
+    /*
+      IMPORTANTE:
+      La proteccion de configuracion/sms_hablame_{nitRut} debe agregarse
+      dentro del match /configuracion/{configId} que ya exista en tus reglas
+      globales. En Firestore Rules un "deny" en un match separado no bloquea
+      un "allow" definido en otro bloque que tambien haga match.
+    */
+  }
+}

@@ -600,17 +600,28 @@ function StudentEditPage() {
                 <option value="inactivo">Inactivo</option>
               </select>
             </label>
-            <label htmlFor="mensajes-whatsapp-estudiante-edit">
-              Desea recibir mensajes de texto o WhatsApp
-              <select
-                id="mensajes-whatsapp-estudiante-edit"
-                value={autorizaMensajes}
-                onChange={(event) => setAutorizaMensajes(event.target.value)}
-              >
-                <option value="si">Si</option>
-                <option value="no">No</option>
-              </select>
-            </label>
+              <label htmlFor="mensajes-whatsapp-estudiante-edit">
+                Desea recibir mensajes de WhatsApp
+                <select
+                  id="mensajes-whatsapp-estudiante-edit"
+                  value={autorizaMensajes}
+                  onChange={(event) => setAutorizaMensajes(event.target.value)}
+                >
+                  <option value="si">Si</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+              <label htmlFor="mensajes-texto-estudiante-edit">
+                Desea recibir mensajes de texto
+                <select
+                  id="mensajes-texto-estudiante-edit"
+                  value={autorizaMensajes}
+                  onChange={(event) => setAutorizaMensajes(event.target.value)}
+                >
+                  <option value="si">Si</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
             <label htmlFor="autoriza-correos-estudiante-edit">
               Autoriza el envio de correos
               <select

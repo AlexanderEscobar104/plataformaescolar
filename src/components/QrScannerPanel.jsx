@@ -22,14 +22,30 @@ function normalizeScannerError(message) {
 }
 
 function extractDetectedQrValue(barcode) {
-  const rawValue = String(barcode?.rawValue || '').trim()
-  if (rawValue) {
-    return rawValue
+  const rawCandidates = [
+    barcode?.rawValue,
+    barcode?.displayValue,
+    barcode?.url?.url,
+    barcode?.urlBookmark?.url,
+    barcode?.sms?.message,
+  ]
+
+  for (const candidate of rawCandidates) {
+    const normalizedCandidate = String(candidate || '').trim()
+    if (normalizedCandidate) {
+      return normalizedCandidate
+    }
   }
 
-  const displayValue = String(barcode?.displayValue || '').trim()
-  if (displayValue) {
-    return displayValue
+  if (Array.isArray(barcode?.bytes) && barcode.bytes.length > 0) {
+    try {
+      const decodedBytes = new TextDecoder().decode(new Uint8Array(barcode.bytes)).trim()
+      if (decodedBytes) {
+        return decodedBytes
+      }
+    } catch (_error) {
+      // Ignoramos errores de decodificacion y usamos los campos de texto disponibles.
+    }
   }
 
   return ''

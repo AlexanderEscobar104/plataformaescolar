@@ -1303,17 +1303,28 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
                     <option value="inactivo">Inactivo</option>
                   </select>
                 </label>
-                <label htmlFor="mensajes-whatsapp-estudiante">
-                  Desea recibir mensajes de texto o WhatsApp
-                  <select
-                    id="mensajes-whatsapp-estudiante"
-                    value={autorizaMensajes}
-                    onChange={(event) => setAutorizaMensajes(event.target.value)}
-                  >
-                    <option value="si">Si</option>
-                    <option value="no">No</option>
-                  </select>
-                </label>
+                  <label htmlFor="mensajes-whatsapp-estudiante">
+                    Desea recibir mensajes de WhatsApp
+                    <select
+                      id="mensajes-whatsapp-estudiante"
+                      value={autorizaMensajes}
+                      onChange={(event) => setAutorizaMensajes(event.target.value)}
+                    >
+                      <option value="si">Si</option>
+                      <option value="no">No</option>
+                    </select>
+                  </label>
+                  <label htmlFor="mensajes-texto-estudiante">
+                    Desea recibir mensajes de texto
+                    <select
+                      id="mensajes-texto-estudiante"
+                      value={autorizaMensajes}
+                      onChange={(event) => setAutorizaMensajes(event.target.value)}
+                    >
+                      <option value="si">Si</option>
+                      <option value="no">No</option>
+                    </select>
+                  </label>
                 <label htmlFor="autoriza-correos-estudiante">
                   Autoriza el envio de correos
                   <select

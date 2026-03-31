@@ -1,9 +1,67 @@
 import { Link } from 'react-router-dom'
 import GuardianStudentSwitcher from '../../components/GuardianStudentSwitcher'
 import useGuardianPortal from '../../hooks/useGuardianPortal'
+import { useAuth } from '../../hooks/useAuth'
+import { PERMISSION_KEYS } from '../../utils/permissions'
+
+const portalSections = [
+  {
+    id: 'academico',
+    eyebrow: 'Seguimiento diario',
+    title: 'Academico',
+    description: 'Tareas, evaluaciones, horario, asistencia y boletines para acompanar el avance del estudiante.',
+    accentClass: 'guardian-hub-card-academic',
+    items: [
+      { label: 'Tareas', to: '/dashboard/acudiente/tareas' },
+      { label: 'Evaluaciones', to: '/dashboard/acudiente/evaluaciones' },
+      { label: 'Horario', to: '/dashboard/acudiente/horario' },
+      { label: 'Asistencia', to: '/dashboard/acudiente/asistencia' },
+      { label: 'Boletines', to: '/dashboard/acudiente/boletines' },
+    ],
+  },
+  {
+    id: 'comunidad',
+    eyebrow: 'Informacion institucional',
+    title: 'Comunidad academica',
+    description: 'Eventos y circulares en un mismo lugar para mantener a las familias siempre informadas.',
+    accentClass: 'guardian-hub-card-community',
+    items: [
+      { label: 'Eventos', to: '/dashboard/eventos' },
+      { label: 'Circulares', to: '/dashboard/acudiente/circulares' },
+    ],
+  },
+  {
+    id: 'participacion',
+    eyebrow: 'Voz de las familias',
+    title: 'Participacion',
+    description: 'Responde iniciativas institucionales, votaciones y encuestas desde una experiencia simple y visible.',
+    accentClass: 'guardian-hub-card-participation',
+    items: [
+      { label: 'Votaciones', to: '/dashboard/acudiente/votaciones' },
+      { label: 'Encuestas', to: '/dashboard/acudiente/encuestas' },
+    ],
+  },
+]
 
 function GuardianHomePage() {
+  const { hasPermission } = useAuth()
   const { loading, linkedStudents, activeStudent, activeStudentId, setActiveStudentId } = useGuardianPortal()
+  const studentDescriptor = activeStudent?.studentGrade
+    ? `Grado ${activeStudent.studentGrade}${activeStudent?.studentGroup ? ` - Grupo ${activeStudent.studentGroup}` : ''}`
+    : 'Sin grado registrado'
+  const canViewGuardianVotaciones = hasPermission(PERMISSION_KEYS.ACUDIENTE_VOTACIONES_VIEW)
+  const canViewGuardianEncuestas = hasPermission(PERMISSION_KEYS.ACUDIENTE_ENCUESTAS_VIEW)
+  const visibleSections = portalSections.map((section) => (
+    section.id === 'participacion'
+      ? {
+        ...section,
+        items: section.items.filter((item) => (
+          (item.label === 'Votaciones' && canViewGuardianVotaciones) ||
+          (item.label === 'Encuestas' && canViewGuardianEncuestas)
+        )),
+      }
+      : section
+  )).filter((section) => section.items.length > 0)
 
   return (
     <section className="dashboard-module-shell settings-module-shell">
@@ -11,7 +69,7 @@ function GuardianHomePage() {
         <div className="dashboard-module-hero-copy">
           <span className="dashboard-module-eyebrow">Portal de Acudiente</span>
           <h2>Inicio del portal</h2>
-          <p>Consulta rapidamente la informacion de los estudiantes vinculados y accede a las secciones principales del portal familiar.</p>
+          <p>Consulta rapidamente la informacion de los estudiantes vinculados y accede a un hub moderno con los modulos clave del portal familiar.</p>
         </div>
         <div className="dashboard-module-hero-note">
           <strong>{linkedStudents.length}</strong>
@@ -31,18 +89,38 @@ function GuardianHomePage() {
         <article className="settings-module-card guardian-portal-stat-card">
           <h3>Estudiante activo</h3>
           <p>{activeStudent?.studentName || 'Sin estudiante seleccionado'}</p>
-          <small>{activeStudent?.studentGrade ? `Grado ${activeStudent.studentGrade}` : 'Sin grado registrado'}{activeStudent?.studentGroup ? ` · Grupo ${activeStudent.studentGroup}` : ''}</small>
+          <small>{studentDescriptor}</small>
         </article>
         <article className="settings-module-card guardian-portal-stat-card">
-          <h3>Accesos directos</h3>
-          <p>4 modulos reales</p>
-          <small>Boletines, asistencia, mensajes y notificaciones</small>
+          <h3>Bloques principales</h3>
+          <p>3 experiencias</p>
+          <small>Academico, comunidad academica y participacion</small>
         </article>
         <article className="settings-module-card guardian-portal-stat-card">
           <h3>Estado del portal</h3>
           <p>{linkedStudents.length > 0 ? 'Activo' : 'Pendiente'}</p>
           <small>{linkedStudents.length > 0 ? 'Cuenta vinculada correctamente' : 'Requiere vinculacion institucional'}</small>
         </article>
+      </div>
+
+      <div className="guardian-home-hub">
+        {visibleSections.map((section) => (
+          <article key={section.id} className={`settings-module-card guardian-hub-card ${section.accentClass}`}>
+            <div className="guardian-hub-card-header">
+              <span className="guardian-hub-card-eyebrow">{section.eyebrow}</span>
+              <h3>{section.title}</h3>
+              <p>{section.description}</p>
+            </div>
+            <div className="guardian-hub-link-list">
+              {section.items.map((item) => (
+                <Link key={item.to} className="guardian-hub-link" to={item.to}>
+                  <span>{item.label}</span>
+                  <small>Abrir modulo</small>
+                </Link>
+              ))}
+            </div>
+          </article>
+        ))}
       </div>
 
       <div className="home-left-card settings-module-card">
@@ -70,6 +148,11 @@ function GuardianHomePage() {
           <Link className="button secondary" to="/dashboard/acudiente/boletines">
             Ver boletines
           </Link>
+          {canViewGuardianVotaciones && (
+            <Link className="button secondary" to="/dashboard/acudiente/votaciones">
+              Ir a votaciones
+            </Link>
+          )}
         </div>
       </div>
     </section>

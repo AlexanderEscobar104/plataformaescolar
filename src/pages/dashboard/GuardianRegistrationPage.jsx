@@ -54,8 +54,13 @@ function GuardianRegistrationPage() {
           nombres,
           apellidos,
           telefono: form.telefono.trim(),
+          celular: form.celular.trim(),
           direccion: form.direccion.trim(),
+          emailPersonal: form.emailPersonal.trim().toLowerCase(),
           parentescoPrincipal: form.parentescoPrincipal,
+          autorizaWhatsApp: form.autorizaWhatsApp === 'si',
+          autorizaMensajesTexto: form.autorizaMensajesTexto === 'si',
+          autorizaCorreos: form.autorizaCorreos === 'si',
           estado: form.estado || 'activo',
         },
       })
@@ -151,6 +156,16 @@ function GuardianRegistrationPage() {
               />
             </label>
 
+            <label htmlFor="guardian-create-celular">
+              Celular
+              <input
+                id="guardian-create-celular"
+                type="text"
+                value={form.celular}
+                onChange={(e) => handleChange('celular', e.target.value)}
+              />
+            </label>
+
             <label htmlFor="guardian-create-parentesco">
               Parentesco principal
               <select
@@ -179,11 +194,11 @@ function GuardianRegistrationPage() {
             </label>
           </div>
 
-          <label htmlFor="guardian-create-direccion">
-            Direccion
-            <input
-              id="guardian-create-direccion"
-              type="text"
+            <label htmlFor="guardian-create-direccion">
+              Direccion
+              <input
+                id="guardian-create-direccion"
+                type="text"
               value={form.direccion}
               onChange={(e) => handleChange('direccion', e.target.value)}
             />
@@ -198,6 +213,54 @@ function GuardianRegistrationPage() {
               onChange={(e) => handleChange('email', e.target.value)}
             />
           </label>
+
+          <label htmlFor="guardian-create-email-personal">
+            Email personal
+            <input
+              id="guardian-create-email-personal"
+              type="email"
+              value={form.emailPersonal}
+              onChange={(e) => handleChange('emailPersonal', e.target.value)}
+            />
+          </label>
+
+          <div className="form-grid-2">
+            <label htmlFor="guardian-create-whatsapp">
+              Desea recibir mensajes de WhatsApp
+              <select
+                id="guardian-create-whatsapp"
+                value={form.autorizaWhatsApp}
+                onChange={(e) => handleChange('autorizaWhatsApp', e.target.value)}
+              >
+                <option value="si">Si</option>
+                <option value="no">No</option>
+              </select>
+            </label>
+
+            <label htmlFor="guardian-create-sms">
+              Desea recibir mensajes de texto
+              <select
+                id="guardian-create-sms"
+                value={form.autorizaMensajesTexto}
+                onChange={(e) => handleChange('autorizaMensajesTexto', e.target.value)}
+              >
+                <option value="si">Si</option>
+                <option value="no">No</option>
+              </select>
+            </label>
+
+            <label htmlFor="guardian-create-correos">
+              Autoriza el envio de correos
+              <select
+                id="guardian-create-correos"
+                value={form.autorizaCorreos}
+                onChange={(e) => handleChange('autorizaCorreos', e.target.value)}
+              >
+                <option value="si">Si</option>
+                <option value="no">No</option>
+              </select>
+            </label>
+          </div>
 
           <label htmlFor="guardian-create-password">
             Clave inicial

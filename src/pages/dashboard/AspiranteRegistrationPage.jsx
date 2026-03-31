@@ -445,13 +445,20 @@ function AspiranteRegistrationPage() {
                   <option value="inactivo">Inactivo</option>
                 </select>
               </label>
-              <label htmlFor="mensajes-aspirante">
-                Desea recibir mensajes de texto o WhatsApp
-                <select id="mensajes-aspirante" value={autorizaMensajes} onChange={(e) => setAutorizaMensajes(e.target.value)}>
-                  <option value="si">Si</option>
-                  <option value="no">No</option>
-                </select>
-              </label>
+                <label htmlFor="mensajes-whatsapp-aspirante">
+                  Desea recibir mensajes de WhatsApp
+                  <select id="mensajes-whatsapp-aspirante" value={autorizaMensajes} onChange={(e) => setAutorizaMensajes(e.target.value)}>
+                    <option value="si">Si</option>
+                    <option value="no">No</option>
+                  </select>
+                </label>
+                <label htmlFor="mensajes-texto-aspirante">
+                  Desea recibir mensajes de texto
+                  <select id="mensajes-texto-aspirante" value={autorizaMensajes} onChange={(e) => setAutorizaMensajes(e.target.value)}>
+                    <option value="si">Si</option>
+                    <option value="no">No</option>
+                  </select>
+                </label>
               <label htmlFor="correos-aspirante">
                 Autoriza el envio de correos
                 <select id="correos-aspirante" value={autorizaCorreos} onChange={(e) => setAutorizaCorreos(e.target.value)}>

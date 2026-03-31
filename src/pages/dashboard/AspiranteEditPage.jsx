@@ -330,7 +330,8 @@ function AspiranteEditPage() {
                 </select>
               </label>
               <label htmlFor="estado-aspirante-edit">Estado<select id="estado-aspirante-edit" value={estado} onChange={(e) => setEstado(e.target.value)}><option value="activo">Activo</option><option value="inactivo">Inactivo</option></select></label>
-              <label htmlFor="mensajes-aspirante-edit">Desea recibir mensajes de texto o WhatsApp<select id="mensajes-aspirante-edit" value={autorizaMensajes} onChange={(e) => setAutorizaMensajes(e.target.value)}><option value="si">Si</option><option value="no">No</option></select></label>
+              <label htmlFor="mensajes-whatsapp-aspirante-edit">Desea recibir mensajes de WhatsApp<select id="mensajes-whatsapp-aspirante-edit" value={autorizaMensajes} onChange={(e) => setAutorizaMensajes(e.target.value)}><option value="si">Si</option><option value="no">No</option></select></label>
+              <label htmlFor="mensajes-texto-aspirante-edit">Desea recibir mensajes de texto<select id="mensajes-texto-aspirante-edit" value={autorizaMensajes} onChange={(e) => setAutorizaMensajes(e.target.value)}><option value="si">Si</option><option value="no">No</option></select></label>
               <label htmlFor="correos-aspirante-edit">Autoriza el envio de correos<select id="correos-aspirante-edit" value={autorizaCorreos} onChange={(e) => setAutorizaCorreos(e.target.value)}><option value="si">Si</option><option value="no">No</option></select></label>
               <div>
                 <DragDropFileInput id="docs-aspirante-edit" label="Adjuntar documentos (maximo 25MB por archivo)" multiple onChange={handleDocumentosChange} />

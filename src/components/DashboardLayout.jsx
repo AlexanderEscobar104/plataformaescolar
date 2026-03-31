@@ -6,6 +6,8 @@ import { db } from '../firebase'
 import logoFallback from '../assets/logo-plataforma.svg'
 import { buildDynamicMemberPermissionKey, PERMISSION_KEYS } from '../utils/permissions'
 import { getAnnouncementDisplaySize, matchesAnnouncementAudience } from '../utils/announcements'
+import { matchesStudentAudience } from '../utils/studentAudience'
+import { matchesParticipationRoles } from '../utils/participation'
 import AnnouncementDisplay from './AnnouncementDisplay'
 import FloatingChatWidget from './FloatingChatWidget'
 import { ensureNativeNotificationPermissions, isNativeApp, openExternalDocument, pushNativeAlert, updateAppBadgeCount } from '../utils/nativeLinks'
@@ -181,10 +183,15 @@ function DashboardLayout() {
   const [memberMenuOpen, setMemberMenuOpen] = useState(false)
   const [admissionsMenuOpen, setAdmissionsMenuOpen] = useState(false)
   const [whatsAppMenuOpen, setWhatsAppMenuOpen] = useState(false)
+  const [smsMenuOpen, setSmsMenuOpen] = useState(false)
+  const [participationMenuOpen, setParticipationMenuOpen] = useState(false)
+  const [performanceMenuOpen, setPerformanceMenuOpen] = useState(false)
   const [paymentsMenuOpen, setPaymentsMenuOpen] = useState(false)
   const [configMenuOpen, setConfigMenuOpen] = useState(false)
   const [modalAnnouncementsQueue, setModalAnnouncementsQueue] = useState([])
   const [modalAnnouncementIndex, setModalAnnouncementIndex] = useState(0)
+  const [modalParticipationQueue, setModalParticipationQueue] = useState([])
+  const [modalParticipationIndex, setModalParticipationIndex] = useState(0)
   const isGuardianUser = userRole === 'acudiente'
 
   useEffect(() => {
@@ -200,6 +207,9 @@ function DashboardLayout() {
     setMemberMenuOpen(group === 'member' ? (prev) => !prev : false)
     setAdmissionsMenuOpen(group === 'admissions' ? (prev) => !prev : false)
     setWhatsAppMenuOpen(group === 'whatsapp' ? (prev) => !prev : false)
+    setSmsMenuOpen(group === 'sms' ? (prev) => !prev : false)
+    setParticipationMenuOpen(group === 'participation' ? (prev) => !prev : false)
+    setPerformanceMenuOpen(group === 'performance' ? (prev) => !prev : false)
     setPaymentsMenuOpen(group === 'payments' ? (prev) => !prev : false)
     setConfigMenuOpen(group === 'config' ? (prev) => !prev : false)
   }
@@ -238,6 +248,72 @@ function DashboardLayout() {
   const canManageAcademicSetup = hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
   const canManageEvents = hasPermission(PERMISSION_KEYS.EVENTS_MANAGE) || canManageAcademicSetup
   const canManageCirculars = hasPermission(PERMISSION_KEYS.CIRCULARS_MANAGE) || canManageAcademicSetup
+  const canManageVotaciones = hasPermission(PERMISSION_KEYS.VOTACIONES_MANAGE)
+  const canManageEncuestas = hasPermission(PERMISSION_KEYS.ENCUESTAS_MANAGE)
+  const canViewDesempenoModule =
+    hasPermission(PERMISSION_KEYS.DESEMPENO_MODULE_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_DASHBOARD_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_PERIODS_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_PERIODS_CREATE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_PERIODS_EDIT) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_PERIODS_CLOSE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_TEMPLATES_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_TEMPLATES_CREATE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_TEMPLATES_EDIT) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_TEMPLATES_DELETE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_ASSIGNMENTS_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_ASSIGNMENTS_CREATE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_ASSIGNMENTS_EDIT) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_ASSIGNMENTS_DELETE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_EVALUATIONS_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_EVALUATIONS_CREATE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_EVALUATIONS_EDIT) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_EVALUATIONS_SUBMIT) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_RESULTS_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_RESULTS_CREATE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_RESULTS_EDIT) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_RESULTS_APPROVE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_IMPROVEMENT_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_IMPROVEMENT_CREATE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_IMPROVEMENT_EDIT) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_IMPROVEMENT_CLOSE) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_HISTORY_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_REPORTS_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_REPORTS_EXPORT) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_OWN_VIEW) ||
+    hasPermission(PERMISSION_KEYS.DESEMPENO_SELF_EVALUATE)
+  const canViewDesempenoDashboard = hasPermission(PERMISSION_KEYS.DESEMPENO_DASHBOARD_VIEW)
+  const canViewDesempenoPeriods = hasPermission(PERMISSION_KEYS.DESEMPENO_PERIODS_VIEW)
+  const canCreateDesempenoPeriods = hasPermission(PERMISSION_KEYS.DESEMPENO_PERIODS_CREATE)
+  const canEditDesempenoPeriods = hasPermission(PERMISSION_KEYS.DESEMPENO_PERIODS_EDIT)
+  const canCloseDesempenoPeriods = hasPermission(PERMISSION_KEYS.DESEMPENO_PERIODS_CLOSE)
+  const canViewDesempenoTemplates = hasPermission(PERMISSION_KEYS.DESEMPENO_TEMPLATES_VIEW)
+  const canCreateDesempenoTemplates = hasPermission(PERMISSION_KEYS.DESEMPENO_TEMPLATES_CREATE)
+  const canEditDesempenoTemplates = hasPermission(PERMISSION_KEYS.DESEMPENO_TEMPLATES_EDIT)
+  const canDeleteDesempenoTemplates = hasPermission(PERMISSION_KEYS.DESEMPENO_TEMPLATES_DELETE)
+  const canViewDesempenoAssignments = hasPermission(PERMISSION_KEYS.DESEMPENO_ASSIGNMENTS_VIEW)
+  const canCreateDesempenoAssignments = hasPermission(PERMISSION_KEYS.DESEMPENO_ASSIGNMENTS_CREATE)
+  const canEditDesempenoAssignments = hasPermission(PERMISSION_KEYS.DESEMPENO_ASSIGNMENTS_EDIT)
+  const canDeleteDesempenoAssignments = hasPermission(PERMISSION_KEYS.DESEMPENO_ASSIGNMENTS_DELETE)
+  const canViewDesempenoEvaluations = hasPermission(PERMISSION_KEYS.DESEMPENO_EVALUATIONS_VIEW)
+  const canCreateDesempenoEvaluations = hasPermission(PERMISSION_KEYS.DESEMPENO_EVALUATIONS_CREATE)
+  const canEditDesempenoEvaluations = hasPermission(PERMISSION_KEYS.DESEMPENO_EVALUATIONS_EDIT)
+  const canSubmitDesempenoEvaluations = hasPermission(PERMISSION_KEYS.DESEMPENO_EVALUATIONS_SUBMIT)
+  const canViewDesempenoResults = hasPermission(PERMISSION_KEYS.DESEMPENO_RESULTS_VIEW)
+  const canCreateDesempenoResults = hasPermission(PERMISSION_KEYS.DESEMPENO_RESULTS_CREATE)
+  const canEditDesempenoResults = hasPermission(PERMISSION_KEYS.DESEMPENO_RESULTS_EDIT)
+  const canApproveDesempenoResults = hasPermission(PERMISSION_KEYS.DESEMPENO_RESULTS_APPROVE)
+  const canViewDesempenoImprovement = hasPermission(PERMISSION_KEYS.DESEMPENO_IMPROVEMENT_VIEW)
+  const canCreateDesempenoImprovement = hasPermission(PERMISSION_KEYS.DESEMPENO_IMPROVEMENT_CREATE)
+  const canEditDesempenoImprovement = hasPermission(PERMISSION_KEYS.DESEMPENO_IMPROVEMENT_EDIT)
+  const canCloseDesempenoImprovement = hasPermission(PERMISSION_KEYS.DESEMPENO_IMPROVEMENT_CLOSE)
+  const canViewDesempenoHistory = hasPermission(PERMISSION_KEYS.DESEMPENO_HISTORY_VIEW)
+  const canViewDesempenoReports = hasPermission(PERMISSION_KEYS.DESEMPENO_REPORTS_VIEW)
+  const canExportDesempenoReports = hasPermission(PERMISSION_KEYS.DESEMPENO_REPORTS_EXPORT)
+  const canViewMyDesempeno = hasPermission(PERMISSION_KEYS.DESEMPENO_OWN_VIEW)
+  const canSelfEvaluateDesempeno = hasPermission(PERMISSION_KEYS.DESEMPENO_SELF_EVALUATE)
+  const canViewGuardianVotaciones = hasPermission(PERMISSION_KEYS.ACUDIENTE_VOTACIONES_VIEW)
+  const canViewGuardianEncuestas = hasPermission(PERMISSION_KEYS.ACUDIENTE_ENCUESTAS_VIEW)
   const canManageSubjects = hasPermission(PERMISSION_KEYS.SUBJECTS_MANAGE) || canManageAcademicSetup
   const canViewPlantelData = hasPermission(PERMISSION_KEYS.PLANTEL_VIEW)
   const canManagePermissions = hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
@@ -278,6 +354,33 @@ function DashboardLayout() {
   const canManageWhatsAppTemplates = hasPermission(PERMISSION_KEYS.WHATSAPP_TEMPLATES_MANAGE)
   const canManageWhatsAppCampaigns = hasPermission(PERMISSION_KEYS.WHATSAPP_CAMPAIGNS_MANAGE)
   const canManageWhatsAppSettings = hasPermission(PERMISSION_KEYS.WHATSAPP_SETTINGS_MANAGE)
+  const canViewSmsModule =
+    hasPermission(PERMISSION_KEYS.SMS_MODULE_VIEW) ||
+    hasPermission(PERMISSION_KEYS.SMS_SEND) ||
+    hasPermission(PERMISSION_KEYS.SMS_HISTORY_VIEW) ||
+    hasPermission(PERMISSION_KEYS.SMS_TEMPLATES_MANAGE) ||
+    hasPermission(PERMISSION_KEYS.SMS_SETTINGS_MANAGE) ||
+    canManageMessageSettings ||
+    hasPermission(PERMISSION_KEYS.MESSAGES_SEND)
+  const canSendSms =
+    hasPermission(PERMISSION_KEYS.SMS_SEND) ||
+    hasPermission(PERMISSION_KEYS.MESSAGES_SEND) ||
+    canManageMessageSettings ||
+    canManagePermissions
+  const canManageSmsTemplates =
+    hasPermission(PERMISSION_KEYS.SMS_TEMPLATES_MANAGE) ||
+    hasPermission(PERMISSION_KEYS.SMS_SETTINGS_MANAGE) ||
+    canManageMessageSettings ||
+    canManagePermissions
+  const canManageSmsSettings =
+    hasPermission(PERMISSION_KEYS.SMS_SETTINGS_MANAGE) ||
+    canManageMessageSettings ||
+    canManagePermissions
+  const canViewSmsHistory =
+    hasPermission(PERMISSION_KEYS.SMS_HISTORY_VIEW) ||
+    hasPermission(PERMISSION_KEYS.SMS_SETTINGS_MANAGE) ||
+    canManageMessageSettings ||
+    canManagePermissions
   const canManagePaymentsImpuestos = hasPermission(PERMISSION_KEYS.PAYMENTS_IMPUESTOS_MANAGE)
   const canManagePaymentsResoluciones = hasPermission(PERMISSION_KEYS.PAYMENTS_RESOLUCIONES_MANAGE)
   const canManagePaymentsCaja = hasPermission(PERMISSION_KEYS.PAYMENTS_CAJA_MANAGE)
@@ -381,13 +484,19 @@ function DashboardLayout() {
     if (canViewBoletines) {
       items.push({ label: 'Boletines', to: '/dashboard/boletines', Icon: ReportsIcon })
     }
+    if (canManageEvents) {
+      items.push({ label: 'Eventos', to: '/dashboard/eventos', Icon: EvaluationsIcon })
+    }
+    if (canManageCirculars) {
+      items.push({ label: 'Circulares', to: '/dashboard/circulares', Icon: ReportsIcon })
+    }
     return items
-  }, [canViewTasks, canViewEvaluations, canViewPermisos, canViewInasistencias, canViewAsistencia, canViewSchedule, canViewCertificados, canViewBoletines])
+  }, [canViewTasks, canViewEvaluations, canViewPermisos, canViewInasistencias, canViewAsistencia, canViewSchedule, canViewCertificados, canViewBoletines, canManageEvents, canManageCirculars])
 
   const paymentsItems = useMemo(() => {
     if (!canViewPayments) return []
 
-    const items = [{ label: 'Pagos', to: '/dashboard/pagos', Icon: PaymentsIcon }]
+    const items = [{ label: 'Facturacion y recibos', to: '/dashboard/pagos', Icon: PaymentsIcon }]
     if (canManagePaymentsImpuestos) items.push({ label: 'Impuestos', to: '/dashboard/impuestos', Icon: PaymentsIcon })
     if (canManagePaymentsResoluciones) items.push({ label: 'Resoluciones', to: '/dashboard/resoluciones', Icon: PaymentsIcon })
     if (canManagePaymentsCaja) items.push({ label: 'Caja', to: '/dashboard/caja', Icon: PaymentsIcon })
@@ -493,6 +602,91 @@ function DashboardLayout() {
     return items
   }, [canManageWhatsAppCampaigns, canManageWhatsAppSettings, canManageWhatsAppTemplates, canViewWhatsAppModule])
 
+  const smsItems = useMemo(() => {
+    if (!canViewSmsModule) return []
+
+    const items = []
+    if (canSendSms) items.push({ label: 'Enviar SMS', to: '/dashboard/sms/enviar', Icon: MessageIcon })
+    if (canViewSmsHistory) items.push({ label: 'Historial SMS', to: '/dashboard/sms/historial', Icon: ScheduleIcon })
+    if (canManageSmsTemplates) items.push({ label: 'Plantillas SMS', to: '/dashboard/sms/plantillas', Icon: MessageIcon })
+    if (canManageSmsSettings) items.push({ label: 'Configuracion SMS', to: '/dashboard/sms/configuracion', Icon: GearIcon })
+    return items
+  }, [canManageSmsSettings, canManageSmsTemplates, canSendSms, canViewSmsHistory, canViewSmsModule])
+
+  const participationItems = useMemo(() => {
+    const items = []
+    if (canManageVotaciones) items.push({ label: 'Votaciones', to: '/dashboard/votaciones', Icon: EvaluationsIcon })
+    if (canManageEncuestas) items.push({ label: 'Encuestas', to: '/dashboard/encuestas', Icon: MessageIcon })
+    return items
+  }, [canManageEncuestas, canManageVotaciones])
+
+  const performanceItems = useMemo(() => {
+    if (!canViewDesempenoModule) return []
+
+    const items = []
+    if (canViewDesempenoDashboard) items.push({ label: 'Dashboard desempeno', to: '/dashboard/desempeno', Icon: ReportsIcon })
+    if (canViewDesempenoPeriods || canCreateDesempenoPeriods || canEditDesempenoPeriods || canCloseDesempenoPeriods) {
+      items.push({ label: 'Periodos', to: '/dashboard/desempeno/periodos', Icon: ScheduleIcon })
+    }
+    if (canViewDesempenoTemplates || canCreateDesempenoTemplates || canEditDesempenoTemplates || canDeleteDesempenoTemplates) {
+      items.push({ label: 'Plantillas', to: '/dashboard/desempeno/plantillas', Icon: ReportsIcon })
+    }
+    if (canViewDesempenoAssignments || canCreateDesempenoAssignments || canEditDesempenoAssignments || canDeleteDesempenoAssignments) {
+      items.push({ label: 'Asignaciones', to: '/dashboard/desempeno/asignaciones', Icon: UserIcon })
+    }
+    if (canViewDesempenoEvaluations || canCreateDesempenoEvaluations || canEditDesempenoEvaluations || canSubmitDesempenoEvaluations) {
+      items.push({ label: 'Evaluaciones', to: '/dashboard/desempeno/evaluaciones', Icon: EvaluationsIcon })
+    }
+    if (canViewDesempenoResults || canCreateDesempenoResults || canEditDesempenoResults || canApproveDesempenoResults) {
+      items.push({ label: 'Resultados', to: '/dashboard/desempeno/resultados', Icon: ReportsIcon })
+    }
+    if (canViewDesempenoImprovement || canCreateDesempenoImprovement || canEditDesempenoImprovement || canCloseDesempenoImprovement) {
+      items.push({ label: 'Planes de mejora', to: '/dashboard/desempeno/planes-mejora', Icon: TasksIcon })
+    }
+    if (canViewDesempenoHistory) {
+      items.push({ label: 'Historial', to: '/dashboard/desempeno/historial', Icon: ScheduleIcon })
+    }
+    if (canViewDesempenoReports || canExportDesempenoReports) {
+      items.push({ label: 'Reportes', to: '/dashboard/desempeno/reportes', Icon: ReportsIcon })
+    }
+    if (canViewMyDesempeno || canSelfEvaluateDesempeno) {
+      items.push({ label: 'Mi desempeno', to: '/dashboard/desempeno/mi-desempeno', Icon: UserIcon })
+    }
+    return items
+  }, [
+    canApproveDesempenoResults,
+    canCloseDesempenoImprovement,
+    canCloseDesempenoPeriods,
+    canCreateDesempenoAssignments,
+    canCreateDesempenoEvaluations,
+    canCreateDesempenoImprovement,
+    canCreateDesempenoPeriods,
+    canCreateDesempenoResults,
+    canCreateDesempenoTemplates,
+    canDeleteDesempenoAssignments,
+    canDeleteDesempenoTemplates,
+    canEditDesempenoAssignments,
+    canEditDesempenoEvaluations,
+    canEditDesempenoImprovement,
+    canEditDesempenoPeriods,
+    canEditDesempenoResults,
+    canEditDesempenoTemplates,
+    canSubmitDesempenoEvaluations,
+    canViewDesempenoAssignments,
+    canViewDesempenoDashboard,
+    canViewDesempenoEvaluations,
+    canViewDesempenoHistory,
+    canViewDesempenoImprovement,
+    canViewDesempenoModule,
+    canViewDesempenoPeriods,
+    canViewDesempenoReports,
+    canViewDesempenoResults,
+    canViewDesempenoTemplates,
+    canViewMyDesempeno,
+    canSelfEvaluateDesempeno,
+    canExportDesempenoReports,
+  ])
+
   const guardianPortalItems = useMemo(() => {
     if (!isGuardianUser) return []
 
@@ -505,13 +699,15 @@ function DashboardLayout() {
       { label: 'Tareas', to: '/dashboard/acudiente/tareas', Icon: TasksIcon },
       { label: 'Evaluaciones', to: '/dashboard/acudiente/evaluaciones', Icon: EvaluationsIcon },
       { label: 'Horario', to: '/dashboard/acudiente/horario', Icon: ScheduleIcon },
-      { label: 'Pagos', to: '/dashboard/acudiente/pagos', Icon: PaymentsIcon },
+      { label: 'Facturacion y recibos', to: '/dashboard/acudiente/pagos', Icon: PaymentsIcon },
       { label: 'Mensajes', to: '/dashboard/acudiente/mensajes', Icon: MessageIcon },
       { label: 'Notificaciones', to: '/dashboard/acudiente/notificaciones', Icon: BellIcon },
       { label: 'Circulares', to: '/dashboard/acudiente/circulares', Icon: ReportsIcon },
+      ...(canViewGuardianVotaciones ? [{ label: 'Votaciones', to: '/dashboard/acudiente/votaciones', Icon: EvaluationsIcon }] : []),
+      ...(canViewGuardianEncuestas ? [{ label: 'Encuestas', to: '/dashboard/acudiente/encuestas', Icon: MessageIcon }] : []),
       { label: 'Mi perfil', to: '/dashboard/acudiente/perfil', Icon: UserIcon },
     ]
-  }, [isGuardianUser])
+  }, [canViewGuardianEncuestas, canViewGuardianVotaciones, isGuardianUser])
 
   const mainItems = useMemo(() => {
     const items = [...mainItemsBase]
@@ -532,7 +728,7 @@ function DashboardLayout() {
     }
 
     if (canManageAcademicSetup) {
-      items.push({ label: 'Camaras de asistencia', to: '/dashboard/camaras-asistencia', Icon: MessageIcon })
+      items.push({ label: 'Lectores de asistencia', to: '/dashboard/camaras-asistencia', Icon: MessageIcon })
     }
 
     if (canManageTipoCertificado || canManageAcademicSetup) {
@@ -545,12 +741,6 @@ function DashboardLayout() {
       items.push({ label: 'Estructura de boletines', to: '/dashboard/estructura-boletines', Icon: ReportsIcon })
     }
 
-    if (canManageEvents) {
-      items.push({ label: 'Eventos', to: '/dashboard/eventos', Icon: EvaluationsIcon })
-    }
-    if (canManageCirculars) {
-      items.push({ label: 'Circulares', to: '/dashboard/circulares', Icon: ReportsIcon })
-    }
     if (canManageSubjects) {
       items.push({ label: 'Crear asignaturas', to: '/dashboard/crear-asignaturas', Icon: ReportsIcon })
     }
@@ -637,7 +827,7 @@ function DashboardLayout() {
   ])
   const allItems = isGuardianUser
     ? guardianPortalItems
-    : [...mainItems, ...paymentsItems, ...academicItems, ...reportItems, ...memberItems, ...admissionsItems, ...whatsappItems, ...configItems]
+    : [...mainItems, ...paymentsItems, ...academicItems, ...participationItems, ...performanceItems, ...reportItems, ...memberItems, ...admissionsItems, ...whatsappItems, ...smsItems, ...configItems]
   const unreadInitializedRef = useRef(false)
   const todayEventsToastShownRef = useRef(false)
   const previousUnreadCountRef = useRef(0)
@@ -649,6 +839,15 @@ function DashboardLayout() {
     location.pathname.startsWith(item.to),
   )
   const whatsappRouteActive = whatsappItems.some((item) =>
+    location.pathname.startsWith(item.to),
+  )
+  const smsRouteActive = smsItems.some((item) =>
+    location.pathname.startsWith(item.to),
+  )
+  const participationRouteActive = participationItems.some((item) =>
+    location.pathname.startsWith(item.to),
+  )
+  const performanceRouteActive = performanceItems.some((item) =>
     location.pathname.startsWith(item.to),
   )
   const academicRouteActive = academicItems.some((item) =>
@@ -672,6 +871,9 @@ function DashboardLayout() {
       setMemberMenuOpen(false)
       setAdmissionsMenuOpen(false)
       setWhatsAppMenuOpen(false)
+      setSmsMenuOpen(false)
+      setParticipationMenuOpen(false)
+      setPerformanceMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [paymentsRouteActive])
@@ -683,10 +885,43 @@ function DashboardLayout() {
       setMemberMenuOpen(false)
       setAdmissionsMenuOpen(false)
       setWhatsAppMenuOpen(false)
+      setSmsMenuOpen(false)
       setPaymentsMenuOpen(false)
+      setParticipationMenuOpen(false)
+      setPerformanceMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [academicRouteActive])
+
+  useEffect(() => {
+    if (participationRouteActive) {
+      setParticipationMenuOpen(true)
+      setAcademicMenuOpen(false)
+      setReportMenuOpen(false)
+      setMemberMenuOpen(false)
+      setAdmissionsMenuOpen(false)
+      setWhatsAppMenuOpen(false)
+      setSmsMenuOpen(false)
+      setPaymentsMenuOpen(false)
+      setConfigMenuOpen(false)
+      setPerformanceMenuOpen(false)
+    }
+  }, [participationRouteActive])
+
+  useEffect(() => {
+    if (performanceRouteActive) {
+      setPerformanceMenuOpen(true)
+      setAcademicMenuOpen(false)
+      setReportMenuOpen(false)
+      setMemberMenuOpen(false)
+      setAdmissionsMenuOpen(false)
+      setWhatsAppMenuOpen(false)
+      setSmsMenuOpen(false)
+      setPaymentsMenuOpen(false)
+      setParticipationMenuOpen(false)
+      setConfigMenuOpen(false)
+    }
+  }, [performanceRouteActive])
 
   useEffect(() => {
     if (reportRouteActive) {
@@ -695,7 +930,10 @@ function DashboardLayout() {
       setMemberMenuOpen(false)
       setAdmissionsMenuOpen(false)
       setWhatsAppMenuOpen(false)
+      setSmsMenuOpen(false)
       setPaymentsMenuOpen(false)
+      setParticipationMenuOpen(false)
+      setPerformanceMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [reportRouteActive])
@@ -707,7 +945,10 @@ function DashboardLayout() {
       setReportMenuOpen(false)
       setAdmissionsMenuOpen(false)
       setWhatsAppMenuOpen(false)
+      setSmsMenuOpen(false)
       setPaymentsMenuOpen(false)
+      setParticipationMenuOpen(false)
+      setPerformanceMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [memberRouteActive])
@@ -720,6 +961,9 @@ function DashboardLayout() {
       setMemberMenuOpen(false)
       setPaymentsMenuOpen(false)
       setWhatsAppMenuOpen(false)
+      setSmsMenuOpen(false)
+      setParticipationMenuOpen(false)
+      setPerformanceMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [admissionsRouteActive])
@@ -732,9 +976,27 @@ function DashboardLayout() {
       setMemberMenuOpen(false)
       setAdmissionsMenuOpen(false)
       setPaymentsMenuOpen(false)
+      setSmsMenuOpen(false)
+      setParticipationMenuOpen(false)
+      setPerformanceMenuOpen(false)
       setConfigMenuOpen(false)
     }
   }, [whatsappRouteActive])
+
+  useEffect(() => {
+    if (smsRouteActive) {
+      setSmsMenuOpen(true)
+      setAcademicMenuOpen(false)
+      setReportMenuOpen(false)
+      setMemberMenuOpen(false)
+      setAdmissionsMenuOpen(false)
+      setPaymentsMenuOpen(false)
+      setWhatsAppMenuOpen(false)
+      setParticipationMenuOpen(false)
+      setPerformanceMenuOpen(false)
+      setConfigMenuOpen(false)
+    }
+  }, [smsRouteActive])
 
   useEffect(() => {
     if (configRouteActive) {
@@ -744,7 +1006,10 @@ function DashboardLayout() {
       setMemberMenuOpen(false)
       setAdmissionsMenuOpen(false)
       setWhatsAppMenuOpen(false)
+      setSmsMenuOpen(false)
       setPaymentsMenuOpen(false)
+      setParticipationMenuOpen(false)
+      setPerformanceMenuOpen(false)
     }
   }, [configRouteActive])
 
@@ -791,11 +1056,11 @@ function DashboardLayout() {
     const unreadQuery = query(
       collection(db, 'messages'),
       where('recipientUid', '==', user.uid),
+      where('read', '==', false),
     )
 
     const unsubscribe = onSnapshot(unreadQuery, (snapshot) => {
-      const unreadMessages = snapshot.docs.filter((item) => !item.data().read)
-      const count = unreadMessages.length
+      const count = snapshot.size
       setUnreadCount(count)
 
       if (!unreadInitializedRef.current) {
@@ -858,11 +1123,11 @@ function DashboardLayout() {
     const notificationsQuery = query(
       collection(db, 'notifications'),
       where('recipientUid', '==', user.uid),
+      where('read', '==', false),
     )
 
     const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
-      const unreadNotifications = snapshot.docs.filter((item) => !item.data().read)
-      setUnreadNotificationCount(unreadNotifications.length)
+      setUnreadNotificationCount(snapshot.size)
     })
 
     return unsubscribe
@@ -937,6 +1202,84 @@ function DashboardLayout() {
   }, [authUserRole, user?.uid, userNitRut, userProfile?.grado, userProfile?.grupo])
 
   useEffect(() => {
+    if (!user?.uid || !userNitRut || !isGuardianUser || (!canViewGuardianVotaciones && !canViewGuardianEncuestas)) {
+      setModalParticipationQueue([])
+      setModalParticipationIndex(0)
+      return undefined
+    }
+
+    const loadParticipationModals = async () => {
+      try {
+        const [linksSnapshot, studentsSnapshot, votesSnapshot, surveysSnapshot] = await Promise.all([
+          getDocs(
+            query(
+              collection(db, 'student_guardians'),
+              where('guardianUid', '==', user.uid),
+              where('nitRut', '==', userNitRut),
+              where('status', '==', 'activo'),
+            ),
+          ),
+          getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut))),
+          getDocs(query(collection(db, 'votaciones'), where('nitRut', '==', userNitRut), where('showAsModal', '==', true), where('status', '==', 'published'))),
+          getDocs(query(collection(db, 'encuestas'), where('nitRut', '==', userNitRut), where('showAsModal', '==', true), where('status', '==', 'published'))),
+        ])
+
+        const studentMap = new Map()
+        studentsSnapshot.docs.forEach((docSnapshot) => {
+          const data = docSnapshot.data() || {}
+          studentMap.set(docSnapshot.id, {
+            uid: docSnapshot.id,
+            grade: String(data?.profile?.grado || '').trim(),
+            group: String(data?.profile?.grupo || '').trim().toUpperCase(),
+          })
+        })
+
+        const linkedStudents = linksSnapshot.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+          .map((link) => {
+            const studentData = studentMap.get(link.studentUid) || {}
+            return {
+              studentUid: String(link.studentUid || '').trim(),
+              grade: String(studentData.grade || link.grado || '').trim(),
+              group: String(studentData.group || link.grupo || '').trim().toUpperCase(),
+            }
+          })
+          .filter((item) => item.studentUid)
+
+        const appliesToAnyLinkedStudent = (item) =>
+          matchesParticipationRoles(item, ['acudiente', 'estudiante']) &&
+          linkedStudents.some((student) =>
+            matchesStudentAudience(item, student.grade, student.group),
+          )
+
+        const mappedVotes = canViewGuardianVotaciones
+          ? votesSnapshot.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data(), modalType: 'vote' }))
+          .filter(appliesToAnyLinkedStudent)
+          : []
+
+        const mappedSurveys = canViewGuardianEncuestas
+          ? surveysSnapshot.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data(), modalType: 'survey' }))
+          .filter(appliesToAnyLinkedStudent)
+          : []
+
+        const queue = [...mappedVotes, ...mappedSurveys]
+          .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+
+        setModalParticipationQueue(queue)
+        setModalParticipationIndex(0)
+      } catch {
+        setModalParticipationQueue([])
+        setModalParticipationIndex(0)
+      }
+    }
+
+    loadParticipationModals()
+    return undefined
+  }, [canViewGuardianEncuestas, canViewGuardianVotaciones, isGuardianUser, user?.uid, userNitRut])
+
+  useEffect(() => {
     if (!unreadToast) return undefined
 
     const timeoutId = setTimeout(() => {
@@ -957,6 +1300,7 @@ function DashboardLayout() {
   }, [todayEventsToast])
 
   const modalAnnouncement = modalAnnouncementsQueue[modalAnnouncementIndex] || null
+  const modalParticipation = modalParticipationQueue[modalParticipationIndex] || null
 
   const handleCloseAnnouncementModal = () => {
     if (modalAnnouncementIndex >= modalAnnouncementsQueue.length - 1) {
@@ -966,6 +1310,16 @@ function DashboardLayout() {
     }
 
     setModalAnnouncementIndex((previous) => previous + 1)
+  }
+
+  const handleCloseParticipationModal = () => {
+    if (modalParticipationIndex >= modalParticipationQueue.length - 1) {
+      setModalParticipationQueue([])
+      setModalParticipationIndex(0)
+      return
+    }
+
+    setModalParticipationIndex((previous) => previous + 1)
   }
 
   const currentPathLabel =
@@ -1141,6 +1495,62 @@ function DashboardLayout() {
                   ))}
                 </div>
               </div>
+              {participationItems.length > 0 && (
+                <div className="sidebar-group sidebar-group-members">
+                  <button
+                    type="button"
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${participationMenuOpen ? ' open' : ''}`}
+                    onClick={() => openSidebarGroup('participation')}
+                    aria-expanded={participationMenuOpen}
+                  >
+                    <span className="sidebar-group-title">Participacion</span>
+                    <ChevronIcon />
+                  </button>
+                  <div className={`sidebar-submenu sidebar-submenu-members${participationMenuOpen ? ' open' : ''}`}>
+                    {participationItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        className={({ isActive }) =>
+                          `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                        }
+                        to={item.to}
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <item.Icon />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {performanceItems.length > 0 && (
+                <div className="sidebar-group sidebar-group-members">
+                  <button
+                    type="button"
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${performanceMenuOpen ? ' open' : ''}`}
+                    onClick={() => openSidebarGroup('performance')}
+                    aria-expanded={performanceMenuOpen}
+                  >
+                    <span className="sidebar-group-title">Desempeno</span>
+                    <ChevronIcon />
+                  </button>
+                  <div className={`sidebar-submenu sidebar-submenu-members${performanceMenuOpen ? ' open' : ''}`}>
+                    {performanceItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        className={({ isActive }) =>
+                          `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                        }
+                        to={item.to}
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <item.Icon />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              )}
               {memberItems.length > 0 && (
                 <div className="sidebar-group sidebar-group-members">
                   <button
@@ -1210,6 +1620,34 @@ function DashboardLayout() {
                   </button>
                   <div className={`sidebar-submenu sidebar-submenu-members${whatsAppMenuOpen ? ' open' : ''}`}>
                     {whatsappItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        className={({ isActive }) =>
+                          `sidebar-link sidebar-link-members${isActive ? ' active' : ''}`
+                        }
+                        to={item.to}
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <item.Icon />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {smsItems.length > 0 && (
+                <div className="sidebar-group sidebar-group-members">
+                  <button
+                    type="button"
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${smsMenuOpen ? ' open' : ''}`}
+                    onClick={() => openSidebarGroup('sms')}
+                    aria-expanded={smsMenuOpen}
+                  >
+                    <span className="sidebar-group-title">SMS</span>
+                    <ChevronIcon />
+                  </button>
+                  <div className={`sidebar-submenu sidebar-submenu-members${smsMenuOpen ? ' open' : ''}`}>
+                    {smsItems.map((item) => (
                       <NavLink
                         key={item.to}
                         className={({ isActive }) =>
@@ -1406,9 +1844,9 @@ function DashboardLayout() {
       )}
 
       {modalAnnouncement && (
-        <div className="modal-overlay" role="presentation">
+        <div className="modal-overlay modal-overlay-welcome" role="presentation">
           <div
-            className="modal-card"
+            className="modal-card modal-card-welcome"
             role="dialog"
             aria-modal="true"
             aria-label={modalAnnouncement.title || 'Anuncio'}
@@ -1426,7 +1864,6 @@ function DashboardLayout() {
             >
               x
             </button>
-            <h3 style={{ marginBottom: '16px', color: 'var(--primary)' }}>{modalAnnouncement.title}</h3>
             <AnnouncementDisplay
               announcement={modalAnnouncement}
               variant="modal"
@@ -1435,12 +1872,79 @@ function DashboardLayout() {
           </div>
         </div>
       )}
+      {!modalAnnouncement && modalParticipation && (
+        <div className="modal-overlay modal-overlay-welcome" role="presentation">
+          <div className="modal-card modal-card-welcome" role="dialog" aria-modal="true" aria-label={modalParticipation.title || 'Participacion'} style={{ width: 'min(100%, 760px)', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}>
+            <button
+              type="button"
+              className="modal-close-icon"
+              aria-label="Cerrar participacion"
+              onClick={handleCloseParticipationModal}
+            >
+              x
+            </button>
+            <h3 style={{ marginBottom: '12px', color: 'var(--primary)' }}>
+              {modalParticipation.modalType === 'vote' ? 'Votacion destacada' : 'Encuesta destacada'}
+            </h3>
+            <div className="member-module-header-copy" style={{ marginBottom: '16px' }}>
+              <h3>{modalParticipation.title || 'Sin titulo'}</h3>
+              <p>{modalParticipation.description || 'Sin descripcion.'}</p>
+            </div>
+            <small style={{ display: 'block', marginBottom: '8px' }}>
+              Cierre: {modalParticipation.closeDate || '-'}
+            </small>
+            <small style={{ display: 'block', marginBottom: '16px' }}>
+              Tipo: {modalParticipation.modalType === 'vote' ? 'Votacion' : 'Encuesta'}
+            </small>
+            {modalParticipation.modalType === 'vote' ? (
+              <div className="event-image-grid" style={{ marginBottom: '16px' }}>
+                {(Array.isArray(modalParticipation.options) ? modalParticipation.options : []).slice(0, 4).map((option) => (
+                  <div key={option.id} className="event-image-item">
+                    {option.imageUrl ? <img src={option.imageUrl} alt={option.label || 'Opcion'} /> : null}
+                    <strong>{option.label || 'Opcion'}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="students-table-wrap" style={{ marginBottom: '16px' }}>
+                <table className="students-table">
+                  <thead>
+                    <tr>
+                      <th>Pregunta</th>
+                      <th>Tipo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(Array.isArray(modalParticipation.questions) ? modalParticipation.questions : []).slice(0, 5).map((question) => (
+                      <tr key={question.id}>
+                        <td data-label="Pregunta">{question.prompt || '-'}</td>
+                        <td data-label="Tipo">{question.type === 'single_choice' ? 'Opcion unica' : 'Texto'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  navigate(modalParticipation.modalType === 'vote' ? '/dashboard/acudiente/votaciones' : '/dashboard/acudiente/encuestas')
+                  handleCloseParticipationModal()
+                }}
+              >
+                {modalParticipation.modalType === 'vote' ? 'Ir a votaciones' : 'Ir a encuestas'}
+              </button>
+              <button type="button" className="button secondary" onClick={handleCloseParticipationModal}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 export default DashboardLayout
-
-
-
-

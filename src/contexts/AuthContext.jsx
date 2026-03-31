@@ -13,7 +13,21 @@ import {
   updateProfile,
   sendPasswordResetEmail,
 } from 'firebase/auth'
-import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
 import { deleteApp, initializeApp } from 'firebase/app'
 import { auth, db, firebaseConfig } from '../firebase'
 import { AuthContext } from './auth-context'
@@ -200,18 +214,31 @@ function resolvePlanTimestamp(plan) {
   return Number.isNaN(fallbackMillis) ? 0 : fallbackMillis
 }
 
-async function getLatestPlanByNit(nitRut) {
+async function getLatestPlanByNit(nitRut, firestoreDb = db) {
   const normalizedNit = String(nitRut || '').trim()
   if (!normalizedNit) return null
 
-  const snapshot = await getDocs(
-    query(collection(db, 'planes'), where('nitEmpresa', '==', normalizedNit)),
-  )
-  if (snapshot.empty) return null
-
-  const plans = snapshot.docs.map((docSnapshot) => docSnapshot.data() || {})
-  plans.sort((a, b) => resolvePlanTimestamp(b) - resolvePlanTimestamp(a))
-  return plans[0] || null
+  // Prefer indexed query (nitEmpresa + createdAt desc). If createdAt is missing, fall back to client-side sorting.
+  try {
+    const snapshot = await getDocs(
+      query(
+        collection(firestoreDb, 'planes'),
+        where('nitEmpresa', '==', normalizedNit),
+        orderBy('createdAt', 'desc'),
+        limit(1),
+      ),
+    )
+    if (snapshot.empty) return null
+    return snapshot.docs[0]?.data() || null
+  } catch {
+    const snapshot = await getDocs(
+      query(collection(firestoreDb, 'planes'), where('nitEmpresa', '==', normalizedNit)),
+    )
+    if (snapshot.empty) return null
+    const plans = snapshot.docs.map((docSnapshot) => docSnapshot.data() || {})
+    plans.sort((a, b) => resolvePlanTimestamp(b) - resolvePlanTimestamp(a))
+    return plans[0] || null
+  }
 }
 
 function AuthProvider({ children }) {

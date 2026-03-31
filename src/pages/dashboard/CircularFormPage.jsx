@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { collection, doc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { getDownloadURL, ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { addDocTracked, updateDocTracked } from '../../services/firestoreProxy'
@@ -9,6 +9,7 @@ import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
 import { PERMISSION_KEYS } from '../../utils/permissions'
+import { buildStudentAudienceOptions } from '../../utils/studentAudience'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
@@ -29,6 +30,29 @@ function CircularFormPage() {
   const [saving, setSaving] = useState(false)
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorModalMessage, setErrorModalMessage] = useState('')
+  const [targetGrades, setTargetGrades] = useState([])
+  const [targetStudentSubgroups, setTargetStudentSubgroups] = useState([])
+  const [gradeOptions, setGradeOptions] = useState([])
+  const [studentSubgroupOptions, setStudentSubgroupOptions] = useState([])
+
+  useEffect(() => {
+    if (!userNitRut) return undefined
+
+    const loadAudienceOptions = async () => {
+      try {
+        const usersSnapshot = await getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut)))
+        const options = buildStudentAudienceOptions(usersSnapshot.docs.map((docSnapshot) => docSnapshot.data() || {}))
+        setGradeOptions(options.grades)
+        setStudentSubgroupOptions(options.subgroups)
+      } catch {
+        setGradeOptions([])
+        setStudentSubgroupOptions([])
+      }
+    }
+
+    loadAudienceOptions()
+    return undefined
+  }, [userNitRut])
 
   useEffect(() => {
     if (!isEditing) return undefined
@@ -47,6 +71,8 @@ function CircularFormPage() {
         setExistingCircular({ id: snapshot.id, ...data })
         setSubject(data.subject || '')
         setFechaVencimiento(data.fechaVencimiento || '')
+        setTargetGrades(Array.isArray(data.targetGrades) ? data.targetGrades : [])
+        setTargetStudentSubgroups(Array.isArray(data.targetStudentSubgroups) ? data.targetStudentSubgroups : [])
       } catch {
         setErrorModalMessage('No fue posible cargar la circular.')
         setShowErrorModal(true)
@@ -77,6 +103,24 @@ function CircularFormPage() {
     }
     setPdfFile(file)
     setFeedback('')
+  }
+
+  const toggleTargetGrade = (grade) => {
+    const normalized = String(grade || '').trim().toUpperCase()
+    setTargetGrades((prev) => (
+      prev.includes(normalized)
+        ? prev.filter((item) => item !== normalized)
+        : [...prev, normalized]
+    ))
+  }
+
+  const toggleTargetSubgroup = (subgroupKey) => {
+    const normalized = String(subgroupKey || '').trim().toUpperCase()
+    setTargetStudentSubgroups((prev) => (
+      prev.includes(normalized)
+        ? prev.filter((item) => item !== normalized)
+        : [...prev, normalized]
+    ))
   }
 
   const uploadPdf = async () => {
@@ -118,6 +162,8 @@ function CircularFormPage() {
         await updateDocTracked(doc(db, 'circulares', circularId), {
           subject: subject.trim(),
           fechaVencimiento: String(fechaVencimiento || '').trim(),
+          targetGrades: targetGrades.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
+          targetStudentSubgroups: targetStudentSubgroups.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           pdf: uploadedPdf || existingCircular?.pdf || null,
           nitRut: userNitRut,
           updatedAt: serverTimestamp(),
@@ -126,6 +172,8 @@ function CircularFormPage() {
         await addDocTracked(collection(db, 'circulares'), {
           subject: subject.trim(),
           fechaVencimiento: String(fechaVencimiento || '').trim(),
+          targetGrades: targetGrades.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
+          targetStudentSubgroups: targetStudentSubgroups.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           pdf: uploadedPdf,
           nitRut: userNitRut,
           createdByUid: user?.uid || '',
@@ -200,6 +248,41 @@ function CircularFormPage() {
                   onChange={(event) => setFechaVencimiento(event.target.value)}
                 />
               </label>
+            </div>
+
+            <div className="settings-module-card chat-settings-card" style={{ marginTop: '1rem' }}>
+              <h3>Aplica para estudiantes</h3>
+              <p>Si no seleccionas ningun grupo o subgrupo, la circular se mostrara para todos.</p>
+              <div className="form-grid-2 circular-form-fields">
+                <div>
+                  <strong>Grupos</strong>
+                  {gradeOptions.length === 0 && <p className="feedback">No hay grados disponibles.</p>}
+                  {gradeOptions.map((option) => (
+                    <label key={option.key} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={targetGrades.includes(option.key)}
+                        onChange={() => toggleTargetGrade(option.key)}
+                      />
+                      <span>{option.label} ({option.count})</span>
+                    </label>
+                  ))}
+                </div>
+                <div>
+                  <strong>Subgrupos</strong>
+                  {studentSubgroupOptions.length === 0 && <p className="feedback">No hay subgrupos disponibles.</p>}
+                  {studentSubgroupOptions.map((option) => (
+                    <label key={option.key} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={targetStudentSubgroups.includes(option.key)}
+                        onChange={() => toggleTargetSubgroup(option.key)}
+                      />
+                      <span>{option.label} ({option.count})</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="circular-upload-card">

@@ -127,9 +127,9 @@ function GuardianProfilePage() {
               <small>{form.direccion || 'Sin direccion registrada'}</small>
             </article>
             <article className="settings-module-card guardian-portal-stat-card">
-              <h3>Seguridad</h3>
+              <h3>Acceso restringido</h3>
               <p>Clave de acceso</p>
-              <small>Puedes actualizarla desde seguridad</small>
+              <small>Puedes actualizarla desde el modulo de acceso restringido</small>
             </article>
           </div>
 

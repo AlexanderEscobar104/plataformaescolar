@@ -20,6 +20,8 @@ function DatosCobroPage() {
   const canManage = hasPermission(PERMISSION_KEYS.PAYMENTS_DATOS_COBRO_MANAGE)
 
   const [diaCorte, setDiaCorte] = useState('')
+  const [diasRecordatorioCobro, setDiasRecordatorioCobro] = useState('3')
+  const [notificacionesCobroAutomaticas, setNotificacionesCobroAutomaticas] = useState(true)
   const [cobraServiciosComplementarios, setCobraServiciosComplementarios] = useState(false)
   const [cobradores, setCobradores] = useState([])
   const [cobradorAutomaticoId, setCobradorAutomaticoId] = useState('')
@@ -90,6 +92,21 @@ function DatosCobroPage() {
             setDiaCorte('')
           }
 
+          const storedDiasRecordatorioCobro = data.diasRecordatorioCobro
+          if (typeof storedDiasRecordatorioCobro === 'number' && Number.isInteger(storedDiasRecordatorioCobro)) {
+            setDiasRecordatorioCobro(String(storedDiasRecordatorioCobro))
+          } else if (typeof storedDiasRecordatorioCobro === 'string' && String(storedDiasRecordatorioCobro).trim()) {
+            setDiasRecordatorioCobro(String(storedDiasRecordatorioCobro).trim())
+          } else {
+            setDiasRecordatorioCobro('3')
+          }
+
+          if (typeof data.notificacionesCobroAutomaticas === 'boolean') {
+            setNotificacionesCobroAutomaticas(data.notificacionesCobroAutomaticas)
+          } else {
+            setNotificacionesCobroAutomaticas(true)
+          }
+
           setCobraServiciosComplementarios(!!data.cobraServiciosComplementarios)
           setCobradorAutomaticoId(String(data.cobradorAutomaticoId || ''))
           setCajaId(String(data.cajaId || ''))
@@ -135,6 +152,14 @@ function DatosCobroPage() {
       return
     }
 
+    const parsedDiasRecordatorioCobro = Number.parseInt(String(diasRecordatorioCobro || '').trim(), 10)
+    if (!Number.isInteger(parsedDiasRecordatorioCobro) || parsedDiasRecordatorioCobro < 0 || parsedDiasRecordatorioCobro > 30) {
+      setModalMessage('Debes ingresar los dias de recordatorio (numero del 0 al 30).')
+      setModalType('error')
+      setModalOpen(true)
+      return
+    }
+
     try {
       setSaving(true)
       const selected = cobradores.find((emp) => emp.id === cobradorAutomaticoId) || null
@@ -143,6 +168,8 @@ function DatosCobroPage() {
         doc(db, 'configuracion', `datos_cobro_${userNitRut}`),
         {
           diaCorte: parsedDia,
+          diasRecordatorioCobro: parsedDiasRecordatorioCobro,
+          notificacionesCobroAutomaticas,
           cobraServiciosComplementarios,
           cobradorAutomaticoId: cobradorAutomaticoId || '',
           cobradorAutomaticoNombre: selected ? `${selected.nombres || ''} ${selected.apellidos || ''}`.trim() : '',
@@ -193,6 +220,22 @@ function DatosCobroPage() {
                   value={diaCorte}
                   onChange={(e) => setDiaCorte(e.target.value)}
                 />
+              </label>
+
+              <label htmlFor="dias-recordatorio-cobro" style={{ marginTop: '14px' }}>
+                Dias para notificar cobro proximo a vencer (0 a 30)
+                <input
+                  id="dias-recordatorio-cobro"
+                  type="number"
+                  min={0}
+                  max={30}
+                  inputMode="numeric"
+                  value={diasRecordatorioCobro}
+                  onChange={(e) => setDiasRecordatorioCobro(e.target.value)}
+                />
+                <small style={{ display: 'block', marginTop: '6px', color: 'var(--text-secondary)' }}>
+                  Define con cuantos dias de anticipacion se enviara la notificacion de cobro proximo a vencer.
+                </small>
               </label>
 
               <label htmlFor="cobrador-automatico" style={{ marginTop: '14px' }}>
@@ -250,6 +293,19 @@ function DatosCobroPage() {
               </label>
 
               <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <input
+                  id="notificaciones-cobro-automaticas"
+                  type="checkbox"
+                  checked={notificacionesCobroAutomaticas}
+                  onChange={(e) => setNotificacionesCobroAutomaticas(e.target.checked)}
+                  style={{ width: 'auto', margin: 0, cursor: 'pointer', transform: 'scale(1.2)' }}
+                />
+                <label htmlFor="notificaciones-cobro-automaticas" style={{ margin: 0, cursor: 'pointer', fontWeight: '500', display: 'block' }}>
+                  Habilitar notificaciones automaticas de cobro
+                </label>
+              </div>
+
+              <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <input
                   id="cobra-serv"
                   type="checkbox"

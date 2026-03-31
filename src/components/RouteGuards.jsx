@@ -108,7 +108,10 @@ function PublicOnlyRoute({ children }) {
   return children
 }
 
-function SecurityCollectionRoute({ children, collectionName = 'seguridad', redirectTo = '/dashboard' }) {
+// La colección Firestore `seguridad` no se usa en este proyecto; las rutas protegidas
+// pasan `collectionName="accesorestringido"` (ver App.jsx). El default coincide por si
+// alguien olvida la prop.
+function SecurityCollectionRoute({ children, collectionName = 'accesorestringido', redirectTo = '/dashboard' }) {
   const [form, setForm] = useState({ usuario: '', clave: '' })
   const [verifying, setVerifying] = useState(false)
   const [accessGranted, setAccessGranted] = useState(false)

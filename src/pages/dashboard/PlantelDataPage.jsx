@@ -39,6 +39,8 @@ function PlantelDataPage() {
   const [correoCorporativo, setCorreoCorporativo] = useState('')
   const [paginaWeb, setPaginaWeb] = useState('')
   const [eslogan, setEslogan] = useState('')
+  const [serieRecibos, setSerieRecibos] = useState('')
+  const [observacionRecibos, setObservacionRecibos] = useState('')
   const [planNombre, setPlanNombre] = useState('')
   const [planFechaVencimiento, setPlanFechaVencimiento] = useState('')
   const [planEstado, setPlanEstado] = useState('')
@@ -111,6 +113,8 @@ function PlantelDataPage() {
         setCorreoCorporativo(data.correoCorporativo || '')
         setPaginaWeb(data.paginaWeb || data.sitioWeb || data.web || '')
         setEslogan(data.eslogan || data.lema || '')
+        setSerieRecibos(data.serieRecibos || data.serieDocumental || '')
+        setObservacionRecibos(data.observacionRecibos || data.receiptObservation || '')
         await loadAssociatedPlan(resolvedNit)
       } finally {
         setLoading(false)
@@ -232,6 +236,8 @@ function PlantelDataPage() {
           correoCorporativo: correoCorporativo.trim(),
           paginaWeb: paginaWeb.trim(),
           eslogan: eslogan.trim(),
+          serieRecibos: String(serieRecibos || '').trim().toUpperCase(),
+          observacionRecibos: String(observacionRecibos || '').trim(),
           updatedAt: serverTimestamp(),
         },
         { merge: true },
@@ -379,6 +385,26 @@ function PlantelDataPage() {
                     value={eslogan}
                     onChange={(event) => setEslogan(event.target.value)}
                     placeholder='Ej: "FORMAMOS CIUDADANOS DEL MUNDO"'
+                  />
+                </label>
+                <label htmlFor="plantel-serie-recibos">
+                  Serie institucional de recibos
+                  <input
+                    id="plantel-serie-recibos"
+                    type="text"
+                    value={serieRecibos}
+                    onChange={(event) => setSerieRecibos(String(event.target.value || '').toUpperCase())}
+                    placeholder="Ej: PE-2026"
+                  />
+                </label>
+                <label htmlFor="plantel-observacion-recibos" style={{ gridColumn: '1 / -1' }}>
+                  Observacion institucional para recibos
+                  <textarea
+                    id="plantel-observacion-recibos"
+                    rows={4}
+                    value={observacionRecibos}
+                    onChange={(event) => setObservacionRecibos(event.target.value)}
+                    placeholder="Texto legal o institucional que debe aparecer en los comprobantes."
                   />
                 </label>
               </div>

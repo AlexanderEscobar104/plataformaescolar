@@ -2,14 +2,17 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const bcrypt = require('bcryptjs');
 
+// Colección `seguridad` no se usa en la app; la única en uso es `accesorestringido`.
+const DEFAULT_SECURITY_COLLECTION = 'accesorestringido';
+
 exports.hashPassword = functions
   .https.onCall(async (data, context) => {
     try {
       // Extraer datos - intenta múltiples formas de acceso
       let usuario = data?.usuario || data?.['usuario'];
       let clave = data?.clave || data?.['clave'];
-      let collectionName = data?.collectionName || data?.['collectionName'] || 'seguridad';
-      
+      let collectionName = data?.collectionName || data?.['collectionName'] || DEFAULT_SECURITY_COLLECTION;
+
       console.log('Data received for hashing:', { usuario, clave, collectionName });
       
       if (!usuario || typeof usuario !== 'string') {
@@ -60,8 +63,8 @@ exports.validateSecurityPassword = functions
       // Extraer datos - intenta múltiples formas de acceso
       let usuario = data?.usuario || data?.['usuario'];
       let clave = data?.clave || data?.['clave'];
-      let collectionName = data?.collectionName || data?.['collectionName'] || 'seguridad';
-      
+      let collectionName = data?.collectionName || data?.['collectionName'] || DEFAULT_SECURITY_COLLECTION;
+
       console.log('Data received for validation:', { usuario, clave: clave ? '[HIDDEN]' : undefined, collectionName });
 
       if (!usuario || !clave) {
@@ -122,8 +125,8 @@ exports.updateSecurityPassword = functions
       let usuarioId = data?.usuarioId || data?.['usuarioId'];
       let claveAntigua = data?.claveAntigua || data?.['claveAntigua'];
       let claveNueva = data?.claveNueva || data?.['claveNueva'];
-      let collectionName = data?.collectionName || data?.['collectionName'] || 'seguridad';
-      
+      let collectionName = data?.collectionName || data?.['collectionName'] || DEFAULT_SECURITY_COLLECTION;
+
       console.log('Data received for password update:', { usuarioId, claveNueva: claveNueva ? '[HIDDEN]' : undefined, collectionName });
 
       // ✅ Validar entrada
