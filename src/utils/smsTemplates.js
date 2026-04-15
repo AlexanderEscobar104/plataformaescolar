@@ -36,8 +36,8 @@ export const DEFAULT_SMS_TEMPLATES = [
     variables: ['acudiente', 'concepto', 'estudiante', 'fecha_vencimiento', 'saldo'],
   },
   {
-    slug: 'pago_vencido',
-    name: 'Pago vencido',
+    slug: 'recordatorio_pago_vencido',
+    name: 'Recordatorio de pago vencido',
     module: 'pagos',
     category: 'cobranza',
     status: 'activo',
@@ -50,8 +50,8 @@ export const DEFAULT_SMS_TEMPLATES = [
     module: 'pagos',
     category: 'confirmacion',
     status: 'activo',
-    body: 'Hola {{acudiente}}, registramos tu pago por {{valor}} para {{concepto}}. Recibo: {{numero_recibo}}. Gracias por tu pago.',
-    variables: ['acudiente', 'concepto', 'numero_recibo', 'valor'],
+    body: 'Hola {{acudiente}}, registramos tu pago por {{valor}} para {{concepto}} de {{estudiante}}. Recibo: {{numero_recibo}}. Gracias por tu pago.',
+    variables: ['acudiente', 'concepto', 'estudiante', 'numero_recibo', 'valor'],
   },
   {
     slug: 'pago_aplicado',

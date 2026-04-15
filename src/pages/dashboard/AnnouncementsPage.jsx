@@ -47,6 +47,12 @@ function formatAnnouncementDate(dateValue) {
   return new Date(`${dateValue}T12:00:00Z`).toLocaleDateString()
 }
 
+function resolveTodayDateInput() {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return today.toISOString().slice(0, 10)
+}
+
 function createAttachmentPayload(file, path, url) {
   return {
     name: file.name,
@@ -61,6 +67,7 @@ function AnnouncementsPage() {
   const { userNitRut, hasPermission } = useAuth()
   const tenantNitRut = String(userNitRut || '').trim()
   const canManageAnnouncements = hasPermission(PERMISSION_KEYS.ANNOUNCEMENTS_MANAGE)
+  const todayDateInput = useMemo(() => resolveTodayDateInput(), [])
 
   const [announcements, setAnnouncements] = useState([])
   const [loading, setLoading] = useState(true)
@@ -481,6 +488,11 @@ function AnnouncementsPage() {
       return
     }
 
+    if (formData.expirationDate && new Date(formData.expirationDate) < new Date(todayDateInput)) {
+      setFeedback('La fecha de vencimiento no puede ser menor a hoy.')
+      return
+    }
+
     setSubmitting(true)
 
     try {
@@ -627,6 +639,7 @@ function AnnouncementsPage() {
                     type="date"
                     id="expirationDate"
                     name="expirationDate"
+                    min={todayDateInput}
                     value={formData.expirationDate}
                     onChange={handleChange}
                     />

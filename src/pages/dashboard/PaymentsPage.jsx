@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import jsPDF from 'jspdf'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { db, functions, storage } from '../../firebase'
 import { addDocTracked, setDocTracked, updateDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
+import { getBoldReturnAttemptId, hasBoldReturnParams, openBoldCheckout } from '../../utils/boldCheckout'
+import { hasEpaycoReturnParams, openEpaycoCheckout, resolveEpaycoReturnMessage } from '../../utils/epaycoCheckout'
 import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 import { savePdfDocument } from '../../utils/nativeLinks'
 import { downloadPaymentReceiptPdf } from '../../utils/paymentReceipts'
 import { fileToDataUrl, guessImageFormat } from '../../utils/pdfImages'
+import OperationStatusModal from '../../components/OperationStatusModal'
 import { DEFAULT_SMS_TEMPLATES, renderSmsTemplate } from '../../utils/smsTemplates'
+import { hasWompiReturnParams, openWompiCheckout, resolveWompiReturnMessage } from '../../utils/wompiCheckout'
 import {
   applyPaymentToCharge,
   buildChargeDocId,
@@ -85,6 +89,22 @@ function formatDateTime(value) {
   }
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleString('es-CO')
+}
+
+function formatElectronicInvoiceStatus(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!normalized) return 'Sin emitir'
+  if (normalized === 'accepted') return 'Aceptada'
+  if (normalized === 'submitted') return 'Enviada'
+  if (normalized === 'queued') return 'En cola'
+  if (normalized === 'rejected') return 'Rechazada'
+  if (normalized === 'voided') return 'Anulada'
+  if (normalized === 'error') return 'Con error'
+  return normalized
+}
+
+function isValidExternalUrl(value) {
+  return /^https?:\/\//i.test(String(value || '').trim())
 }
 
 function formatHumanDate(value) {
@@ -197,8 +217,9 @@ function formatSmsTemplateSummary(templateSlug) {
 }
 
 function PaymentsPage() {
+  const location = useLocation()
   const navigate = useNavigate()
-  const { user, userNitRut, hasPermission } = useAuth()
+  const { user, userNitRut, hasPermission, hasPlanModule } = useAuth()
   const canViewPayments = hasPermission(PERMISSION_KEYS.PAYMENTS_VIEW)
   const canManageItems = hasPermission(PERMISSION_KEYS.PAYMENTS_ITEM_COBRO_MANAGE)
   const canManageServices = hasPermission(PERMISSION_KEYS.PAYMENTS_SERVICIOS_COMPLEMENTARIOS_MANAGE)
@@ -213,6 +234,7 @@ function PaymentsPage() {
   const [generating, setGenerating] = useState(false)
   const [registeringPayment, setRegisteringPayment] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [students, setStudents] = useState([])
   const [usersDirectory, setUsersDirectory] = useState({})
   const [guardianLinks, setGuardianLinks] = useState([])
@@ -238,9 +260,16 @@ function PaymentsPage() {
   const [generatingAll, setGeneratingAll] = useState(false)
   const [issuingReceiptId, setIssuingReceiptId] = useState('')
   const [sendingSmsKey, setSendingSmsKey] = useState('')
+  const sendingSmsKeysRef = useRef(new Set())
   const [annullingReceiptId, setAnnullingReceiptId] = useState('')
   const [annulConfirmTarget, setAnnulConfirmTarget] = useState(null)
   const [activeView, setActiveView] = useState('facturacion')
+  const [onlinePaymentChargeId, setOnlinePaymentChargeId] = useState('')
+  const [issuingElectronicInvoiceId, setIssuingElectronicInvoiceId] = useState('')
+  const [paymentPlatforms, setPaymentPlatforms] = useState({ epayco: { enabled: false }, wompi: { enabled: false }, bold: { enabled: false }, dataico: { enabled: false } })
+  const canUseEpayco = hasPlanModule('pagos-plataformas-epayco')
+  const canUseWompi = hasPlanModule('pagos-plataformas-wompi')
+  const canUseBold = hasPlanModule('pagos-plataformas-bold')
 
   useEffect(() => {
     setCustomDueDate(resolveDefaultDueDate(periodLabel, billingData?.diaCorte))
@@ -249,6 +278,26 @@ function PaymentsPage() {
   useEffect(() => {
     setMassDueDate(resolveDefaultDueDate(massPeriodLabel, billingData?.diaCorte))
   }, [billingData?.diaCorte, massPeriodLabel])
+
+  useEffect(() => {
+    setShowFeedbackModal(Boolean(feedback))
+  }, [feedback])
+
+  const loadPaymentPlatforms = useCallback(async () => {
+    try {
+      const getPaymentPlatformSettings = httpsCallable(functions, 'getPaymentPlatformSettings')
+      const response = await getPaymentPlatformSettings()
+      const data = response?.data || {}
+      setPaymentPlatforms({
+        epayco: canUseEpayco ? data.epayco || { enabled: false } : { enabled: false },
+        wompi: canUseWompi ? data.wompi || { enabled: false } : { enabled: false },
+        bold: canUseBold ? data.bold || { enabled: false } : { enabled: false },
+        dataico: data.dataico || { enabled: false },
+      })
+    } catch {
+      setPaymentPlatforms({ epayco: { enabled: false }, wompi: { enabled: false }, bold: { enabled: false }, dataico: { enabled: false } })
+    }
+  }, [canUseBold, canUseEpayco, canUseWompi])
 
   const roleOptions = useMemo(
     () => buildAllRoleOptions(customRoles).filter((role) => role.value !== 'aspirante'),
@@ -335,6 +384,13 @@ function PaymentsPage() {
             ...docSnapshot.data(),
             receiptStatus: receiptData.status || 'activo',
             officialNumber: receiptData.officialNumber || '',
+            electronicInvoiceId: receiptData.electronicInvoiceId || docSnapshot.data()?.electronicInvoiceId || '',
+            electronicInvoiceStatus: receiptData.electronicInvoiceStatus || docSnapshot.data()?.electronicInvoiceStatus || '',
+            electronicInvoiceNumber: receiptData.electronicInvoiceNumber || docSnapshot.data()?.electronicInvoiceNumber || '',
+            electronicInvoiceCufe: receiptData.electronicInvoiceCufe || docSnapshot.data()?.electronicInvoiceCufe || '',
+            electronicInvoicePdfUrl: receiptData.electronicInvoicePdfUrl || docSnapshot.data()?.electronicInvoicePdfUrl || '',
+            electronicInvoiceXmlUrl: receiptData.electronicInvoiceXmlUrl || docSnapshot.data()?.electronicInvoiceXmlUrl || '',
+            electronicInvoiceError: receiptData.electronicInvoiceError || docSnapshot.data()?.electronicInvoiceError || '',
           }
         })
         .sort((a, b) => {
@@ -384,6 +440,42 @@ function PaymentsPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  useEffect(() => {
+    const isBoldReturn = hasBoldReturnParams(location.search)
+    const isEpaycoReturn = hasEpaycoReturnParams(location.search)
+    const isWompiReturn = hasWompiReturnParams(location.search)
+    if (!isBoldReturn && !isEpaycoReturn && !isWompiReturn) return
+
+    const handleReturn = async () => {
+      if (isBoldReturn) {
+        try {
+          const attemptId = getBoldReturnAttemptId(location.search)
+          const finalizeBoldCheckout = httpsCallable(functions, 'finalizeBoldCheckout')
+          const response = await finalizeBoldCheckout({ attemptId })
+          const result = response?.data || {}
+          setFeedback(result.message || 'Regresaste desde Bold. Estamos confirmando el pago.')
+        } catch {
+          setFeedback('Regresaste desde Bold, pero no fue posible confirmar el pago en este momento.')
+        }
+      } else {
+        const nextMessage = isEpaycoReturn
+          ? resolveEpaycoReturnMessage(location.search)
+          : resolveWompiReturnMessage(location.search)
+        if (nextMessage) {
+          setFeedback(nextMessage)
+        }
+      }
+      navigate(location.pathname, { replace: true })
+      await loadData().catch(() => {})
+    }
+
+    handleReturn().catch(() => {})
+  }, [loadData, location.pathname, location.search, navigate])
+
+  useEffect(() => {
+    loadPaymentPlatforms()
+  }, [loadPaymentPlatforms])
 
   const selectedStudent = useMemo(
     () => students.find((student) => student.id === selectedStudentId) || null,
@@ -627,7 +719,12 @@ function PaymentsPage() {
     const smsText = renderSmsTemplate(template.body, smsVariables)
     const smsKey = `${String(templateSlug || '').trim()}__${String(transactionData.id || chargeData.id || '').trim()}`
 
+    if (sendingSmsKeysRef.current.has(smsKey)) {
+      return
+    }
+
     try {
+      sendingSmsKeysRef.current.add(smsKey)
       setSendingSmsKey(smsKey)
       setFeedback('')
       const sendSmsHablame = httpsCallable(functions, 'sendSmsHablame')
@@ -643,6 +740,7 @@ function PaymentsPage() {
     } catch {
       setFeedback('No fue posible enviar el SMS rapido desde pagos.')
     } finally {
+      sendingSmsKeysRef.current.delete(smsKey)
       setSendingSmsKey('')
     }
   }, [guardianLinks, plantelData, resolveSmsTargetFromPayment, smsTemplates])
@@ -902,6 +1000,90 @@ function PaymentsPage() {
     return response?.data || null
   }
 
+  const handleStartEpaycoPayment = async (charge) => {
+    if (!charge?.id) return
+    if (String(charge?.resolvedStatus || charge?.status || '').trim().toLowerCase() === 'anulado') {
+      setFeedback('Este cargo esta anulado y no admite pagos en linea.')
+      return
+    }
+    if ((Number(charge.balance) || 0) <= 0) {
+      setFeedback('Este cargo ya no tiene saldo pendiente.')
+      return
+    }
+
+    try {
+      setOnlinePaymentChargeId(charge.id)
+      setFeedback('')
+      const createEpaycoCheckout = httpsCallable(functions, 'createEpaycoCheckout')
+      const response = await createEpaycoCheckout({ chargeId: charge.id })
+      const checkout = response?.data?.checkout || null
+      if (!checkout) {
+        throw new Error('No fue posible preparar el checkout.')
+      }
+      await openEpaycoCheckout(checkout)
+    } catch {
+      setFeedback('No fue posible iniciar el pago en linea.')
+    } finally {
+      setOnlinePaymentChargeId('')
+    }
+  }
+
+  const handleStartWompiPayment = async (charge) => {
+    if (!charge?.id) return
+    if (String(charge?.resolvedStatus || charge?.status || '').trim().toLowerCase() === 'anulado') {
+      setFeedback('Este cargo esta anulado y no admite pagos en linea.')
+      return
+    }
+    if ((Number(charge.balance) || 0) <= 0) {
+      setFeedback('Este cargo ya no tiene saldo pendiente.')
+      return
+    }
+
+    try {
+      setOnlinePaymentChargeId(charge.id)
+      setFeedback('')
+      const createWompiCheckout = httpsCallable(functions, 'createWompiCheckout')
+      const response = await createWompiCheckout({ chargeId: charge.id })
+      const widget = response?.data?.widget || null
+      if (!widget) {
+        throw new Error('No fue posible preparar el checkout.')
+      }
+      await openWompiCheckout(widget)
+    } catch {
+      setFeedback('No fue posible iniciar el pago en linea con Wompi.')
+    } finally {
+      setOnlinePaymentChargeId('')
+    }
+  }
+
+  const handleStartBoldPayment = async (charge) => {
+    if (!charge?.id) return
+    if (String(charge?.resolvedStatus || charge?.status || '').trim().toLowerCase() === 'anulado') {
+      setFeedback('Este cargo esta anulado y no admite pagos en linea.')
+      return
+    }
+    if ((Number(charge.balance) || 0) <= 0) {
+      setFeedback('Este cargo ya no tiene saldo pendiente.')
+      return
+    }
+
+    try {
+      setOnlinePaymentChargeId(charge.id)
+      setFeedback('')
+      const createBoldCheckout = httpsCallable(functions, 'createBoldCheckout')
+      const response = await createBoldCheckout({ chargeId: charge.id })
+      const checkout = response?.data?.checkout || null
+      if (!checkout?.url) {
+        throw new Error('No fue posible preparar el checkout.')
+      }
+      openBoldCheckout(checkout)
+    } catch {
+      setFeedback('No fue posible iniciar el pago en linea con Bold.')
+    } finally {
+      setOnlinePaymentChargeId('')
+    }
+  }
+
   const handleRequestAnnul = ({ charge = null, transaction = null } = {}) => {
     if (!charge?.id && !transaction?.id) return
     setAnnulConfirmTarget({ charge, transaction })
@@ -1088,6 +1270,28 @@ function PaymentsPage() {
     }
   }
 
+  const issueElectronicInvoice = async (transaction) => {
+    if (!transaction?.id) return
+    try {
+      setIssuingElectronicInvoiceId(transaction.id)
+      setFeedback('')
+      const createElectronicInvoice = httpsCallable(functions, 'createElectronicInvoice')
+      const response = await createElectronicInvoice({ transactionId: transaction.id })
+      const result = response?.data || {}
+      const statusLabel = formatElectronicInvoiceStatus(result.status)
+      setFeedback(
+        result.alreadyIssued
+          ? `La factura electronica ya estaba ${statusLabel.toLowerCase()}.`
+          : `Factura electronica ${statusLabel.toLowerCase()} correctamente.`,
+      )
+      await loadData()
+    } catch (error) {
+      setFeedback(error?.message || 'No fue posible emitir la factura electronica.')
+    } finally {
+      setIssuingElectronicInvoiceId('')
+    }
+  }
+
   if (!canViewPayments) {
     return (
       <section className="dashboard-module-shell settings-module-shell">
@@ -1100,13 +1304,12 @@ function PaymentsPage() {
   }
 
   return (
-    <section className="dashboard-module-shell settings-module-shell">
+    <section className="dashboard-module-shell settings-module-shell payments-page-shell">
       <div className="dashboard-module-hero">
         <div className="dashboard-module-hero-copy">
           <span className="dashboard-module-eyebrow">Facturacion</span>
           <h2>Facturacion y recibos por titulares</h2>
           <p>Genera cargos por periodo, registra recaudos y administra recibos oficiales descargables para estudiantes y otros titulares.</p>
-          {feedback && <p className="feedback">{feedback}</p>}
         </div>
         <div className="dashboard-module-hero-note">
           <strong>{formatCurrency(summary.balance)}</strong>
@@ -1325,7 +1528,7 @@ function PaymentsPage() {
                   <tr key={charge.id}>
                     <td data-label="Concepto">
                       <strong>{charge.conceptName || '-'}</strong>
-                      <div style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      <div className="payments-charge-meta">
                         {charge.recipientName || charge.studentName || 'Titular'} · {resolveRecipientLabel(charge)}
                       </div>
                     </td>
@@ -1337,39 +1540,75 @@ function PaymentsPage() {
                     <td data-label="Estado">{charge.resolvedStatus || '-'}</td>
                     <td data-label="Registrar pago">
                       <div className="payments-inline-form">
-                        <input
-                          value={draft.amount}
-                          onChange={(event) => updatePaymentDraft(charge.id, 'amount', event.target.value)}
-                          placeholder="Valor"
-                          inputMode="numeric"
-                        />
-                        <select value={draft.method} onChange={(event) => updatePaymentDraft(charge.id, 'method', event.target.value)} className="guardian-student-switcher-select">
-                          <option value="efectivo">Efectivo</option>
-                          <option value="transferencia">Transferencia</option>
-                          <option value="tarjeta">Tarjeta</option>
-                        </select>
-                        <input
-                          value={draft.reference}
-                          onChange={(event) => updatePaymentDraft(charge.id, 'reference', event.target.value)}
-                          placeholder="Referencia"
-                        />
-                        {chargeStatus === 'anulado' ? (
-                          <span className="payments-inline-status">Anulado</span>
-                        ) : charge.resolvedStatus === 'pagado' ? (
-                          <span className="payments-inline-status">Pagado</span>
-                        ) : (
-                          <button type="button" className="button small" onClick={() => handleRegisterPayment(charge)} disabled={registeringPayment}>
-                            {registeringPayment ? 'Guardando...' : 'Aplicar'}
+                        <div className="payments-inline-fields">
+                          <input
+                            value={draft.amount}
+                            onChange={(event) => updatePaymentDraft(charge.id, 'amount', event.target.value)}
+                            placeholder="Valor"
+                            inputMode="numeric"
+                          />
+                          <select value={draft.method} onChange={(event) => updatePaymentDraft(charge.id, 'method', event.target.value)} className="guardian-student-switcher-select">
+                            <option value="efectivo">Efectivo</option>
+                            <option value="transferencia">Transferencia</option>
+                            <option value="tarjeta">Tarjeta</option>
+                          </select>
+                          <input
+                            value={draft.reference}
+                            onChange={(event) => updatePaymentDraft(charge.id, 'reference', event.target.value)}
+                            placeholder="Referencia"
+                          />
+                        </div>
+                        <div className="payments-inline-actions">
+                          {chargeStatus === 'anulado' ? (
+                            <span className="payments-inline-status">Anulado</span>
+                          ) : charge.resolvedStatus === 'pagado' ? (
+                            <span className="payments-inline-status">Pagado</span>
+                          ) : (
+                            <>
+                              <button type="button" className="button small" onClick={() => handleRegisterPayment(charge)} disabled={registeringPayment || onlinePaymentChargeId === charge.id}>
+                                {registeringPayment ? 'Guardando...' : 'Aplicar'}
+                              </button>
+                              {paymentPlatforms.epayco?.enabled && (
+                                <button
+                                  type="button"
+                                  className="button secondary small"
+                                  onClick={() => handleStartEpaycoPayment(charge)}
+                                  disabled={registeringPayment || onlinePaymentChargeId === charge.id}
+                                >
+                                  {onlinePaymentChargeId === charge.id ? 'Abriendo...' : 'Pagar con ePayco'}
+                                </button>
+                              )}
+                              {paymentPlatforms.wompi?.enabled && (
+                                <button
+                                  type="button"
+                                  className="button secondary small"
+                                  onClick={() => handleStartWompiPayment(charge)}
+                                  disabled={registeringPayment || onlinePaymentChargeId === charge.id}
+                                >
+                                  {onlinePaymentChargeId === charge.id ? 'Abriendo...' : 'Pagar con Wompi'}
+                                </button>
+                              )}
+                              {paymentPlatforms.bold?.enabled && (
+                                <button
+                                  type="button"
+                                  className="button secondary small"
+                                  onClick={() => handleStartBoldPayment(charge)}
+                                  disabled={registeringPayment || onlinePaymentChargeId === charge.id}
+                                >
+                                  {onlinePaymentChargeId === charge.id ? 'Abriendo...' : 'Pagar con Bold'}
+                                </button>
+                              )}
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            className="button small danger"
+                            onClick={() => handleRequestAnnul({ charge, transaction: latestTransaction })}
+                            disabled={!canAnnulReceipt || annullingReceiptId === (latestTransaction?.id || charge.id)}
+                          >
+                            {annullingReceiptId === (latestTransaction?.id || charge.id) ? 'Anulando...' : chargeStatus === 'anulado' || receiptStatus === 'anulado' ? 'Anulado' : 'Anular'}
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          className="button small danger"
-                          onClick={() => handleRequestAnnul({ charge, transaction: latestTransaction })}
-                          disabled={!canAnnulReceipt || annullingReceiptId === (latestTransaction?.id || charge.id)}
-                        >
-                          {annullingReceiptId === (latestTransaction?.id || charge.id) ? 'Anulando...' : chargeStatus === 'anulado' || receiptStatus === 'anulado' ? 'Anulado' : 'Anular'}
-                        </button>
+                        </div>
                       </div>
                     </td>
                     {canSendSms ? (
@@ -1501,6 +1740,12 @@ function PaymentsPage() {
                     <small>Concepto: {matchingCharge?.conceptName || 'Cargo asociado'}</small>
                     <small>Referencia: {transaction.reference || '-'}</small>
                     <small>Estado del recibo: {receiptStatus === 'anulado' ? 'Anulado' : 'Activo'}</small>
+                    <small>
+                      Factura electronica: {formatElectronicInvoiceStatus(transaction.electronicInvoiceStatus)}
+                      {transaction.electronicInvoiceNumber ? ` · ${transaction.electronicInvoiceNumber}` : ''}
+                    </small>
+                    {transaction.electronicInvoiceCufe ? <small>CUFE: {transaction.electronicInvoiceCufe}</small> : null}
+                    {transaction.electronicInvoiceError ? <small className="feedback error">{transaction.electronicInvoiceError}</small> : null}
                     {canSendSms ? <small className="payments-sms-target">{formatSmsTargetSummary(smsTarget)}</small> : null}
                     {canSendSms ? <small className="payments-sms-target">{formatSmsTemplateSummary(quickSmsTemplateSlug)}</small> : null}
                     <div className="member-module-actions">
@@ -1531,6 +1776,26 @@ function PaymentsPage() {
                       >
                         {annullingReceiptId === transaction.id ? 'Anulando...' : chargeStatus === 'anulado' || receiptStatus === 'anulado' ? 'Anulado' : 'Anular'}
                       </button>
+                      {paymentPlatforms.dataico?.enabled ? (
+                        <button
+                          type="button"
+                          className="button small secondary"
+                          onClick={() => issueElectronicInvoice(transaction)}
+                          disabled={issuingElectronicInvoiceId === transaction.id || receiptStatus === 'anulado'}
+                        >
+                          {issuingElectronicInvoiceId === transaction.id ? 'Facturando...' : 'Emitir FE'}
+                        </button>
+                      ) : null}
+                      {isValidExternalUrl(transaction.electronicInvoicePdfUrl) ? (
+                        <a className="button small secondary" href={transaction.electronicInvoicePdfUrl} target="_blank" rel="noopener noreferrer">
+                          PDF FE
+                        </a>
+                      ) : null}
+                      {isValidExternalUrl(transaction.electronicInvoiceXmlUrl) ? (
+                        <a className="button small secondary" href={transaction.electronicInvoiceXmlUrl} target="_blank" rel="noopener noreferrer">
+                          XML FE
+                        </a>
+                      ) : null}
                     </div>
                   </article>
                 )
@@ -1566,6 +1831,12 @@ function PaymentsPage() {
                     Recibo: {transaction.officialNumber || 'Pendiente'} Â· Estado: {receiptStatus === 'anulado' ? 'Anulado' : 'Activo'}
                   </small>
                   <small>Referencia: {transaction.reference || '-'}</small>
+                  <small>
+                    Factura electronica: {formatElectronicInvoiceStatus(transaction.electronicInvoiceStatus)}
+                    {transaction.electronicInvoiceNumber ? ` · ${transaction.electronicInvoiceNumber}` : ''}
+                  </small>
+                  {transaction.electronicInvoiceCufe ? <small>CUFE: {transaction.electronicInvoiceCufe}</small> : null}
+                  {transaction.electronicInvoiceError ? <small className="feedback error">{transaction.electronicInvoiceError}</small> : null}
                   {canSendSms ? <small className="payments-sms-target">{formatSmsTargetSummary(smsTarget)}</small> : null}
                   {canSendSms ? <small className="payments-sms-target">{formatSmsTemplateSummary(quickSmsTemplateSlug)}</small> : null}
                   <div className="member-module-actions">
@@ -1596,16 +1867,36 @@ function PaymentsPage() {
                       >
                         {annullingReceiptId === transaction.id ? 'Anulando...' : chargeStatus === 'anulado' || receiptStatus === 'anulado' ? 'Anulado' : 'Anular'}
                       </button>
+                    <button
+                      type="button"
+                      className="button small"
+                      onClick={() => issueReceipt(transaction)}
+                      disabled={issuingReceiptId === transaction.id}
+                    >
+                      {issuingReceiptId === transaction.id ? 'Emitiendo...' : 'Emitir comprobante'}
+                    </button>
+                    {paymentPlatforms.dataico?.enabled ? (
                       <button
                         type="button"
-                        className="button small"
-                        onClick={() => issueReceipt(transaction)}
-                        disabled={issuingReceiptId === transaction.id}
+                        className="button small secondary"
+                        onClick={() => issueElectronicInvoice(transaction)}
+                        disabled={issuingElectronicInvoiceId === transaction.id || receiptStatus === 'anulado'}
                       >
-                        {issuingReceiptId === transaction.id ? 'Emitiendo...' : 'Emitir comprobante'}
+                        {issuingElectronicInvoiceId === transaction.id ? 'Facturando...' : 'Emitir FE'}
                       </button>
-                    </div>
-                  </article>
+                    ) : null}
+                    {isValidExternalUrl(transaction.electronicInvoicePdfUrl) ? (
+                      <a className="button small secondary" href={transaction.electronicInvoicePdfUrl} target="_blank" rel="noopener noreferrer">
+                        PDF FE
+                      </a>
+                    ) : null}
+                    {isValidExternalUrl(transaction.electronicInvoiceXmlUrl) ? (
+                      <a className="button small secondary" href={transaction.electronicInvoiceXmlUrl} target="_blank" rel="noopener noreferrer">
+                        XML FE
+                      </a>
+                    ) : null}
+                  </div>
+                </article>
                 )
               })}
             </div>
@@ -1649,6 +1940,15 @@ function PaymentsPage() {
           </div>
         </div>
       )}
+      <OperationStatusModal
+        open={showFeedbackModal}
+        title="Facturacion y recibos"
+        message={feedback}
+        onClose={() => {
+          setShowFeedbackModal(false)
+          setFeedback('')
+        }}
+      />
     </section>
   )
 }

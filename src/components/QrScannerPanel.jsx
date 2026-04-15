@@ -51,6 +51,41 @@ function extractDetectedQrValue(barcode) {
   return ''
 }
 
+function extractNativeScanValue(result) {
+  const directCandidates = [
+    result?.rawValue,
+    result?.displayValue,
+    result?.content,
+    result?.value,
+    result?.scanResult,
+    result?.text,
+  ]
+
+  for (const candidate of directCandidates) {
+    const normalized = String(candidate || '').trim()
+    if (normalized) {
+      return normalized
+    }
+  }
+
+  const barcodeCandidates = Array.isArray(result?.barcodes)
+    ? result.barcodes
+    : Array.isArray(result)
+      ? result
+      : result?.barcode
+        ? [result.barcode]
+        : []
+
+  for (const candidate of barcodeCandidates) {
+    const extracted = extractDetectedQrValue(candidate)
+    if (extracted) {
+      return extracted
+    }
+  }
+
+  return ''
+}
+
 async function ensureGoogleScannerModule(BarcodeScanner, installState) {
   if (Capacitor.getPlatform() !== 'android') {
     return
@@ -291,8 +326,9 @@ function QrScannerPanel({
           autoZoom: true,
         })
 
-        const rawValue = extractDetectedQrValue(result?.barcodes?.[0])
+        const rawValue = extractNativeScanValue(result)
         if (!rawValue) {
+          throw new Error('No se detecto un codigo QR valido.')
           return
         }
 

@@ -15,9 +15,11 @@ import { PERMISSION_KEYS } from '../../utils/permissions'
 import PaginationControls from '../../components/PaginationControls'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import SearchableSelect from '../../components/SearchableSelect'
+import { findDocumentSignature, loadTenantDocumentSignatures } from '../../services/documentSignatures'
+import SignatureDetailModal from '../../components/SignatureDetailModal'
 
 function PermisosPage() {
-  const { user, hasPermission } = useAuth()
+  const { user, hasPermission, userNitRut } = useAuth()
   
   const canCreate = hasPermission(PERMISSION_KEYS.PERMISOS_CREATE)
   const canEdit = hasPermission(PERMISSION_KEYS.PERMISOS_EDIT)
@@ -32,6 +34,9 @@ function PermisosPage() {
   const [validationError, setValidationError] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [signatureFilter, setSignatureFilter] = useState('todos')
+  const [signatures, setSignatures] = useState([])
+  const [selectedSignature, setSelectedSignature] = useState(null)
 
   const [form, setForm] = useState({
     estudianteId: '',
@@ -63,36 +68,38 @@ function PermisosPage() {
     setLoading(true)
     try {
       // Load Employees (Non-students/aspirantes)
-      const usersSnap = await getDocs(collection(db, 'users'))
+      const [usersSnap, tiposSnap, permisosSnap, signatureRows] = await Promise.all([
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'tipo_permisos')),
+        getDocs(query(collection(db, 'permisos'), orderBy('creadoEn', 'desc'))),
+        loadTenantDocumentSignatures({ nitRut: userNitRut, tipoModulo: 'permiso' }).catch(() => []),
+      ])
+
       const employeesData = usersSnap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .filter((u) => u.role !== 'estudiante' && u.role !== 'aspirante')
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
       setEstudiantes(employeesData)
 
-      // Load Absence Types
-      const tiposSnap = await getDocs(collection(db, 'tipo_permisos'))
       const tiposData = tiposSnap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .filter((t) => t.estado === 'activo')
         .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')))
       setTiposPermiso(tiposData)
 
-      // Load Absences
-      const permisosSnap = await getDocs(
-        query(collection(db, 'permisos'), orderBy('creadoEn', 'desc'))
-      )
       const permisosData = permisosSnap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }))
       setPermisos(permisosData)
+      setSignatures(signatureRows)
     } catch (error) {
       console.error('Error loading permisos data:', error)
+      setSignatures([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [userNitRut])
 
   useEffect(() => {
     loadData()
@@ -313,15 +320,28 @@ function PermisosPage() {
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return permisos
-    return permisos.filter(
-      (item) =>
-        (item.estudianteNombre || '').toLowerCase().includes(q) ||
-        (item.tipoNombre || '').toLowerCase().includes(q) ||
-        (item.fechaDesde || '').includes(q) ||
-        (item.fechaHasta || '').includes(q)
-    )
-  }, [permisos, search])
+    return permisos.filter((item) => {
+      const signature = findDocumentSignature(signatures, {
+        tipoModulo: 'permiso',
+        documentoId: item.id,
+        estudianteId: item.estudianteId,
+      })
+      const matchesSearch = !q || [
+        item.estudianteNombre || '',
+        item.tipoNombre || '',
+        item.fechaDesde || '',
+        item.fechaHasta || '',
+        signature?.firmanteNombre || '',
+      ].some((value) => String(value).toLowerCase().includes(q))
+
+      const matchesSignature =
+        signatureFilter === 'todos' ||
+        (signatureFilter === 'firmados' && Boolean(signature)) ||
+        (signatureFilter === 'pendientes' && !signature)
+
+      return matchesSearch && matchesSignature
+    })
+  }, [permisos, search, signatureFilter, signatures])
 
   const displayedRows = useMemo(() => {
     return filteredRows.slice((currentPage - 1) * 10, currentPage * 10)
@@ -525,6 +545,17 @@ function PermisosPage() {
               }}
               placeholder="Buscar por estudiante, tipo o fecha..."
             />
+            <select
+              value={signatureFilter}
+              onChange={(e) => {
+                setSignatureFilter(e.target.value)
+                setCurrentPage(1)
+              }}
+            >
+              <option value="todos">Todas las firmas</option>
+              <option value="firmados">Solo firmados</option>
+              <option value="pendientes">Solo pendientes</option>
+            </select>
           </div>
 
           {loading ? (
@@ -539,6 +570,8 @@ function PermisosPage() {
                     <th>Usuario</th>
                     <th>Motivo</th>
                     <th>Descripcion</th>
+                    <th>Firma</th>
+                    <th>Firmante</th>
                     <th>Soporte</th>
                     {(canEdit || canDelete) && <th>Acciones</th>}
                   </tr>
@@ -546,16 +579,40 @@ function PermisosPage() {
                 <tbody>
                   {filteredRows.length === 0 && (
                     <tr>
-                      <td colSpan={(canEdit || canDelete) ? 7 : 6}>No hay permisos registrados.</td>
+                      <td colSpan={(canEdit || canDelete) ? 9 : 8}>No hay permisos registrados.</td>
                     </tr>
                   )}
-                  {displayedRows.map((item) => (
+                  {displayedRows.map((item) => {
+                    const signature = findDocumentSignature(signatures, {
+                      tipoModulo: 'permiso',
+                      documentoId: item.id,
+                      estudianteId: item.estudianteId,
+                    })
+
+                    return (
                     <tr key={item.id}>
                       <td data-label="Desde">{item.fechaDesde} {item.horaDesde}</td>
                       <td data-label="Hasta">{item.fechaHasta} {item.horaHasta}</td>
                       <td data-label="Estudiante">{item.estudianteNombre}</td>
                       <td data-label="Motivo">{item.tipoNombre}</td>
                       <td data-label="Descripcion">{item.descripcion || '-'}</td>
+                      <td data-label="Firma">
+                        {signature ? (
+                          <button
+                            type="button"
+                            className="signature-status-button"
+                            onClick={() => setSelectedSignature(signature)}
+                          >
+                            <span className="signature-status-chip is-signed">Firmado</span>
+                          </button>
+                        ) : (
+                          <span className="signature-status-chip is-pending">Pendiente</span>
+                        )}
+                        <div className="signature-meta-text">
+                          {signature?.firmadoEn?.toDate ? signature.firmadoEn.toDate().toLocaleString('es-CO') : '-'}
+                        </div>
+                      </td>
+                      <td data-label="Firmante">{signature?.firmanteNombre || '-'}</td>
                       <td data-label="Soporte">
                         {item.soporteUrl ? (
                           <a
@@ -620,7 +677,7 @@ function PermisosPage() {
                       </td>
                       )}
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
               <PaginationControls
@@ -666,6 +723,13 @@ function PermisosPage() {
           </div>
         </div>
       )}
+
+      <SignatureDetailModal
+        open={Boolean(selectedSignature)}
+        signature={selectedSignature}
+        onClose={() => setSelectedSignature(null)}
+        title="Detalle de firma del permiso"
+      />
 
       {showAddSoporteModal && selectedItemForSoporte && (
         <div className="modal-overlay" role="presentation">

@@ -134,7 +134,7 @@ function GuardianTasksPage() {
         <div className="dashboard-module-hero-note">
           <strong>{summary.total}</strong>
           <span>Tareas visibles</span>
-          <small>{summary.delivered} entregadas · {summary.pending} pendientes</small>
+          <small>{summary.delivered} entregadas - {summary.pending} pendientes</small>
         </div>
       </div>
 
@@ -149,12 +149,15 @@ function GuardianTasksPage() {
         <article className="settings-module-card guardian-portal-stat-card">
           <h3>Estudiante activo</h3>
           <p>{activeStudent?.studentName || 'Sin estudiante seleccionado'}</p>
-          <small>{activeStudent?.studentGrade ? `Grado ${activeStudent.studentGrade}` : 'Sin grado'}{activeStudent?.studentGroup ? ` · Grupo ${activeStudent.studentGroup}` : ''}</small>
+          <small>
+            {activeStudent?.studentGrade ? `Grado ${activeStudent.studentGrade}` : 'Sin grado'}
+            {activeStudent?.studentGroup ? ` - Grupo ${activeStudent.studentGroup}` : ''}
+          </small>
         </article>
         <article className="settings-module-card guardian-portal-stat-card">
           <h3>Entregadas</h3>
           <p>{summary.delivered}</p>
-          <small>Con registro en `tareas_entregas`</small>
+          <small>Con registro en tareas_entregas</small>
         </article>
         <article className="settings-module-card guardian-portal-stat-card">
           <h3>Pendientes</h3>
@@ -163,7 +166,7 @@ function GuardianTasksPage() {
         </article>
       </div>
 
-      <div className="students-table-wrap">
+      <div className="students-table-wrap guardian-tasks-table-wrap">
         {loading || portalLoading ? (
           <p>Cargando tareas...</p>
         ) : tasks.length === 0 ? (
@@ -193,7 +196,13 @@ function GuardianTasksPage() {
                     </span>
                   </td>
                   <td data-label="Entrega">{task.delivery?.deliveryDate ? formatDate(task.delivery.deliveryDate) : '-'}</td>
-                  <td data-label="Nota">{typeof task.delivery?.note === 'number' ? task.delivery.note.toFixed(1) : typeof task.note === 'number' ? task.note.toFixed(1) : '-'}</td>
+                  <td data-label="Nota">
+                    {typeof task.delivery?.note === 'number'
+                      ? task.delivery.note.toFixed(1)
+                      : typeof task.note === 'number'
+                        ? task.note.toFixed(1)
+                        : '-'}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -45,6 +45,7 @@ const PLAN_ACTIVE_STATUS = 'activo'
 const LINKED_DEVICE_SESSION_KEY = 'linked_device_session_id'
 const GEOLOCATION_TIMEOUT_MS = 8000
 const REVERSE_GEOCODE_TIMEOUT_MS = 6000
+const PLAN_BLOCK_EXEMPT_MODULES = new Set(['creacion-planes', 'tipo-reportes'])
 
 function getLocalSessionId() {
   if (typeof window === 'undefined') return ''
@@ -214,6 +215,63 @@ function resolvePlanTimestamp(plan) {
   return Number.isNaN(fallbackMillis) ? 0 : fallbackMillis
 }
 
+function toIsoDate(value) {
+  if (!value) return ''
+  if (typeof value?.toDate === 'function') return value.toDate().toISOString().slice(0, 10)
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10)
+}
+
+function resolveTodayIsoLocal() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function resolvePlanOperationalMeta(plan) {
+  const status = String(plan?.estado || 'activo').trim().toLowerCase()
+  const startDate = toIsoDate(plan?.fechaInicioOperacion || plan?.fechaAdquisicion)
+  const endDate = toIsoDate(plan?.fechaVencimiento)
+  const trialDays = Math.max(Number(plan?.diasPrueba || 0), 0)
+  const graceDays = Math.max(Number(plan?.diasCortesia || 0), 0)
+  const shouldBlock = plan?.bloquearModulosAlVencer !== false
+  const todayIso = resolveTodayIsoLocal()
+
+  if (!plan || !startDate || !endDate) {
+    return {
+      status: status === 'inactivo' ? 'inactive' : 'active',
+      shouldBlockModules: false,
+      isOperational: status !== 'inactivo',
+    }
+  }
+
+  const graceEnd = new Date(`${endDate}T00:00:00`)
+  graceEnd.setDate(graceEnd.getDate() + graceDays)
+  const graceEndIso = graceEnd.toISOString().slice(0, 10)
+  const trialEnd = new Date(`${startDate}T00:00:00`)
+  trialEnd.setDate(trialEnd.getDate() + Math.max(trialDays - 1, 0))
+  const trialEndIso = trialEnd.toISOString().slice(0, 10)
+
+  if (status === 'inactivo') {
+    return { status: 'inactive', shouldBlockModules: true, isOperational: false }
+  }
+  if (todayIso < startDate) {
+    return { status: 'scheduled', shouldBlockModules: false, isOperational: true }
+  }
+  if (trialDays > 0 && todayIso <= trialEndIso) {
+    return { status: 'trial', shouldBlockModules: false, isOperational: true }
+  }
+  if (todayIso > graceEndIso) {
+    return { status: 'expired', shouldBlockModules: shouldBlock, isOperational: !shouldBlock }
+  }
+  if (todayIso > endDate) {
+    return { status: 'grace', shouldBlockModules: false, isOperational: true }
+  }
+  return { status: 'active', shouldBlockModules: false, isOperational: true }
+}
+
 async function getLatestPlanByNit(nitRut, firestoreDb = db) {
   const normalizedNit = String(nitRut || '').trim()
   if (!normalizedNit) return null
@@ -246,6 +304,11 @@ function AuthProvider({ children }) {
   const [userRole, setUserRole] = useState('')
   const [userNitRut, setUserNitRut] = useState('')
   const [userProfile, setUserProfile] = useState({})
+  const [currentPlan, setCurrentPlan] = useState(null)
+  const [planStatus, setPlanStatus] = useState('active')
+  const [planModuleAccessBlocked, setPlanModuleAccessBlocked] = useState(false)
+  const [planModules, setPlanModules] = useState([])
+  const [planModulesLoaded, setPlanModulesLoaded] = useState(false)
   const [rolePermissions, setRolePermissions] = useState(DEFAULT_ROLE_PERMISSIONS)
   const [loading, setLoading] = useState(true)
   const [showInactivityWarning, setShowInactivityWarning] = useState(false)
@@ -348,6 +411,8 @@ function AuthProvider({ children }) {
         setUserRole('')
         setUserNitRut('')
         setUserProfile({})
+        setPlanModules([])
+        setPlanModulesLoaded(false)
         window.__TENANT_ID__ = undefined
         window.__CURRENT_USER__ = undefined
         setLoading(false)
@@ -369,6 +434,8 @@ function AuthProvider({ children }) {
           setUserRole('')
           setUserNitRut('')
           setUserProfile({})
+          setPlanModules([])
+          setPlanModulesLoaded(false)
           await signOut(auth).catch(() => {})
           return
         }
@@ -377,6 +444,7 @@ function AuthProvider({ children }) {
         setUserRole(userData.role || '')
         setUserNitRut(userData.nitRut || '')
         setUserProfile(profile)
+        setPlanModulesLoaded(false)
         await ensureLinkedDeviceSession(firebaseUser, userData)
 
         // Needed by firestoreProxy history logger (historial_modificaciones).
@@ -401,6 +469,8 @@ function AuthProvider({ children }) {
         setUserRole('')
         setUserNitRut('')
         setUserProfile({})
+        setPlanModules([])
+        setPlanModulesLoaded(false)
         clearSessionWatcher()
         window.__TENANT_ID__ = undefined
         window.__CURRENT_USER__ = undefined
@@ -414,6 +484,58 @@ function AuthProvider({ children }) {
       unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadPlanModules = async () => {
+      if (!userNitRut) {
+        if (!cancelled) {
+          setCurrentPlan(null)
+          setPlanStatus('active')
+          setPlanModuleAccessBlocked(false)
+          setPlanModules([])
+          setPlanModulesLoaded(true)
+        }
+        return
+      }
+
+      try {
+        const latestPlan = await getLatestPlanByNit(userNitRut)
+        const nextModules = Array.isArray(latestPlan?.modulosPlan)
+          ? latestPlan.modulosPlan
+              .filter((item) => typeof item === 'string')
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : []
+        const operationalMeta = resolvePlanOperationalMeta(latestPlan)
+
+        if (!cancelled) {
+          setCurrentPlan(latestPlan || null)
+          setPlanStatus(operationalMeta.status)
+          setPlanModuleAccessBlocked(Boolean(operationalMeta.shouldBlockModules))
+          setPlanModules(operationalMeta.shouldBlockModules ? [] : nextModules)
+        }
+      } catch {
+        if (!cancelled) {
+          setCurrentPlan(null)
+          setPlanStatus('active')
+          setPlanModuleAccessBlocked(false)
+          setPlanModules([])
+        }
+      } finally {
+        if (!cancelled) {
+          setPlanModulesLoaded(true)
+        }
+      }
+    }
+
+    loadPlanModules()
+
+    return () => {
+      cancelled = true
+    }
+  }, [userNitRut])
 
   useEffect(() => {
     const permissionsDocId = userNitRut ? `permisosRoles_${userNitRut}` : 'permisosRoles'
@@ -504,9 +626,9 @@ function AuthProvider({ children }) {
 
       if (userNit) {
         const latestPlan = await getLatestPlanByNit(userNit)
-        const planStatus = String(latestPlan?.estado || '').trim().toLowerCase()
-        if (latestPlan && planStatus !== PLAN_ACTIVE_STATUS) {
-          const blockedError = new Error('El plan asociado al NIT no se encuentra activo.')
+        const operationalMeta = resolvePlanOperationalMeta(latestPlan)
+        if (latestPlan && !operationalMeta.isOperational) {
+          const blockedError = new Error('El plan asociado al NIT se encuentra vencido o inactivo.')
           blockedError.code = 'plan/inactive'
           throw blockedError
         }
@@ -696,6 +818,14 @@ function AuthProvider({ children }) {
     return hasRolePermission(roleOverride || userRole, permissionKey, rolePermissions)
   }
 
+  const hasPlanModule = (moduleKey) => {
+    const normalizedKey = String(moduleKey || '').trim()
+    if (!normalizedKey) return false
+    if (!userNitRut || !planModulesLoaded) return true
+    if (planModuleAccessBlocked) return PLAN_BLOCK_EXEMPT_MODULES.has(normalizedKey)
+    return planModules.includes(normalizedKey)
+  }
+
   const userPermissions = resolveRolePermissions(userRole, rolePermissions)
 
   const value = {
@@ -703,6 +833,12 @@ function AuthProvider({ children }) {
     userRole,
     userNitRut,
     userProfile,
+    currentPlan,
+    planStatus,
+    planModuleAccessBlocked,
+    planModules,
+    planModulesLoaded,
+    hasPlanModule,
     rolePermissions,
     userPermissions,
     hasPermission,

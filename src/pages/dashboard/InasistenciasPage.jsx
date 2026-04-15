@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   collection,
-  addDoc,
+  doc,
+  getDoc,
   getDocs,
   query,
   orderBy,
@@ -15,9 +16,21 @@ import { PERMISSION_KEYS } from '../../utils/permissions'
 import PaginationControls from '../../components/PaginationControls'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import SearchableSelect from '../../components/SearchableSelect'
+import { findDocumentSignature, loadTenantDocumentSignatures } from '../../services/documentSignatures'
+import SignatureDetailModal from '../../components/SignatureDetailModal'
+import { addDocTracked, deleteDocTracked, setDocTracked, updateDocTracked } from '../../services/firestoreProxy'
+import { buildAttendanceDocId, buildIsoDateRangeInclusive } from '../../utils/attendance'
+
+function normalizeAttendanceStatus(value) {
+  return String(value || '').trim().toLowerCase() === 'no' ? 'No' : 'Si'
+}
+
+function buildReporterName(user) {
+  return String(user?.displayName || user?.email || 'Usuario').trim() || 'Usuario'
+}
 
 function InasistenciasPage() {
-  const { user, hasPermission } = useAuth()
+  const { user, hasPermission, userNitRut } = useAuth()
   
   const canCreate = hasPermission(PERMISSION_KEYS.INASISTENCIAS_CREATE)
   const canEdit = hasPermission(PERMISSION_KEYS.INASISTENCIAS_EDIT)
@@ -32,6 +45,9 @@ function InasistenciasPage() {
   const [validationError, setValidationError] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [signatureFilter, setSignatureFilter] = useState('todos')
+  const [signatures, setSignatures] = useState([])
+  const [selectedSignature, setSelectedSignature] = useState(null)
 
   const [form, setForm] = useState({
     estudianteId: '',
@@ -47,6 +63,7 @@ function InasistenciasPage() {
   const [soporteFile, setSoporteFile] = useState(null)
   const [existingSoporteUrl, setExistingSoporteUrl] = useState('')
   const [editingId, setEditingId] = useState(null)
+  const [editingRecord, setEditingRecord] = useState(null)
 
   // State for Add Soporte Modal
   const [showAddSoporteModal, setShowAddSoporteModal] = useState(false)
@@ -63,40 +80,131 @@ function InasistenciasPage() {
     setLoading(true)
     try {
       // Load Students
-      const usersSnap = await getDocs(collection(db, 'users'))
+      const [usersSnap, tiposSnap, inasistenciasSnap, signatureRows] = await Promise.all([
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'tipo_inasistencias')),
+        getDocs(query(collection(db, 'inasistencias'), orderBy('creadoEn', 'desc'))),
+        loadTenantDocumentSignatures({ nitRut: userNitRut, tipoModulo: 'inasistencia' }).catch(() => []),
+      ])
+
       const studentsData = usersSnap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .filter((u) => u.role === 'estudiante')
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
       setEstudiantes(studentsData)
 
-      // Load Absence Types
-      const tiposSnap = await getDocs(collection(db, 'tipo_inasistencias'))
       const tiposData = tiposSnap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .filter((t) => t.estado === 'activo')
         .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')))
       setTiposInasistencia(tiposData)
 
-      // Load Absences
-      const inasistenciasSnap = await getDocs(
-        query(collection(db, 'inasistencias'), orderBy('creadoEn', 'desc'))
-      )
       const inasistenciasData = inasistenciasSnap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }))
       setInasistencias(inasistenciasData)
+      setSignatures(signatureRows)
     } catch (error) {
       console.error('Error loading inasistencias data:', error)
+      setSignatures([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [userNitRut])
 
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const validateAbsenceAttendanceConflicts = useCallback(async ({ absenceId = '', studentId, attendanceDates }) => {
+    if (!userNitRut || !studentId || !Array.isArray(attendanceDates) || attendanceDates.length === 0) return
+
+    const conflictingDates = []
+
+    for (const dateIso of attendanceDates) {
+      const attendanceRef = doc(db, 'asistencias', buildAttendanceDocId(userNitRut, dateIso, studentId))
+      const attendanceSnap = await getDoc(attendanceRef)
+      if (!attendanceSnap.exists()) continue
+
+      const data = attendanceSnap.data() || {}
+      const linkedAbsenceId = String(data.inasistenciaId || '').trim()
+      if (linkedAbsenceId && linkedAbsenceId === String(absenceId || '').trim()) continue
+
+      if (normalizeAttendanceStatus(data.asistencia) === 'Si') {
+        conflictingDates.push(dateIso)
+      }
+    }
+
+    if (conflictingDates.length > 0) {
+      throw new Error(`Ya existe asistencia marcada en: ${conflictingDates.join(', ')}.`)
+    }
+  }, [userNitRut])
+
+  const upsertAbsenceAttendanceRecords = useCallback(async ({
+    absenceId,
+    studentId,
+    studentName,
+    attendanceDates,
+    tipoId,
+    tipoNombre,
+    descripcion,
+    fechaDesde,
+    fechaHasta,
+  }) => {
+    if (!userNitRut || !studentId || !Array.isArray(attendanceDates) || attendanceDates.length === 0) return
+
+    const student = estudiantes.find((item) => item.id === studentId)
+    const profile = student?.profile || {}
+
+    await Promise.all(
+      attendanceDates.map((dateIso) =>
+        setDocTracked(
+          doc(db, 'asistencias', buildAttendanceDocId(userNitRut, dateIso, studentId)),
+          {
+            nitRut: userNitRut,
+            uid: studentId,
+            fecha: dateIso,
+            role: 'estudiante',
+            grado: String(profile.grado || '').trim(),
+            grupo: String(profile.grupo || '').trim(),
+            asistencia: 'No',
+            tipoMarcacion: 'inasistencia',
+            marcadoPorUid: user?.uid || '',
+            marcadoPorNombre: buildReporterName(user),
+            marcadoPorNumeroDocumento: '',
+            marcadoEn: serverTimestamp(),
+            bloqueoAsistencia: true,
+            inasistenciaId: absenceId,
+            inasistenciaTipoId: tipoId,
+            inasistenciaTipoNombre: tipoNombre,
+            inasistenciaDescripcion: descripcion,
+            inasistenciaFechaDesde: fechaDesde,
+            inasistenciaFechaHasta: fechaHasta,
+            userName: studentName || student?.name || '',
+          },
+          { merge: true },
+        ),
+      ),
+    )
+  }, [estudiantes, user, userNitRut])
+
+  const removeAbsenceAttendanceRecords = useCallback(async ({ absenceId, studentId, attendanceDates }) => {
+    if (!userNitRut || !studentId || !Array.isArray(attendanceDates) || attendanceDates.length === 0) return
+
+    await Promise.all(
+      attendanceDates.map(async (dateIso) => {
+        const attendanceRef = doc(db, 'asistencias', buildAttendanceDocId(userNitRut, dateIso, studentId))
+        const attendanceSnap = await getDoc(attendanceRef)
+        if (!attendanceSnap.exists()) return
+
+        const data = attendanceSnap.data() || {}
+        if (String(data.inasistenciaId || '').trim() !== String(absenceId || '').trim()) return
+
+        await deleteDocTracked(attendanceRef)
+      }),
+    )
+  }, [userNitRut])
 
   const handleStudentChange = (e) => {
     const studentId = e.target.value
@@ -145,6 +253,18 @@ function InasistenciasPage() {
         soporteUrl = existingSoporteUrl
       }
 
+      const attendanceDates = buildIsoDateRangeInclusive(form.fechaDesde, form.fechaHasta)
+      if (attendanceDates.length === 0) {
+        setValidationError('El rango de fechas de la inasistencia no es valido.')
+        return
+      }
+
+      await validateAbsenceAttendanceConflicts({
+        absenceId: editingId || '',
+        studentId: form.estudianteId,
+        attendanceDates,
+      })
+
       const payload = {
         estudianteId: form.estudianteId,
         estudianteNombre: form.estudianteNombre,
@@ -156,19 +276,52 @@ function InasistenciasPage() {
         tipoNombre: form.tipoNombre,
         descripcion: form.descripcion.trim(),
         soporteUrl,
+        attendanceDates,
       }
-
-      const { doc, updateDoc } = await import('firebase/firestore')
 
       if (editingId) {
         payload.updatedAt = serverTimestamp()
         payload.updatedByUid = user?.uid || ''
-        await updateDoc(doc(db, 'inasistencias', editingId), payload)
+        await updateDocTracked(doc(db, 'inasistencias', editingId), payload)
+        await upsertAbsenceAttendanceRecords({
+          absenceId: editingId,
+          studentId: form.estudianteId,
+          studentName: form.estudianteNombre,
+          attendanceDates,
+          tipoId: form.tipoId,
+          tipoNombre: form.tipoNombre,
+          descripcion: form.descripcion.trim(),
+          fechaDesde: form.fechaDesde,
+          fechaHasta: form.fechaHasta,
+        })
+
+        const previousDates = Array.isArray(editingRecord?.attendanceDates) && editingRecord.attendanceDates.length > 0
+          ? editingRecord.attendanceDates
+          : buildIsoDateRangeInclusive(editingRecord?.fechaDesde, editingRecord?.fechaHasta)
+        const previousStudentId = String(editingRecord?.estudianteId || '').trim()
+        const currentDates = new Set(attendanceDates)
+
+        await removeAbsenceAttendanceRecords({
+          absenceId: editingId,
+          studentId: previousStudentId,
+          attendanceDates: previousDates.filter((dateIso) => previousStudentId !== form.estudianteId || !currentDates.has(dateIso)),
+        })
         setFeedback('Inasistencia actualizada correctamente.')
       } else {
         payload.creadoEn = serverTimestamp()
         payload.creadoPorUid = user?.uid || ''
-        await addDoc(collection(db, 'inasistencias'), payload)
+        const absenceRef = await addDocTracked(collection(db, 'inasistencias'), payload)
+        await upsertAbsenceAttendanceRecords({
+          absenceId: absenceRef.id,
+          studentId: form.estudianteId,
+          studentName: form.estudianteNombre,
+          attendanceDates,
+          tipoId: form.tipoId,
+          tipoNombre: form.tipoNombre,
+          descripcion: form.descripcion.trim(),
+          fechaDesde: form.fechaDesde,
+          fechaHasta: form.fechaHasta,
+        })
         setFeedback('Inasistencia reportada correctamente.')
       }
       setForm({
@@ -185,11 +338,12 @@ function InasistenciasPage() {
       setSoporteFile(null)
       setExistingSoporteUrl('')
       setEditingId(null)
+      setEditingRecord(null)
       
       await loadData()
     } catch (error) {
       console.error('Error saving inasistencia:', error)
-      setValidationError('No fue posible reportar la inasistencia.')
+      setValidationError(error?.message || 'No fue posible reportar la inasistencia.')
     } finally {
       setSaving(false)
     }
@@ -198,6 +352,7 @@ function InasistenciasPage() {
   const handleEdit = (item) => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
     setEditingId(item.id)
+    setEditingRecord(item)
     setForm({
       estudianteId: item.estudianteId || '',
       estudianteNombre: item.estudianteNombre || '',
@@ -228,6 +383,7 @@ function InasistenciasPage() {
     setSoporteFile(null)
     setExistingSoporteUrl('')
     setEditingId(null)
+    setEditingRecord(null)
     setFeedback('')
   }
 
@@ -239,9 +395,15 @@ function InasistenciasPage() {
     if (!itemToDelete) return
     try {
       setDeleting(true)
-      // Note: We should use a tracked delete function in the future.
-      const { doc, deleteDoc } = await import('firebase/firestore')
-      await deleteDoc(doc(db, 'inasistencias', itemToDelete.id))
+      const datesToRemove = Array.isArray(itemToDelete.attendanceDates) && itemToDelete.attendanceDates.length > 0
+        ? itemToDelete.attendanceDates
+        : buildIsoDateRangeInclusive(itemToDelete.fechaDesde, itemToDelete.fechaHasta)
+      await removeAbsenceAttendanceRecords({
+        absenceId: itemToDelete.id,
+        studentId: itemToDelete.estudianteId,
+        attendanceDates: datesToRemove,
+      })
+      await deleteDocTracked(doc(db, 'inasistencias', itemToDelete.id))
       setFeedback('Inasistencia eliminada correctamente.')
       setItemToDelete(null)
       await loadData()
@@ -287,13 +449,11 @@ function InasistenciasPage() {
       await uploadBytesTracked(storageRef, newSoporteFile)
       const url = await getDownloadURL(storageRef)
 
-      const { doc, updateDoc } = await import('firebase/firestore')
-      
       const updatedDescription = selectedItemForSoporte.descripcion 
         ? `${selectedItemForSoporte.descripcion}\n\n[Observación de soporte adjunto]: ${newSoporteObservacion.trim()}`
         : `[Observación de soporte adjunto]: ${newSoporteObservacion.trim()}`
 
-      await updateDoc(doc(db, 'inasistencias', selectedItemForSoporte.id), {
+      await updateDocTracked(doc(db, 'inasistencias', selectedItemForSoporte.id), {
         soporteUrl: url,
         descripcion: updatedDescription,
         updatedAt: serverTimestamp(),
@@ -313,15 +473,28 @@ function InasistenciasPage() {
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return inasistencias
-    return inasistencias.filter(
-      (item) =>
-        (item.estudianteNombre || '').toLowerCase().includes(q) ||
-        (item.tipoNombre || '').toLowerCase().includes(q) ||
-        (item.fechaDesde || '').includes(q) ||
-        (item.fechaHasta || '').includes(q)
-    )
-  }, [inasistencias, search])
+    return inasistencias.filter((item) => {
+      const signature = findDocumentSignature(signatures, {
+        tipoModulo: 'inasistencia',
+        documentoId: item.id,
+        estudianteId: item.estudianteId,
+      })
+      const matchesSearch = !q || [
+        item.estudianteNombre || '',
+        item.tipoNombre || '',
+        item.fechaDesde || '',
+        item.fechaHasta || '',
+        signature?.firmanteNombre || '',
+      ].some((value) => String(value).toLowerCase().includes(q))
+
+      const matchesSignature =
+        signatureFilter === 'todos' ||
+        (signatureFilter === 'firmados' && Boolean(signature)) ||
+        (signatureFilter === 'pendientes' && !signature)
+
+      return matchesSearch && matchesSignature
+    })
+  }, [inasistencias, search, signatureFilter, signatures])
 
   const displayedRows = useMemo(() => {
     return filteredRows.slice((currentPage - 1) * 10, currentPage * 10)
@@ -525,6 +698,17 @@ function InasistenciasPage() {
               }}
               placeholder="Buscar por estudiante, tipo o fecha..."
             />
+            <select
+              value={signatureFilter}
+              onChange={(e) => {
+                setSignatureFilter(e.target.value)
+                setCurrentPage(1)
+              }}
+            >
+              <option value="todos">Todas las firmas</option>
+              <option value="firmados">Solo firmados</option>
+              <option value="pendientes">Solo pendientes</option>
+            </select>
           </div>
 
           {loading ? (
@@ -539,6 +723,8 @@ function InasistenciasPage() {
                     <th>Estudiante</th>
                     <th>Motivo</th>
                     <th>Descripcion</th>
+                    <th>Firma</th>
+                    <th>Firmante</th>
                     <th>Soporte</th>
                     {(canEdit || canDelete) && <th>Acciones</th>}
                   </tr>
@@ -546,16 +732,40 @@ function InasistenciasPage() {
                 <tbody>
                   {filteredRows.length === 0 && (
                     <tr>
-                      <td colSpan={(canEdit || canDelete) ? 7 : 6}>No hay inasistencias registradas.</td>
+                      <td colSpan={(canEdit || canDelete) ? 9 : 8}>No hay inasistencias registradas.</td>
                     </tr>
                   )}
-                  {displayedRows.map((item) => (
+                  {displayedRows.map((item) => {
+                    const signature = findDocumentSignature(signatures, {
+                      tipoModulo: 'inasistencia',
+                      documentoId: item.id,
+                      estudianteId: item.estudianteId,
+                    })
+
+                    return (
                     <tr key={item.id}>
                       <td data-label="Desde">{item.fechaDesde} {item.horaDesde}</td>
                       <td data-label="Hasta">{item.fechaHasta} {item.horaHasta}</td>
                       <td data-label="Estudiante">{item.estudianteNombre}</td>
                       <td data-label="Motivo">{item.tipoNombre}</td>
                       <td data-label="Descripcion">{item.descripcion || '-'}</td>
+                      <td data-label="Firma">
+                        {signature ? (
+                          <button
+                            type="button"
+                            className="signature-status-button"
+                            onClick={() => setSelectedSignature(signature)}
+                          >
+                            <span className="signature-status-chip is-signed">Firmado</span>
+                          </button>
+                        ) : (
+                          <span className="signature-status-chip is-pending">Pendiente</span>
+                        )}
+                        <div className="signature-meta-text">
+                          {signature?.firmadoEn?.toDate ? signature.firmadoEn.toDate().toLocaleString('es-CO') : '-'}
+                        </div>
+                      </td>
+                      <td data-label="Firmante">{signature?.firmanteNombre || '-'}</td>
                       <td data-label="Soporte">
                         {item.soporteUrl ? (
                           <a
@@ -620,7 +830,7 @@ function InasistenciasPage() {
                       </td>
                       )}
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
               <PaginationControls
@@ -666,6 +876,13 @@ function InasistenciasPage() {
           </div>
         </div>
       )}
+
+      <SignatureDetailModal
+        open={Boolean(selectedSignature)}
+        signature={selectedSignature}
+        onClose={() => setSelectedSignature(null)}
+        title="Detalle de firma de la inasistencia"
+      />
 
       {showAddSoporteModal && selectedItemForSoporte && (
         <div className="modal-overlay" role="presentation">

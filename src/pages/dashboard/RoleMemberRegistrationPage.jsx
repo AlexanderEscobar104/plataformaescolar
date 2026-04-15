@@ -10,8 +10,8 @@ const normalizeRoleValue = (name) => String(name || '').toLowerCase().trim()
 
 function RoleMemberRegistrationPage() {
   const { roleId } = useParams()
-  const { userNitRut, hasPermission } = useAuth()
-  const canCreate = hasPermission(buildDynamicMemberPermissionKey(roleId, 'create'))
+  const { userNitRut, hasPermission, hasPlanModule } = useAuth()
+  const canCreate = hasPlanModule('miembros-dinamicos') && hasPermission(buildDynamicMemberPermissionKey(roleId, 'create'))
   const [loading, setLoading] = useState(true)
   const [roleName, setRoleName] = useState('')
   const [roleValue, setRoleValue] = useState('')

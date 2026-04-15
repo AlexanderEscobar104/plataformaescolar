@@ -12,6 +12,19 @@ import {
   getQrLoginSessionStatus,
 } from '../services/qrAuth'
 
+function isLikelyMobileDevice() {
+  if (typeof window === 'undefined') return false
+
+  const userAgent = String(window.navigator?.userAgent || '').toLowerCase()
+  const hasMobileAgent = /android|iphone|ipad|ipod|mobile|windows phone/i.test(userAgent)
+  const coarsePointer = typeof window.matchMedia === 'function'
+    ? window.matchMedia('(pointer: coarse)').matches
+    : false
+  const narrowViewport = window.innerWidth <= 820
+
+  return hasMobileAgent || (coarsePointer && narrowViewport)
+}
+
 function LoginPage() {
   const navigate = useNavigate()
   const { login, loginWithCustomToken } = useAuth()
@@ -27,6 +40,7 @@ function LoginPage() {
   const [logo, setLogo] = useState('/logo_plataforma_digital.png')
   const [modalOpen, setModalOpen] = useState(false)
   const [modalMessage, setModalMessage] = useState('')
+  const [showQrLogin, setShowQrLogin] = useState(() => !isLikelyMobileDevice())
 
   const qrImageUrl = useMemo(() => {
     if (!qrSession?.qrPayload) return ''
@@ -52,10 +66,32 @@ function LoginPage() {
   }
 
   useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const updateDeviceMode = () => {
+      const shouldShowQr = !isLikelyMobileDevice()
+      setShowQrLogin(shouldShowQr)
+      if (!shouldShowQr) {
+        setAuthMethod('password')
+      }
+    }
+
+    updateDeviceMode()
+    window.addEventListener('resize', updateDeviceMode)
+    return () => window.removeEventListener('resize', updateDeviceMode)
+  }, [])
+
+  useEffect(() => {
+    if (!showQrLogin && authMethod === 'qr') {
+      setAuthMethod('password')
+    }
+  }, [authMethod, showQrLogin])
+
+  useEffect(() => {
     if (authMethod === 'qr' && !qrSession && !qrLoading) {
       startQrSession().catch(() => {})
     }
-  }, [authMethod])
+  }, [authMethod, qrLoading, qrSession])
 
   useEffect(() => {
     if (authMethod !== 'qr' || !qrSession?.sessionId || !qrSession?.sessionKey) {
@@ -168,13 +204,15 @@ function LoginPage() {
           >
             Correo electronico y contrasena
           </button>
-          <button
-            type="button"
-            className={`auth-method-button${authMethod === 'qr' ? ' active' : ''}`}
-            onClick={() => setAuthMethod('qr')}
-          >
-            Codigo QR
-          </button>
+          {showQrLogin && (
+            <button
+              type="button"
+              className={`auth-method-button${authMethod === 'qr' ? ' active' : ''}`}
+              onClick={() => setAuthMethod('qr')}
+            >
+              Codigo QR
+            </button>
+          )}
         </div>
 
         {authMethod === 'password' ? (

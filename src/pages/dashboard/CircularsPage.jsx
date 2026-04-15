@@ -9,6 +9,8 @@ import { PERMISSION_KEYS } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
 import { summarizeStudentAudience } from '../../utils/studentAudience'
+import { loadTenantDocumentSignatures } from '../../services/documentSignatures'
+import SignatureDetailModal from '../../components/SignatureDetailModal'
 
 function formatDate(dateValue) {
 
@@ -40,11 +42,17 @@ function CircularsPage() {
   const [deleting, setDeleting] = useState(false)
   const [loading, setLoading] = useState(true)
   const [circulars, setCirculars] = useState([])
+  const [signatures, setSignatures] = useState([])
+  const [signatureFilter, setSignatureFilter] = useState('todos')
+  const [selectedSignature, setSelectedSignature] = useState(null)
 
   const loadCirculars = useCallback(async () => {
     setLoading(true)
     try {
-      const snapshot = await getDocs(query(collection(db, 'circulares'), where('nitRut', '==', userNitRut)))
+      const [snapshot, signatureRows] = await Promise.all([
+        getDocs(query(collection(db, 'circulares'), where('nitRut', '==', userNitRut))),
+        loadTenantDocumentSignatures({ nitRut: userNitRut, tipoModulo: 'circular' }).catch(() => []),
+      ])
       const mapped = snapshot.docs
         .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
         .sort((a, b) => {
@@ -53,6 +61,7 @@ function CircularsPage() {
           return bValue - aValue
         })
       setCirculars(mapped)
+      setSignatures(signatureRows)
     } finally {
       setLoading(false)
     }
@@ -88,13 +97,28 @@ function CircularsPage() {
 
   const filteredCirculars = useMemo(() => {
     const normalized = search.trim().toLowerCase()
-    if (!normalized) return circulars
-
     return circulars.filter((item) => {
-      const haystack = `${item.subject || ''} ${formatDate(item.createdAt)} ${item.fechaVencimiento || ''} ${summarizeStudentAudience(item)}`.toLowerCase()
-      return haystack.includes(normalized)
+      const signatureRows = signatures.filter((signature) => String(signature.documentoId || '') === String(item.id))
+      const signedCount = signatureRows.length
+      const matchesSearch = !normalized || `${item.subject || ''} ${formatDate(item.createdAt)} ${item.fechaVencimiento || ''} ${summarizeStudentAudience(item)}`.toLowerCase().includes(normalized)
+      const matchesSignature =
+        signatureFilter === 'todos' ||
+        (signatureFilter === 'firmados' && signedCount > 0) ||
+        (signatureFilter === 'pendientes' && signedCount === 0)
+      return matchesSearch && matchesSignature
     })
-  }, [search, circulars])
+  }, [search, circulars, signatureFilter, signatures])
+
+  const circularSignatureSummary = useMemo(() => {
+    const signedTotal = filteredCirculars.filter((item) => signatures.some((signature) => String(signature.documentoId || '') === String(item.id))).length
+    const total = filteredCirculars.length
+    return {
+      total,
+      signedTotal,
+      pendingTotal: Math.max(total - signedTotal, 0),
+      percentage: total > 0 ? Math.round((signedTotal / total) * 100) : 0,
+    }
+  }, [filteredCirculars, signatures])
 
   return (
     <section className="circulars-page-shell">
@@ -103,6 +127,24 @@ function CircularsPage() {
           <span className="circulars-page-eyebrow">Comunicacion institucional</span>
           <h2>Circulares</h2>
           <p>Gestiona circulares institucionales en formato PDF con fechas de vencimiento y acceso rapido al archivo.</p>
+        </div>
+        <div className="signature-summary-grid">
+          <div className="signature-summary-card">
+            <strong>{circularSignatureSummary.total}</strong>
+            <span>Circulares filtradas</span>
+          </div>
+          <div className="signature-summary-card">
+            <strong>{circularSignatureSummary.signedTotal}</strong>
+            <span>Con confirmacion</span>
+          </div>
+          <div className="signature-summary-card">
+            <strong>{circularSignatureSummary.pendingTotal}</strong>
+            <span>Pendientes</span>
+          </div>
+          <div className="signature-summary-card">
+            <strong>{circularSignatureSummary.percentage}%</strong>
+            <span>Tasa de firma</span>
+          </div>
         </div>
         <div className="circulars-page-hero-actions">
         {canManageCirculars && (
@@ -126,6 +168,17 @@ function CircularsPage() {
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Buscar circular por asunto, fecha o audiencia"
         />
+        <select
+          value={signatureFilter}
+          onChange={(event) => {
+            setSignatureFilter(event.target.value)
+            setCurrentPage(1)
+          }}
+        >
+          <option value="todos">Todas las firmas</option>
+          <option value="firmados">Con confirmacion</option>
+          <option value="pendientes">Sin confirmacion</option>
+        </select>
       </div>
 
       {loading ? (
@@ -139,6 +192,8 @@ function CircularsPage() {
                 <th>Fecha</th>
                 <th>Fecha vencimiento</th>
                 <th>Aplica para</th>
+                <th>Firmas</th>
+                <th>Ultimo firmante</th>
                 <th>Archivo</th>
                 {canManageCirculars && <th>Acciones</th>}
               </tr>
@@ -146,15 +201,39 @@ function CircularsPage() {
             <tbody>
               {filteredCirculars.length === 0 && (
                 <tr>
-                  <td colSpan={canManageCirculars ? 6 : 5}>No hay circulares para mostrar.</td>
+                  <td colSpan={canManageCirculars ? 8 : 7}>No hay circulares para mostrar.</td>
                 </tr>
               )}
-              {(exportingAll ? filteredCirculars : filteredCirculars.slice((currentPage - 1) * 10, currentPage * 10)).map((item) => (
+              {(exportingAll ? filteredCirculars : filteredCirculars.slice((currentPage - 1) * 10, currentPage * 10)).map((item) => {
+                const signatureRows = signatures
+                  .filter((signature) => String(signature.documentoId || '') === String(item.id))
+                  .sort((a, b) => (b.firmadoEn?.toMillis?.() || 0) - (a.firmadoEn?.toMillis?.() || 0))
+                const latestSignature = signatureRows[0] || null
+
+                return (
                 <tr key={item.id}>
                   <td data-label="Asunto">{item.subject || '-'}</td>
                   <td data-label="Fecha">{formatDate(item.createdAt)}</td>
                   <td data-label="Fecha vencimiento">{item.fechaVencimiento || '-'}</td>
                   <td data-label="Aplica para">{summarizeStudentAudience(item)}</td>
+                  <td data-label="Firmas">
+                    {signatureRows.length > 0 ? (
+                      <button
+                        type="button"
+                        className="signature-status-button"
+                        onClick={() => setSelectedSignature(latestSignature)}
+                      >
+                        <span className="signature-status-chip is-signed">{`${signatureRows.length} firma(s)`}</span>
+                      </button>
+                    ) : (
+                      <span className="signature-status-chip is-pending">Pendiente</span>
+                    )}
+                  </td>
+                  <td data-label="Ultimo firmante">
+                    {latestSignature
+                      ? `${latestSignature.firmanteNombre || '-'} | ${formatDate(latestSignature.firmadoEn)}`
+                      : '-'}
+                  </td>
                   <td data-label="Archivo">
                     {item.pdf?.url ? (
                       <a href={item.pdf.url} target="_blank" rel="noreferrer" download className="pdf-download-icon" title="Descargar PDF">
@@ -193,7 +272,7 @@ function CircularsPage() {
                     </td>
                   )}
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
       <PaginationControls 
@@ -260,6 +339,13 @@ function CircularsPage() {
         title="Operacion fallida"
         message={errorModalMessage}
         onClose={() => setShowErrorModal(false)}
+      />
+
+      <SignatureDetailModal
+        open={Boolean(selectedSignature)}
+        signature={selectedSignature}
+        onClose={() => setSelectedSignature(null)}
+        title="Detalle de firma de la circular"
       />
     </section>
   )

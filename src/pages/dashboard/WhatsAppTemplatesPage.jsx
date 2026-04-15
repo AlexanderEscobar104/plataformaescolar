@@ -23,9 +23,18 @@ const WHATSAPP_VARIABLE_HELP = [
   '{{plantel}}',
 ]
 
+const LANGUAGE_OPTIONS = [
+  { value: 'es', label: 'Español' },
+  { value: 'en', label: 'English' },
+]
+
+function formatLanguageLabel(value) {
+  return LANGUAGE_OPTIONS.find((option) => option.value === value)?.label || String(value || '').trim().toUpperCase() || 'Idioma'
+}
+
 const DEFAULT_WHATSAPP_TEMPLATES = [
   {
-    key: 'admisiones_bienvenida',
+    key: 'admisiones_bienvenida_es',
     name: 'Bienvenida admisiones',
     module: 'admisiones',
     category: 'utilidad',
@@ -34,7 +43,16 @@ const DEFAULT_WHATSAPP_TEMPLATES = [
     variables: ['acudiente', 'plantel', 'estudiante', 'grado'],
   },
   {
-    key: 'admisiones_etapa',
+    key: 'admisiones_bienvenida_en',
+    name: 'Admissions welcome',
+    module: 'admisiones',
+    category: 'utilidad',
+    language: 'en',
+    body: 'Hello {{acudiente}}, welcome to {{plantel}}. The admissions process for {{estudiante}} in grade {{grado}} has been registered.',
+    variables: ['acudiente', 'plantel', 'estudiante', 'grado'],
+  },
+  {
+    key: 'admisiones_etapa_es',
     name: 'Actualizacion etapa admisiones',
     module: 'admisiones',
     category: 'recordatorio',
@@ -43,7 +61,16 @@ const DEFAULT_WHATSAPP_TEMPLATES = [
     variables: ['acudiente', 'estudiante', 'plantel', 'etapa'],
   },
   {
-    key: 'pagos_recordatorio',
+    key: 'admisiones_etapa_en',
+    name: 'Admissions stage update',
+    module: 'admisiones',
+    category: 'recordatorio',
+    language: 'en',
+    body: 'Hello {{acudiente}}, the admissions process for {{estudiante}} at {{plantel}} is currently in the {{etapa}} stage.',
+    variables: ['acudiente', 'estudiante', 'plantel', 'etapa'],
+  },
+  {
+    key: 'pagos_recordatorio_es',
     name: 'Recordatorio de pago',
     module: 'pagos',
     category: 'recordatorio',
@@ -52,7 +79,16 @@ const DEFAULT_WHATSAPP_TEMPLATES = [
     variables: ['acudiente', 'plantel', 'concepto', 'estudiante', 'periodo', 'saldo', 'fecha_vencimiento'],
   },
   {
-    key: 'pagos_confirmacion',
+    key: 'pagos_recordatorio_en',
+    name: 'Payment reminder',
+    module: 'pagos',
+    category: 'recordatorio',
+    language: 'en',
+    body: 'Hello {{acudiente}}, at {{plantel}} the charge {{concepto}} for {{estudiante}} in {{periodo}} has an outstanding balance of {{saldo}} and is due on {{fecha_vencimiento}}.',
+    variables: ['acudiente', 'plantel', 'concepto', 'estudiante', 'periodo', 'saldo', 'fecha_vencimiento'],
+  },
+  {
+    key: 'pagos_confirmacion_es',
     name: 'Confirmacion de pago',
     module: 'pagos',
     category: 'utilidad',
@@ -61,12 +97,30 @@ const DEFAULT_WHATSAPP_TEMPLATES = [
     variables: ['acudiente', 'plantel', 'valor', 'concepto', 'estudiante'],
   },
   {
-    key: 'general_informativo',
+    key: 'pagos_confirmacion_en',
+    name: 'Payment confirmation',
+    module: 'pagos',
+    category: 'utilidad',
+    language: 'en',
+    body: 'Hello {{acudiente}}, we have recorded at {{plantel}} the payment of {{valor}} for {{concepto}} for {{estudiante}}.',
+    variables: ['acudiente', 'plantel', 'valor', 'concepto', 'estudiante'],
+  },
+  {
+    key: 'general_informativo_es',
     name: 'Mensaje informativo general',
     module: 'general',
     category: 'utilidad',
     language: 'es',
     body: 'Hola {{acudiente}}, {{plantel}} te comparte una novedad relacionada con {{estudiante}}.',
+    variables: ['acudiente', 'plantel', 'estudiante'],
+  },
+  {
+    key: 'general_informativo_en',
+    name: 'General information message',
+    module: 'general',
+    category: 'utilidad',
+    language: 'en',
+    body: 'Hello {{acudiente}}, {{plantel}} is sharing an update related to {{estudiante}}.',
     variables: ['acudiente', 'plantel', 'estudiante'],
   },
 ]
@@ -187,7 +241,7 @@ function WhatsAppTemplatesPage() {
   const filteredTemplates = useMemo(() => {
     const term = String(search || '').trim().toLowerCase()
     return templates.filter((item) => {
-      const haystack = [item.name, item.module, item.body, item.category].join(' ').toLowerCase()
+      const haystack = [item.name, item.module, item.body, item.category, item.language].join(' ').toLowerCase()
       return !term || haystack.includes(term)
     })
   }, [search, templates])
@@ -198,6 +252,7 @@ function WhatsAppTemplatesPage() {
         String(item.name || '').trim().toLowerCase(),
         String(item.module || '').trim().toLowerCase(),
         String(item.category || '').trim().toLowerCase(),
+        String(item.language || 'es').trim().toLowerCase(),
       ].join('__')),
     ),
     [templates],
@@ -301,6 +356,7 @@ function WhatsAppTemplatesPage() {
       String(template?.name || '').trim().toLowerCase(),
       String(template?.module || '').trim().toLowerCase(),
       String(template?.category || '').trim().toLowerCase(),
+      String(template?.language || 'es').trim().toLowerCase(),
     ].join('__')
 
     if (existingQuickTemplateKeys.has(templateKey)) {
@@ -376,6 +432,7 @@ function WhatsAppTemplatesPage() {
                     String(template.name || '').trim().toLowerCase(),
                     String(template.module || '').trim().toLowerCase(),
                     String(template.category || '').trim().toLowerCase(),
+                    String(template.language || 'es').trim().toLowerCase(),
                   ].join('__')
                   const alreadyExists = existingQuickTemplateKeys.has(templateKey)
                   const actionKey = String(template.key || template.name || '').trim()
@@ -387,7 +444,11 @@ function WhatsAppTemplatesPage() {
                       onClick={() => handleCreateDefaultTemplate(template)}
                       disabled={alreadyExists || quickCreatingKey === actionKey}
                     >
-                      {alreadyExists ? `${template.name} creada` : quickCreatingKey === actionKey ? 'Creando...' : `Crear ${template.name}`}
+                      {alreadyExists
+                        ? `${template.name} (${formatLanguageLabel(template.language)}) creada`
+                        : quickCreatingKey === actionKey
+                          ? 'Creando...'
+                          : `Crear ${template.name} (${formatLanguageLabel(template.language)})`}
                     </button>
                   )
                 })}
@@ -429,7 +490,11 @@ function WhatsAppTemplatesPage() {
               </label>
               <label>
                 Idioma
-                <input type="text" value={form.language} onChange={(event) => setForm((prev) => ({ ...prev, language: event.target.value }))} />
+                <select value={form.language} onChange={(event) => setForm((prev) => ({ ...prev, language: event.target.value }))}>
+                  {LANGUAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
               </label>
               <label>
                 Estado
@@ -500,10 +565,11 @@ function WhatsAppTemplatesPage() {
                 <article key={item.id} className="guardian-message-card" style={{ cursor: 'default' }}>
                   <header>
                     <strong>{item.name || 'Plantilla'}</strong>
-                    <span>{item.module || '-'}</span>
+                    <span>{`${item.module || '-'} · ${formatLanguageLabel(String(item.language || 'es').trim().toLowerCase())}`}</span>
                   </header>
                   <p>{item.body || 'Sin cuerpo registrado.'}</p>
                   <small>Categoria: {item.category || '-'}</small>
+                  <small>Idioma: {formatLanguageLabel(String(item.language || 'es').trim().toLowerCase())}</small>
                   <small>Variables: {Array.isArray(item.variables) && item.variables.length > 0 ? item.variables.join(', ') : '-'}</small>
                   <small>Estado: {item.status || 'activo'}</small>
                   {canManageTemplates ? (

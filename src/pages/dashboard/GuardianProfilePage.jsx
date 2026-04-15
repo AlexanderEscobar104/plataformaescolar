@@ -17,6 +17,7 @@ function GuardianProfilePage() {
     nombres: '',
     apellidos: '',
     telefono: '',
+    celular: '',
     direccion: '',
     email: '',
     parentescoPrincipal: 'Madre',
@@ -39,6 +40,7 @@ function GuardianProfilePage() {
           nombres: profile.nombres || '',
           apellidos: profile.apellidos || '',
           telefono: profile.telefono || '',
+          celular: profile.celular || '',
           direccion: profile.direccion || '',
           email: data.email || '',
           parentescoPrincipal: profile.parentescoPrincipal || 'Madre',
@@ -79,6 +81,7 @@ function GuardianProfilePage() {
           nombres,
           apellidos,
           telefono: form.telefono.trim(),
+          celular: form.celular.trim(),
           direccion: form.direccion.trim(),
           parentescoPrincipal: form.parentescoPrincipal,
           estado: form.estado || 'activo',
@@ -123,8 +126,8 @@ function GuardianProfilePage() {
             </article>
             <article className="settings-module-card guardian-portal-stat-card">
               <h3>Contacto</h3>
-              <p>{form.telefono || '-'}</p>
-              <small>{form.direccion || 'Sin direccion registrada'}</small>
+              <p>{form.celular || form.telefono || '-'}</p>
+              <small>{form.celular ? `Telefono fijo: ${form.telefono || '-'}` : form.direccion || 'Sin direccion registrada'}</small>
             </article>
             <article className="settings-module-card guardian-portal-stat-card">
               <h3>Acceso restringido</h3>
@@ -137,7 +140,7 @@ function GuardianProfilePage() {
             <fieldset className="form-fieldset" disabled={saving}>
               <label>
                 Tipo de documento
-                <select value={form.tipoDocumento} onChange={(event) => handleChange('tipoDocumento', event.target.value)}>
+                <select value={form.tipoDocumento} disabled>
                   {GUARDIAN_DOCUMENT_OPTIONS.map((option) => (
                     <option key={option} value={option}>
                       {option}
@@ -148,7 +151,7 @@ function GuardianProfilePage() {
 
               <label>
                 Numero de documento
-                <input value={form.numeroDocumento} onChange={(event) => handleChange('numeroDocumento', event.target.value)} />
+                <input value={form.numeroDocumento} disabled />
               </label>
 
               <div className="form-grid-2">
@@ -163,6 +166,10 @@ function GuardianProfilePage() {
                 <label>
                   Telefono
                   <input value={form.telefono} onChange={(event) => handleChange('telefono', event.target.value)} />
+                </label>
+                <label>
+                  Celular
+                  <input value={form.celular} onChange={(event) => handleChange('celular', event.target.value)} />
                 </label>
                 <label>
                   Parentesco principal

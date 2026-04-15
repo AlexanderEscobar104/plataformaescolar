@@ -16,9 +16,10 @@ const normalizeRoleValue = (name) => String(name || '').toLowerCase().trim()
 function RoleMemberEditPage() {
   const navigate = useNavigate()
   const { roleId, memberId } = useParams()
-  const { hasPermission, userNitRut } = useAuth()
-  const canViewMember = hasPermission(buildDynamicMemberPermissionKey(roleId, 'view'))
-  const canEdit = hasPermission(buildDynamicMemberPermissionKey(roleId, 'edit'))
+  const { hasPermission, userNitRut, hasPlanModule } = useAuth()
+  const hasDynamicMembersModule = hasPlanModule('miembros-dinamicos')
+  const canViewMember = hasDynamicMembersModule && hasPermission(buildDynamicMemberPermissionKey(roleId, 'view'))
+  const canEdit = hasDynamicMembersModule && hasPermission(buildDynamicMemberPermissionKey(roleId, 'edit'))
   const canAccessMember = canViewMember || canEdit
 
   const [loading, setLoading] = useState(true)

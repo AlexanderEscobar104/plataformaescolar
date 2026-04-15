@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../../firebase'
+import OperationStatusModal from '../../components/OperationStatusModal'
 import { useAuth } from '../../hooks/useAuth'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 
@@ -13,6 +14,10 @@ const EMPTY_SETTINGS = {
   priority: false,
   certificate: false,
   flash: false,
+  automaticReminders: {
+    upcomingPayments: true,
+    overduePayments: true,
+  },
   apiKey: '',
   hasApiKey: false,
 }
@@ -26,7 +31,15 @@ function SmsSettingsPage() {
   const [form, setForm] = useState(EMPTY_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [feedback, setFeedback] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalType, setModalType] = useState('success')
+  const [modalMessage, setModalMessage] = useState('')
+
+  const openModal = (message, type = 'success') => {
+    setModalMessage(message)
+    setModalType(type)
+    setModalOpen(true)
+  }
 
   const loadSettings = async () => {
     if (!canManage) {
@@ -49,11 +62,15 @@ function SmsSettingsPage() {
         priority: Boolean(data.priority),
         certificate: Boolean(data.certificate),
         flash: Boolean(data.flash),
+        automaticReminders: {
+          upcomingPayments: data?.automaticReminders?.upcomingPayments !== false,
+          overduePayments: data?.automaticReminders?.overduePayments !== false,
+        },
         apiKey: '',
         hasApiKey: Boolean(data.hasApiKey),
       }))
     } catch {
-      setFeedback('No fue posible cargar la configuracion SMS.')
+      openModal('No fue posible cargar la configuracion SMS.', 'error')
     } finally {
       setLoading(false)
     }
@@ -66,13 +83,12 @@ function SmsSettingsPage() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     if (!canManage) {
-      setFeedback('No tienes permisos para administrar el canal SMS.')
+      openModal('No tienes permisos para administrar el canal SMS.', 'error')
       return
     }
 
     try {
       setSaving(true)
-      setFeedback('')
       const saveSmsSettings = httpsCallable(functions, 'saveSmsSettings')
       const response = await saveSmsSettings({
         enabled: form.enabled,
@@ -83,6 +99,10 @@ function SmsSettingsPage() {
         priority: form.priority,
         certificate: form.certificate,
         flash: form.flash,
+        automaticReminders: {
+          upcomingPayments: form.automaticReminders.upcomingPayments,
+          overduePayments: form.automaticReminders.overduePayments,
+        },
         apiKey: form.apiKey,
       })
       const data = response?.data || {}
@@ -91,9 +111,9 @@ function SmsSettingsPage() {
         apiKey: '',
         hasApiKey: Boolean(data.hasApiKey),
       }))
-      setFeedback('Configuracion SMS guardada correctamente.')
+      openModal('Configuracion SMS guardada correctamente.', 'success')
     } catch {
-      setFeedback('No fue posible guardar la configuracion SMS.')
+      openModal('No fue posible guardar la configuracion SMS.', 'error')
     } finally {
       setSaving(false)
     }
@@ -124,8 +144,6 @@ function SmsSettingsPage() {
           <small>{form.hasApiKey ? 'API key registrada' : 'Sin API key registrada'}</small>
         </div>
       </div>
-
-      {feedback && <p className={`feedback ${feedback.includes('correctamente') ? 'success' : 'error'}`}>{feedback}</p>}
 
       {loading ? (
         <p>Cargando configuracion...</p>
@@ -208,6 +226,43 @@ function SmsSettingsPage() {
                 </div>
               </div>
 
+              <div className="sms-settings-options">
+                <span className="sms-settings-options-title">Recordatorios automaticos</span>
+                <div className="sms-settings-checkbox-list">
+                  <label className="sms-settings-checkbox-item">
+                    <input
+                      type="checkbox"
+                      checked={form.automaticReminders.upcomingPayments}
+                      onChange={(event) => setForm((prev) => ({
+                        ...prev,
+                        automaticReminders: {
+                          ...prev.automaticReminders,
+                          upcomingPayments: event.target.checked,
+                        },
+                      }))}
+                    />
+                    <span>Recordatorio de pago proximo</span>
+                  </label>
+                  <label className="sms-settings-checkbox-item">
+                    <input
+                      type="checkbox"
+                      checked={form.automaticReminders.overduePayments}
+                      onChange={(event) => setForm((prev) => ({
+                        ...prev,
+                        automaticReminders: {
+                          ...prev.automaticReminders,
+                          overduePayments: event.target.checked,
+                        },
+                      }))}
+                    />
+                    <span>Recordatorio de pago vencido</span>
+                  </label>
+                </div>
+                <p className="template-helper-text" style={{ marginTop: '8px' }}>
+                  Estos controles definen que mensajes enviara automaticamente la tarea diaria de recordatorios de cartera.
+                </p>
+              </div>
+
               <div className="guardian-message-card" style={{ cursor: 'default' }}>
                 <header>
                   <strong>Datos tecnicos</strong>
@@ -225,6 +280,13 @@ function SmsSettingsPage() {
           </form>
         </div>
       )}
+      <OperationStatusModal
+        open={modalOpen}
+        type={modalType}
+        title={modalType === 'error' ? 'Operacion fallida' : 'Operacion exitosa'}
+        message={modalMessage}
+        onClose={() => setModalOpen(false)}
+      />
     </section>
   )
 }

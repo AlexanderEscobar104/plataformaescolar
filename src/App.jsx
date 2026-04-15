@@ -20,6 +20,7 @@ import EventsPage from './pages/dashboard/EventsPage'
 import MessagesPage from './pages/dashboard/MessagesPage'
 import NotificationsPage from './pages/dashboard/NotificationsPage'
 import PlantelDataPage from './pages/dashboard/PlantelDataPage'
+import SedesPage from './pages/dashboard/SedesPage'
 import PermissionsPage from './pages/dashboard/PermissionsPage'
 import RolesPage from './pages/dashboard/RolesPage'
 import ProfessorEditPage from './pages/dashboard/ProfessorEditPage'
@@ -77,6 +78,8 @@ import DesempenoReportesPage from './pages/dashboard/DesempenoReportesPage'
 import DesempenoMiDesempenoPage from './pages/dashboard/DesempenoMiDesempenoPage'
 import TipoEmpleadosPage from './pages/dashboard/TipoEmpleadosPage'
 import DatosCobroPage from './pages/dashboard/DatosCobroPage'
+import PaymentPlatformsSettingsPage from './pages/dashboard/PaymentPlatformsSettingsPage'
+import AuditSystemPage from './pages/dashboard/AuditSystemPage'
 import ImpuestosPage from './pages/dashboard/ImpuestosPage'
 import CajaPage from './pages/dashboard/CajaPage'
 import ItemCobroPage from './pages/dashboard/ItemCobroPage'
@@ -113,6 +116,7 @@ import AdmissionsLeadsPage from './pages/dashboard/AdmissionsLeadsPage'
 import AdmissionsLeadDetailPage from './pages/dashboard/AdmissionsLeadDetailPage'
 import AdmissionsAgendaPage from './pages/dashboard/AdmissionsAgendaPage'
 import AdmissionsReportsPage from './pages/dashboard/AdmissionsReportsPage'
+import MatriculasPage from './pages/dashboard/MatriculasPage'
 import ManagementDashboardPage from './pages/dashboard/ManagementDashboardPage'
 import WhatsAppInboxPage from './pages/dashboard/WhatsAppInboxPage'
 import WhatsAppTemplatesPage from './pages/dashboard/WhatsAppTemplatesPage'
@@ -246,6 +250,22 @@ function App() {
           }
         />
         <Route
+          path="/tipo-reportes"
+          element={(
+            <SecurityCollectionRoute collectionName="accesorestringido" redirectTo="/login">
+              <TipoReportesPage />
+            </SecurityCollectionRoute>
+          )}
+        />
+        <Route
+          path="/creacion-planes"
+          element={(
+            <SecurityCollectionRoute collectionName="accesorestringido" redirectTo="/login">
+              <PlanCreationPage />
+            </SecurityCollectionRoute>
+          )}
+        />
+        <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
@@ -291,6 +311,8 @@ function App() {
           <Route path="admisiones/leads/:leadId" element={<AdmissionsLeadDetailPage />} />
           <Route path="admisiones/agenda" element={<AdmissionsAgendaPage />} />
           <Route path="admisiones/reportes" element={<AdmissionsReportsPage />} />
+          <Route path="matriculas" element={<MatriculasPage />} />
+          <Route path="sedes" element={<SedesPage />} />
           <Route path="whatsapp/bandeja" element={<WhatsAppInboxPage />} />
           <Route path="whatsapp/plantillas" element={<WhatsAppTemplatesPage />} />
           <Route path="whatsapp/campanas" element={<WhatsAppCampaignsPage />} />
@@ -331,10 +353,12 @@ function App() {
             path="pagos"
             element={<PaymentsPage />}
           />
+          <Route path="pagos/plataformas" element={<PaymentPlatformsSettingsPage />} />
           <Route
             path="reportes"
             element={<ReportesPage />}
           />
+          <Route path="auditoria-sistema" element={<AuditSystemPage />} />
           <Route
             path="reconocimientos"
             element={<CertificadosPage />}
@@ -405,11 +429,7 @@ function App() {
           <Route path="roles" element={<RolesPage />} />
           <Route
             path="tipo-reportes"
-            element={(
-              <SecurityCollectionRoute collectionName="accesorestringido">
-                <TipoReportesPage />
-              </SecurityCollectionRoute>
-            )}
+            element={<Navigate to="/tipo-reportes" replace />}
           />
           <Route path="tipo-inasistencias" element={<TipoInasistenciasPage />} />
           <Route path="tipo-permisos" element={<TipoPermisosPage />} />
@@ -422,11 +442,7 @@ function App() {
           <Route path="dispositivos-vinculados" element={<LinkedDevicesPage />} />
           <Route
             path="creacion-planes"
-            element={(
-              <SecurityCollectionRoute collectionName="accesorestringido">
-                <PlanCreationPage />
-              </SecurityCollectionRoute>
-            )}
+            element={<Navigate to="/creacion-planes" replace />}
           />
           <Route path="camaras-asistencia" element={<CamarasAsistenciaPage />} />
           <Route path="asistencia" element={<AsistenciaPage />} />

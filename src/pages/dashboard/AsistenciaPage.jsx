@@ -100,6 +100,36 @@ function chunk(array, size) {
   return result
 }
 
+function formatAttendanceDate(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return '-'
+  const parsed = new Date(`${raw}T00:00:00`)
+  return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleDateString('es-CO')
+}
+
+function looksLikeEmail(value) {
+  return String(value || '').includes('@')
+}
+
+function buildDirectoryDisplayName(data = {}) {
+  const profile = data.profile || {}
+  const role = String(data.role || '').trim().toLowerCase()
+
+  if (role === 'estudiante') {
+    return `${profile.primerNombre || ''} ${profile.segundoNombre || ''} ${profile.primerApellido || ''} ${profile.segundoApellido || ''}`
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  const profileName = `${profile.nombres || ''} ${profile.apellidos || ''}`.replace(/\s+/g, ' ').trim()
+  if (profileName) return profileName
+
+  const employeeName = `${data.nombres || ''} ${data.apellidos || ''}`.replace(/\s+/g, ' ').trim()
+  if (employeeName) return employeeName
+
+  return String(data.name || '').trim()
+}
+
 function AsistenciaPage() {
   const { user, userNitRut, userRole, hasPermission } = useAuth()
   const canUseAttendance =
@@ -117,6 +147,7 @@ function AsistenciaPage() {
   const [selectedRole, setSelectedRole] = useState('')
   const [selectedGrade, setSelectedGrade] = useState('')
   const [selectedGroup, setSelectedGroup] = useState('')
+  const [studentDirectory, setStudentDirectory] = useState([])
 
   const [users, setUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
@@ -124,12 +155,17 @@ function AsistenciaPage() {
   const [selectedUsers, setSelectedUsers] = useState({})
   const [markedUsers, setMarkedUsers] = useState(() => new Set())
   const [attendanceByUid, setAttendanceByUid] = useState({})
+  const [attendanceMetaByUid, setAttendanceMetaByUid] = useState({})
   const [markerInfo, setMarkerInfo] = useState({ uid: '', nombre: '', numeroDocumento: '' })
 
   const [saving, setSaving] = useState(false)
   const [deletingUid, setDeletingUid] = useState('')
   const [feedback, setFeedback] = useState('')
   const [confirmMarkAllOpen, setConfirmMarkAllOpen] = useState(false)
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyTarget, setHistoryTarget] = useState(null)
+  const [attendanceHistory, setAttendanceHistory] = useState([])
   const selectAllRef = useRef(null)
 
   const roleOptions = useMemo(() => buildAllRoleOptions(customRoles), [customRoles])
@@ -144,10 +180,39 @@ function AsistenciaPage() {
     () => roleOptions.find((opt) => opt.value === selectedRole)?.label || '',
     [roleOptions, selectedRole],
   )
+  const availableStudentGrades = useMemo(() => {
+    const gradeSet = new Set(
+      studentDirectory
+        .map((item) => String(item.grado || '').trim())
+        .filter(Boolean),
+    )
+
+    return GRADE_OPTIONS.filter((grade) => gradeSet.has(String(grade)))
+  }, [studentDirectory])
+  const availableStudentGroups = useMemo(() => {
+    const groupSet = new Set(
+      studentDirectory
+        .filter((item) => !selectedGrade || String(item.grado) === String(selectedGrade))
+        .map((item) => String(item.grupo || '').trim())
+        .filter(Boolean),
+    )
+
+    return GROUP_OPTIONS.filter((group) => groupSet.has(String(group)))
+  }, [selectedGrade, studentDirectory])
 
   const selectedUserIds = useMemo(
     () => Object.keys(selectedUsers).filter((uid) => selectedUsers[uid]),
     [selectedUsers],
+  )
+  const selectableUserIds = useMemo(
+    () =>
+      users
+        .filter((item) => {
+          const meta = attendanceMetaByUid[item.id] || {}
+          return !meta.hasReportedAbsence && !meta.alreadyMarkedToday
+        })
+        .map((item) => item.id),
+    [attendanceMetaByUid, users],
   )
 
   const filteredUsers = useMemo(() => {
@@ -160,8 +225,8 @@ function AsistenciaPage() {
   }, [userSearch, users])
 
   const allSelected = useMemo(
-    () => users.length > 0 && selectedUserIds.length === users.length,
-    [selectedUserIds.length, users.length],
+    () => selectableUserIds.length > 0 && selectableUserIds.every((uid) => selectedUsers[uid]),
+    [selectableUserIds, selectedUsers],
   )
 
   const anySelected = selectedUserIds.length > 0
@@ -181,6 +246,38 @@ function AsistenciaPage() {
       setCustomRoles([])
     } finally {
       setLoadingRoles(false)
+    }
+  }, [userNitRut])
+
+  const loadStudentDirectory = useCallback(async () => {
+    if (!userNitRut) {
+      setStudentDirectory([])
+      return
+    }
+
+    try {
+      const snapshot = await getDocs(
+        query(
+          collection(db, 'users'),
+          where('nitRut', '==', userNitRut),
+          where('role', '==', 'estudiante'),
+        ),
+      )
+
+      const mapped = snapshot.docs
+        .map((docSnapshot) => {
+          const data = docSnapshot.data() || {}
+          return {
+            grado: String(data.profile?.grado || '').trim(),
+            grupo: String(data.profile?.grupo || '').trim(),
+            estado: String(resolveUserStatus(data) || '').trim().toLowerCase(),
+          }
+        })
+        .filter((item) => item.estado !== 'inactivo')
+
+      setStudentDirectory(mapped)
+    } catch {
+      setStudentDirectory([])
     }
   }, [userNitRut])
 
@@ -237,11 +334,13 @@ function AsistenciaPage() {
     if (!selectedRole) {
       setMarkedUsers(new Set())
       setAttendanceByUid({})
+      setAttendanceMetaByUid({})
       return
     }
     if (selectedRole === 'estudiante' && (!selectedGrade || !selectedGroup)) {
       setMarkedUsers(new Set())
       setAttendanceByUid({})
+      setAttendanceMetaByUid({})
       return
     }
 
@@ -250,6 +349,7 @@ function AsistenciaPage() {
       const snapshot = await getDocs(query(collection(db, 'asistencias'), where('nitRut', '==', userNitRut)))
       const next = new Set()
       const nextByUid = {}
+      const nextMetaByUid = {}
       snapshot.docs.forEach((docSnapshot) => {
         const data = docSnapshot.data()
         const uid = String(data?.uid || '')
@@ -263,10 +363,19 @@ function AsistenciaPage() {
 
         const status = String(data.asistencia || '').trim().toLowerCase() === 'no' ? 'No' : 'Si'
         nextByUid[uid] = status
+        nextMetaByUid[uid] = {
+          tipoMarcacion: String(data.tipoMarcacion || '').trim().toLowerCase(),
+          hasReportedAbsence:
+            Boolean(data.bloqueoAsistencia) ||
+            Boolean(String(data.inasistenciaId || '').trim()) ||
+            String(data.tipoMarcacion || '').trim().toLowerCase() === 'inasistencia',
+          alreadyMarkedToday: status === 'Si',
+        }
         if (status === 'Si') next.add(uid)
       })
       setMarkedUsers(next)
       setAttendanceByUid(nextByUid)
+      setAttendanceMetaByUid(nextMetaByUid)
     } catch {
       // Keep whatever we currently show; a query failure (index/permissions) should not blank the UI.
     }
@@ -277,12 +386,16 @@ function AsistenciaPage() {
       setUsers([])
       setSelectedUsers({})
       setMarkedUsers(new Set())
+      setAttendanceByUid({})
+      setAttendanceMetaByUid({})
       return
     }
     if (selectedRole === 'estudiante' && (!selectedGrade || !selectedGroup)) {
       setUsers([])
       setSelectedUsers({})
       setMarkedUsers(new Set())
+      setAttendanceByUid({})
+      setAttendanceMetaByUid({})
       return
     }
 
@@ -329,6 +442,7 @@ function AsistenciaPage() {
       setSelectedUsers({})
       setMarkedUsers(new Set())
       setAttendanceByUid({})
+      setAttendanceMetaByUid({})
       setFeedback('No fue posible cargar los usuarios para el rol seleccionado.')
     } finally {
       setLoadingUsers(false)
@@ -338,7 +452,8 @@ function AsistenciaPage() {
   useEffect(() => {
     if (!userNitRut) return
     loadRoles()
-  }, [loadRoles, userNitRut])
+    loadStudentDirectory()
+  }, [loadRoles, loadStudentDirectory, userNitRut])
 
   useEffect(() => {
     setFeedback('')
@@ -347,6 +462,7 @@ function AsistenciaPage() {
     setSelectedUsers({})
     setMarkedUsers(new Set())
     setAttendanceByUid({})
+    setAttendanceMetaByUid({})
     if (selectedRole !== 'estudiante') {
       setSelectedGrade('')
       setSelectedGroup('')
@@ -354,26 +470,42 @@ function AsistenciaPage() {
   }, [selectedRole])
 
   useEffect(() => {
+    if (selectedRole !== 'estudiante') return
+    if (selectedGrade && !availableStudentGrades.includes(selectedGrade)) {
+      setSelectedGrade('')
+    }
+  }, [availableStudentGrades, selectedGrade, selectedRole])
+
+  useEffect(() => {
+    if (selectedRole !== 'estudiante') return
+    if (selectedGroup && !availableStudentGroups.includes(selectedGroup)) {
+      setSelectedGroup('')
+    }
+  }, [availableStudentGroups, selectedGroup, selectedRole])
+
+  useEffect(() => {
     loadUsersForRole()
   }, [loadUsersForRole])
 
   useEffect(() => {
     if (!selectAllRef.current) return
-    selectAllRef.current.indeterminate = selectedUserIds.length > 0 && selectedUserIds.length < users.length
-  }, [selectedUserIds.length, users.length])
+    const selectedSelectableCount = selectableUserIds.filter((uid) => selectedUsers[uid]).length
+    selectAllRef.current.indeterminate =
+      selectedSelectableCount > 0 && selectedSelectableCount < selectableUserIds.length
+  }, [selectableUserIds, selectedUsers])
 
   const handleToggleSelectAll = (checked) => {
-    if (!users.length) return
+    if (!selectableUserIds.length) return
     if (checked) {
-      setSelectedUsers(users.reduce((acc, item) => ({ ...acc, [item.id]: true }), {}))
+      setSelectedUsers(selectableUserIds.reduce((acc, uid) => ({ ...acc, [uid]: true }), {}))
     } else {
       setSelectedUsers({})
     }
   }
 
   const handleMarkAllSelected = () => {
-    if (!users.length) return
-    setSelectedUsers(users.reduce((acc, item) => ({ ...acc, [item.id]: true }), {}))
+    if (!selectableUserIds.length) return
+    setSelectedUsers(selectableUserIds.reduce((acc, uid) => ({ ...acc, [uid]: true }), {}))
   }
 
   const handleUnmarkAllSelected = () => {
@@ -404,10 +536,26 @@ function AsistenciaPage() {
       const batchSize = 12
       const allUserIds = users.map((u) => u.id)
       const selectedSet = new Set(uidsToMark)
+      const blockedSelected = uidsToMark.filter((uid) => {
+        const meta = attendanceMetaByUid[uid] || {}
+        return meta.hasReportedAbsence || meta.alreadyMarkedToday
+      })
+
+      if (blockedSelected.length > 0) {
+        setFeedback('No se puede marcar asistencia para usuarios con inasistencia reportada o ya marcados hoy.')
+        return
+      }
 
       // If all selected are marked, the action becomes "desmarcar": force selected to No.
       const desiredByUid = {}
       allUserIds.forEach((uid) => {
+        const meta = attendanceMetaByUid[uid] || {}
+        const currentStatus = attendanceByUid[uid] || (markedUsers.has(uid) ? 'Si' : '-')
+
+        if (meta.hasReportedAbsence || meta.alreadyMarkedToday) {
+          desiredByUid[uid] = currentStatus
+          return
+        }
         if (allSelectedAreMarked) {
           desiredByUid[uid] = selectedSet.has(uid) ? 'No' : 'No'
           return
@@ -415,10 +563,15 @@ function AsistenciaPage() {
         desiredByUid[uid] = selectedSet.has(uid) ? 'Si' : 'No'
       })
 
-      const writes = allUserIds.map((uid) => ({
-        uid,
-        asistencia: desiredByUid[uid],
-      }))
+      const writes = allUserIds
+        .filter((uid) => {
+          const currentStatus = attendanceByUid[uid] || (markedUsers.has(uid) ? 'Si' : '-')
+          return desiredByUid[uid] !== currentStatus
+        })
+        .map((uid) => ({
+          uid,
+          asistencia: desiredByUid[uid],
+        }))
 
       const tasks = []
       chunk(writes, batchSize).forEach((group) => {
@@ -450,13 +603,20 @@ function AsistenciaPage() {
 
       const nextByUid = {}
       const nextMarked = new Set()
+      const nextMetaByUid = {}
       allUserIds.forEach((uid) => {
         const status = desiredByUid[uid]
         nextByUid[uid] = status
+        nextMetaByUid[uid] = {
+          ...(attendanceMetaByUid[uid] || {}),
+          alreadyMarkedToday: status === 'Si',
+          hasReportedAbsence: Boolean(attendanceMetaByUid[uid]?.hasReportedAbsence),
+        }
         if (status === 'Si') nextMarked.add(uid)
       })
       setAttendanceByUid(nextByUid)
       setMarkedUsers(nextMarked)
+      setAttendanceMetaByUid(nextMetaByUid)
 
       await loadMarkedUsers()
       setFeedback(allSelectedAreMarked ? 'Asistencia desmarcada.' : 'Asistencia marcada.')
@@ -469,7 +629,7 @@ function AsistenciaPage() {
 
   const applyAttendanceToggle = async () => {
     if (!anySelected) {
-      if (users.length === 0) {
+      if (selectableUserIds.length === 0) {
         setFeedback('No hay usuarios para marcar.')
         return
       }
@@ -513,6 +673,15 @@ function AsistenciaPage() {
       })
 
       setAttendanceByUid((prev) => ({ ...prev, [uid]: 'No' }))
+      setAttendanceMetaByUid((prev) => ({
+        ...prev,
+        [uid]: {
+          ...(prev[uid] || {}),
+          alreadyMarkedToday: false,
+          hasReportedAbsence: false,
+          tipoMarcacion: 'manual',
+        },
+      }))
       setMarkedUsers((prev) => {
         const next = new Set(prev)
         next.delete(uid)
@@ -523,6 +692,79 @@ function AsistenciaPage() {
       setFeedback('No fue posible borrar la asistencia.')
     } finally {
       setDeletingUid('')
+    }
+  }
+
+  const handleViewAttendanceHistory = async (item) => {
+    setHistoryTarget(item)
+    setAttendanceHistory([])
+    setHistoryModalOpen(true)
+    setHistoryLoading(true)
+    try {
+      const snapshot = await getDocs(
+        query(
+          collection(db, 'asistencias'),
+          where('nitRut', '==', userNitRut),
+          where('uid', '==', item.id),
+        ),
+      )
+
+      const history = snapshot.docs
+        .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+        .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')))
+        .slice(0, 10)
+
+      const markerUids = [...new Set(history.map((row) => String(row.marcadoPorUid || '').trim()).filter(Boolean))]
+      const markerEntries = await Promise.all(
+        markerUids.map(async (uid) => {
+          try {
+            const userSnap = await getDoc(doc(db, 'users', uid))
+            if (userSnap.exists()) {
+              const name = buildDirectoryDisplayName(userSnap.data())
+              if (name) return [uid, name]
+            }
+          } catch {
+            // Ignore and continue with employees fallback.
+          }
+
+          try {
+            const employeeSnap = await getDoc(doc(db, 'empleados', uid))
+            if (employeeSnap.exists()) {
+              const name = buildDirectoryDisplayName(employeeSnap.data())
+              if (name) return [uid, name]
+            }
+          } catch {
+            // Ignore and fall back to stored marker data.
+          }
+
+          return [uid, '']
+        }),
+      )
+
+      const markerNameByUid = new Map(markerEntries)
+
+      const resolvedHistory = history.map((row) => {
+        const explicitName = String(row.marcadoPorNombre || '').trim()
+        const markerUid = String(row.marcadoPorUid || '').trim()
+        const resolvedMarkerName =
+          (explicitName && !looksLikeEmail(explicitName) ? explicitName : '') ||
+          markerNameByUid.get(markerUid) ||
+          explicitName ||
+          row.marcadoPorNumeroDocumento ||
+          markerUid ||
+          '-'
+
+        return {
+          ...row,
+          resolvedMarkerName,
+        }
+      })
+
+      setAttendanceHistory(resolvedHistory)
+    } catch {
+      setAttendanceHistory([])
+    } finally {
+      setHistoryLoading(false)
     }
   }
 
@@ -570,11 +812,14 @@ function AsistenciaPage() {
                   <select
                     id="attendance-grade"
                     value={selectedGrade}
-                    onChange={(event) => setSelectedGrade(event.target.value)}
+                    onChange={(event) => {
+                      setSelectedGrade(event.target.value)
+                      setSelectedGroup('')
+                    }}
                     disabled={!canUseAttendance}
                   >
                     <option value="">Selecciona grado</option>
-                    {GRADE_OPTIONS.map((opt) => (
+                    {availableStudentGrades.map((opt) => (
                       <option key={opt} value={opt}>
                         {opt}
                       </option>
@@ -587,10 +832,10 @@ function AsistenciaPage() {
                     id="attendance-group"
                     value={selectedGroup}
                     onChange={(event) => setSelectedGroup(event.target.value)}
-                    disabled={!canUseAttendance}
+                    disabled={!canUseAttendance || !selectedGrade}
                   >
                     <option value="">Selecciona grupo</option>
-                    {GROUP_OPTIONS.map((opt) => (
+                    {availableStudentGroups.map((opt) => (
                       <option key={opt} value={opt}>
                         {opt}
                       </option>
@@ -652,7 +897,7 @@ function AsistenciaPage() {
                             type="checkbox"
                             checked={allSelected}
                             onChange={(event) => handleToggleSelectAll(event.target.checked)}
-                            disabled={!canUseAttendance || saving}
+                            disabled={!canUseAttendance || saving || selectableUserIds.length === 0}
                             aria-label="Seleccionar todos"
                           />
                         </th>
@@ -661,6 +906,7 @@ function AsistenciaPage() {
                         <th>Nombres</th>
                         <th>Apellidos</th>
                         <th>Asistencia hoy</th>
+                        <th>Inasistencia reportada</th>
                         <th>Acciones</th>
                       </tr>
                     </thead>
@@ -669,24 +915,30 @@ function AsistenciaPage() {
                         const checked = Boolean(selectedUsers[item.id])
                         const todayStatus = attendanceByUid[item.id] || (markedUsers.has(item.id) ? 'Si' : '-')
                         const isMarked = todayStatus === 'Si'
+                        const attendanceMeta = attendanceMetaByUid[item.id] || {}
+                        const hasReportedAbsence = Boolean(attendanceMeta.hasReportedAbsence)
+                        const isBlockedForManualMark = hasReportedAbsence || Boolean(attendanceMeta.alreadyMarkedToday)
                         const initials = `${String(item.nombres || '').trim()[0] || ''}${String(item.apellidos || '').trim()[0] || ''}`
                           .toUpperCase()
                           .slice(0, 2) || 'US'
 
                         return (
-                          <tr key={item.id} className={isMarked ? 'attendance-row-marked' : ''}>
-                            <td>
+                          <tr
+                            key={item.id}
+                            className={hasReportedAbsence ? 'attendance-row-absence' : isMarked ? 'attendance-row-marked' : ''}
+                          >
+                            <td data-label="Seleccionar">
                               <input
                                 type="checkbox"
                                 checked={checked}
                                 onChange={(event) =>
                                   setSelectedUsers((prev) => ({ ...prev, [item.id]: event.target.checked }))
                                 }
-                                disabled={!canUseAttendance || saving}
+                                disabled={!canUseAttendance || saving || isBlockedForManualMark}
                                 aria-label={`Seleccionar ${item.nombres} ${item.apellidos}`}
                               />
                             </td>
-                            <td>
+                            <td data-label="Foto">
                               {item.avatarUrl ? (
                                 <img
                                   className="attendance-avatar"
@@ -699,31 +951,44 @@ function AsistenciaPage() {
                                 </div>
                               )}
                             </td>
-                            <td>{item.numeroDocumento}</td>
-                            <td>{item.nombres}</td>
-                            <td>{item.apellidos}</td>
-                            <td>{todayStatus}</td>
-                            <td>
-                              {todayStatus === 'Si' ? (
+                            <td data-label="Documento">{item.numeroDocumento}</td>
+                            <td data-label="Nombres">{item.nombres}</td>
+                            <td data-label="Apellidos">{item.apellidos}</td>
+                            <td data-label="Asistencia hoy">{todayStatus}</td>
+                            <td data-label="Inasistencia reportada">{hasReportedAbsence ? 'Si' : 'No'}</td>
+                            <td data-label="Acciones">
+                              <div className="student-actions attendance-action-list">
                                 <button
                                   type="button"
-                                  className="button small danger icon-action-button"
-                                  onClick={() => handleDeleteAttendanceForUid(item.id)}
-                                  disabled={!canDeleteAttendance || saving || deletingUid === item.id}
-                                  title="Borrar asistencia"
-                                  aria-label="Borrar asistencia"
+                                  className="button secondary small icon-action-button"
+                                  onClick={() => handleViewAttendanceHistory(item)}
+                                  disabled={saving}
+                                  title="Ver asistencia"
+                                  aria-label="Ver asistencia"
                                 >
-                                  {deletingUid === item.id ? (
-                                    '...'
-                                  ) : (
-                                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                                      <path d="M7 21a2 2 0 0 1-2-2V7h14v12a2 2 0 0 1-2 2H7Zm3-3h2V10h-2v8Zm4 0h2V10h-2v8ZM9 4h6l1 1h4v2H4V5h4l1-1Z" />
-                                    </svg>
-                                  )}
+                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 5c5.5 0 9.7 4.3 11 6.8.1.1.1.4 0 .5C21.7 14.7 17.5 19 12 19S2.3 14.7 1 12.3a.6.6 0 0 1 0-.5C2.3 9.3 6.5 5 12 5Zm0 2C8.1 7 4.9 9.8 3.2 12 4.9 14.2 8.1 17 12 17s7.1-2.8 8.8-5C19.1 9.8 15.9 7 12 7Zm0 1.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5Zm0 2A1.5 1.5 0 1 0 13.5 12 1.5 1.5 0 0 0 12 10.5Z" />
+                                  </svg>
                                 </button>
-                              ) : (
-                                <span className="roles-no-actions">-</span>
-                              )}
+                                {todayStatus === 'Si' ? (
+                                  <button
+                                    type="button"
+                                    className="button small danger icon-action-button"
+                                    onClick={() => handleDeleteAttendanceForUid(item.id)}
+                                    disabled={!canDeleteAttendance || saving || deletingUid === item.id}
+                                    title="Borrar asistencia"
+                                    aria-label="Borrar asistencia"
+                                  >
+                                    {deletingUid === item.id ? (
+                                      '...'
+                                    ) : (
+                                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M7 21a2 2 0 0 1-2-2V7h14v12a2 2 0 0 1-2 2H7Zm3-3h2V10h-2v8Zm4 0h2V10h-2v8ZM9 4h6l1 1h4v2H4V5h4l1-1Z" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                ) : null}
+                              </div>
                             </td>
                           </tr>
                         )
@@ -737,7 +1002,7 @@ function AsistenciaPage() {
                     type="button"
                     className="button"
                     onClick={applyAttendanceToggle}
-                    disabled={!canUseAttendance || saving || users.length === 0}
+                    disabled={!canUseAttendance || saving || selectableUserIds.length === 0}
                   >
                     {saving ? 'Procesando...' : actionLabel}
                   </button>
@@ -761,7 +1026,7 @@ function AsistenciaPage() {
             </button>
             <h3>Confirmar marcacion</h3>
             <p>
-              No seleccionaste ningun usuario. Se marcara asistencia a todos los registros mostrados en la lista.
+              No seleccionaste ningun usuario. Se marcara asistencia a todos los registros habilitados en la lista.
             </p>
             <div className="modal-actions">
               <button type="button" className="button secondary" onClick={() => setConfirmMarkAllOpen(false)}>
@@ -772,13 +1037,65 @@ function AsistenciaPage() {
                 className="button"
                 onClick={async () => {
                   setConfirmMarkAllOpen(false)
-                  await applyAttendanceToggleWithSelectedIds(users.map((u) => u.id))
+                  await applyAttendanceToggleWithSelectedIds(selectableUserIds)
                 }}
                 disabled={saving}
               >
                 Confirmar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {historyModalOpen && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card attendance-history-modal" role="dialog" aria-modal="true" aria-label="Ver asistencia">
+            <button
+              type="button"
+              className="modal-close-icon"
+              aria-label="Cerrar"
+              onClick={() => setHistoryModalOpen(false)}
+            >
+              x
+            </button>
+            <h3>Ver asistencia</h3>
+            <p>
+              Ultimas 10 asistencias de <strong>{historyTarget ? `${historyTarget.nombres} ${historyTarget.apellidos}` : 'este usuario'}</strong>.
+            </p>
+
+            {historyLoading ? (
+              <p>Cargando historial...</p>
+            ) : attendanceHistory.length === 0 ? (
+              <p>No hay asistencias registradas para mostrar.</p>
+            ) : (
+              <div className="students-table-wrap">
+                <table className="students-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Asistió</th>
+                      <th>Rol</th>
+                      <th>Grado</th>
+                      <th>Grupo</th>
+                      <th>Marcado por</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendanceHistory.map((row) => (
+                      <tr key={row.id}>
+                        <td data-label="Fecha">{formatAttendanceDate(row.fecha)}</td>
+                        <td data-label="Asistió">{row.asistencia || '-'}</td>
+                        <td data-label="Rol">{row.role || '-'}</td>
+                        <td data-label="Grado">{row.grado || '-'}</td>
+                        <td data-label="Grupo">{row.grupo || '-'}</td>
+                        <td data-label="Marcado por">{row.resolvedMarkerName || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

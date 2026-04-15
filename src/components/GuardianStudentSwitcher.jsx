@@ -25,7 +25,9 @@ function GuardianStudentSwitcher({
           ) : (
             linkedStudents.map((student) => (
               <option key={student.studentUid} value={student.studentUid}>
-                {student.studentName || 'Estudiante'}{student.studentGrade ? ` · ${student.studentGrade}` : ''}{student.studentGroup ? `-${student.studentGroup}` : ''}
+                {student.studentName || 'Estudiante'}
+                {student.studentGrade ? ` - ${student.studentGrade}` : ''}
+                {student.studentGroup ? ` / ${student.studentGroup}` : ''}
               </option>
             ))
           )}

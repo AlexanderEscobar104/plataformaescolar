@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { db, functions } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import useGuardianPortal from '../../hooks/useGuardianPortal'
 import GuardianStudentSwitcher from '../../components/GuardianStudentSwitcher'
+import { getBoldReturnAttemptId, hasBoldReturnParams, openBoldCheckout } from '../../utils/boldCheckout'
+import { hasEpaycoReturnParams, openEpaycoCheckout, resolveEpaycoReturnMessage } from '../../utils/epaycoCheckout'
 import { downloadPaymentReceiptPdf } from '../../utils/paymentReceipts'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import { resolveChargeStatus, STUDENT_BILLING_COLLECTION } from '../../utils/studentBilling'
+import { hasWompiReturnParams, openWompiCheckout, resolveWompiReturnMessage } from '../../utils/wompiCheckout'
 
 function formatCurrency(value) {
   const amount = Number(value)
@@ -29,7 +33,9 @@ function isAnnulledCharge(item) {
 }
 
 function GuardianPaymentsPage() {
-  const { userNitRut, hasPermission } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { userNitRut, hasPermission, hasPlanModule } = useAuth()
   const {
     loading: portalLoading,
     error: portalError,
@@ -49,6 +55,11 @@ function GuardianPaymentsPage() {
   const [plantelData, setPlantelData] = useState(null)
   const [receiptSignatures, setReceiptSignatures] = useState([])
   const [issuingReceiptId, setIssuingReceiptId] = useState('')
+  const [onlinePaymentChargeId, setOnlinePaymentChargeId] = useState('')
+  const [paymentPlatforms, setPaymentPlatforms] = useState({ epayco: { enabled: false }, wompi: { enabled: false }, bold: { enabled: false } })
+  const canUseEpayco = hasPlanModule('pagos-plataformas-epayco')
+  const canUseWompi = hasPlanModule('pagos-plataformas-wompi')
+  const canUseBold = hasPlanModule('pagos-plataformas-bold')
 
   const loadData = useCallback(async () => {
     if (!userNitRut || !canViewPayments) {
@@ -120,6 +131,58 @@ function GuardianPaymentsPage() {
     loadData()
   }, [loadData])
 
+  useEffect(() => {
+    const isBoldReturn = hasBoldReturnParams(location.search)
+    const isEpaycoReturn = hasEpaycoReturnParams(location.search)
+    const isWompiReturn = hasWompiReturnParams(location.search)
+    if (!isBoldReturn && !isEpaycoReturn && !isWompiReturn) return
+
+    const handleReturn = async () => {
+      if (isBoldReturn) {
+        try {
+          const attemptId = getBoldReturnAttemptId(location.search)
+          const finalizeBoldCheckout = httpsCallable(functions, 'finalizeBoldCheckout')
+          const response = await finalizeBoldCheckout({ attemptId })
+          const result = response?.data || {}
+          setFeedback(result.message || 'Regresaste desde Bold. Estamos confirmando el pago.')
+        } catch {
+          setFeedback('Regresaste desde Bold, pero no fue posible confirmar el pago en este momento.')
+        }
+      } else {
+        const nextMessage = isEpaycoReturn
+          ? resolveEpaycoReturnMessage(location.search)
+          : resolveWompiReturnMessage(location.search)
+        if (nextMessage) {
+          setFeedback(nextMessage)
+        }
+      }
+
+      navigate(location.pathname, { replace: true })
+      await loadData().catch(() => {})
+    }
+
+    handleReturn().catch(() => {})
+  }, [loadData, location.pathname, location.search, navigate])
+
+  useEffect(() => {
+    const loadPaymentPlatforms = async () => {
+      try {
+        const getPaymentPlatformSettings = httpsCallable(functions, 'getPaymentPlatformSettings')
+        const response = await getPaymentPlatformSettings()
+        const data = response?.data || {}
+        setPaymentPlatforms({
+          epayco: canUseEpayco ? data.epayco || { enabled: false } : { enabled: false },
+          wompi: canUseWompi ? data.wompi || { enabled: false } : { enabled: false },
+          bold: canUseBold ? data.bold || { enabled: false } : { enabled: false },
+        })
+      } catch {
+        setPaymentPlatforms({ epayco: { enabled: false }, wompi: { enabled: false }, bold: { enabled: false } })
+      }
+    }
+
+    loadPaymentPlatforms()
+  }, [canUseBold, canUseEpayco, canUseWompi])
+
   const estimatedTotal = useMemo(
     () => charges.reduce((sum, item) => (isAnnulledCharge(item) ? sum : sum + (Number(item.totalAmount) || 0)), 0),
     [charges],
@@ -164,6 +227,90 @@ function GuardianPaymentsPage() {
       setIssuingReceiptId('')
     }
   }, [charges, createOfficialReceipt, loadData, plantelData, receiptSignatures, userNitRut])
+
+  const handleStartEpaycoPayment = useCallback(async (charge) => {
+    if (!charge?.id) return
+    if (isAnnulledCharge(charge)) {
+      setFeedback('Este cargo esta anulado y no admite pagos en linea.')
+      return
+    }
+    if ((Number(charge.balance) || 0) <= 0) {
+      setFeedback('Este cargo ya no tiene saldo pendiente.')
+      return
+    }
+
+    try {
+      setOnlinePaymentChargeId(charge.id)
+      setFeedback('')
+      const createEpaycoCheckout = httpsCallable(functions, 'createEpaycoCheckout')
+      const response = await createEpaycoCheckout({ chargeId: charge.id })
+      const checkout = response?.data?.checkout || null
+      if (!checkout) {
+        throw new Error('No fue posible preparar el checkout.')
+      }
+      await openEpaycoCheckout(checkout)
+    } catch {
+      setFeedback('No fue posible iniciar el pago en linea.')
+    } finally {
+      setOnlinePaymentChargeId('')
+    }
+  }, [])
+
+  const handleStartWompiPayment = useCallback(async (charge) => {
+    if (!charge?.id) return
+    if (isAnnulledCharge(charge)) {
+      setFeedback('Este cargo esta anulado y no admite pagos en linea.')
+      return
+    }
+    if ((Number(charge.balance) || 0) <= 0) {
+      setFeedback('Este cargo ya no tiene saldo pendiente.')
+      return
+    }
+
+    try {
+      setOnlinePaymentChargeId(charge.id)
+      setFeedback('')
+      const createWompiCheckout = httpsCallable(functions, 'createWompiCheckout')
+      const response = await createWompiCheckout({ chargeId: charge.id })
+      const widget = response?.data?.widget || null
+      if (!widget) {
+        throw new Error('No fue posible preparar el checkout.')
+      }
+      await openWompiCheckout(widget)
+    } catch {
+      setFeedback('No fue posible iniciar el pago en linea con Wompi.')
+    } finally {
+      setOnlinePaymentChargeId('')
+    }
+  }, [])
+
+  const handleStartBoldPayment = useCallback(async (charge) => {
+    if (!charge?.id) return
+    if (isAnnulledCharge(charge)) {
+      setFeedback('Este cargo esta anulado y no admite pagos en linea.')
+      return
+    }
+    if ((Number(charge.balance) || 0) <= 0) {
+      setFeedback('Este cargo ya no tiene saldo pendiente.')
+      return
+    }
+
+    try {
+      setOnlinePaymentChargeId(charge.id)
+      setFeedback('')
+      const createBoldCheckout = httpsCallable(functions, 'createBoldCheckout')
+      const response = await createBoldCheckout({ chargeId: charge.id })
+      const checkout = response?.data?.checkout || null
+      if (!checkout?.url) {
+        throw new Error('No fue posible preparar el checkout.')
+      }
+      openBoldCheckout(checkout)
+    } catch {
+      setFeedback('No fue posible iniciar el pago en linea con Bold.')
+    } finally {
+      setOnlinePaymentChargeId('')
+    }
+  }, [])
 
   if (!canViewPayments) {
     return (
@@ -233,6 +380,7 @@ function GuardianPaymentsPage() {
                 <th>Pagado</th>
                 <th>Saldo</th>
                 <th>Estado</th>
+                <th>Pago en linea</th>
               </tr>
             </thead>
             <tbody>
@@ -245,6 +393,44 @@ function GuardianPaymentsPage() {
                   <td data-label="Pagado">{formatCurrency(item.amountPaid)}</td>
                   <td data-label="Saldo">{formatCurrency(item.balance)}</td>
                   <td data-label="Estado">{item.resolvedStatus || '-'}</td>
+                  <td data-label="Pago en linea">
+                    {isAnnulledCharge(item) || (Number(item.balance) || 0) <= 0 ? (
+                      <span>{isAnnulledCharge(item) ? 'No disponible' : 'Pagado'}</span>
+                    ) : (
+                      <div className="member-module-actions" style={{ justifyContent: 'flex-start' }}>
+                        {paymentPlatforms.epayco?.enabled && (
+                          <button
+                            type="button"
+                            className="button small"
+                            onClick={() => handleStartEpaycoPayment(item)}
+                            disabled={onlinePaymentChargeId === item.id}
+                          >
+                            {onlinePaymentChargeId === item.id ? 'Abriendo...' : 'ePayco'}
+                          </button>
+                        )}
+                        {paymentPlatforms.wompi?.enabled && (
+                          <button
+                            type="button"
+                            className="button secondary small"
+                            onClick={() => handleStartWompiPayment(item)}
+                            disabled={onlinePaymentChargeId === item.id}
+                          >
+                            {onlinePaymentChargeId === item.id ? 'Abriendo...' : 'Wompi'}
+                          </button>
+                        )}
+                        {paymentPlatforms.bold?.enabled && (
+                          <button
+                            type="button"
+                            className="button secondary small"
+                            onClick={() => handleStartBoldPayment(item)}
+                            disabled={onlinePaymentChargeId === item.id}
+                          >
+                            {onlinePaymentChargeId === item.id ? 'Abriendo...' : 'Pagar con Bold'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

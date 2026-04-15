@@ -26,6 +26,15 @@ function formatRelativeConversationTime(value) {
   return date.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' })
 }
 
+const LANGUAGE_LABELS = {
+  es: 'Español',
+  en: 'English',
+}
+
+function formatLanguageLabel(value) {
+  return LANGUAGE_LABELS[String(value || '').trim().toLowerCase()] || String(value || '').trim().toUpperCase() || 'Idioma'
+}
+
 function WhatsAppInboxPage() {
   const { user, userNitRut, hasPermission } = useAuth()
   const canViewModule = hasPermission(PERMISSION_KEYS.WHATSAPP_MODULE_VIEW)
@@ -79,6 +88,7 @@ function WhatsAppInboxPage() {
         item.recipientName,
         item.recipientPhone,
         item.templateName,
+        item.templateLanguage,
         item.messageBody,
       ]
         .join(' ')
@@ -344,6 +354,7 @@ function WhatsAppInboxPage() {
                       <div className="whatsapp-bubble-meta">
                         <span>{formatDateTime(item.createdAt)}</span>
                         <span>{isInbound ? 'Entrante' : item.status || 'pendiente'}</span>
+                        {!isInbound && item.templateLanguage ? <span>{formatLanguageLabel(item.templateLanguage)}</span> : null}
                       </div>
                       {!isInbound && (item.deliveredAt || item.readAt || item.errorMessage) ? (
                         <div className="whatsapp-bubble-status">

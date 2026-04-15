@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cotizacion Comercial Edupleace</title>
+  <style>
+    :root {
+      --primary: #0f4c5c;
+      --primary-soft: #eaf4f6;
+      --accent: #d17a22;
+      --text: #1f2933;
+      --muted: #52606d;
+      --border: #d9e2ec;
+      --bg: #f7fafc;
+      --white: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.45;
+    }
+    .page {
+      max-width: 1080px;
+      margin: 24px auto;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 16px 40px rgba(15, 76, 92, 0.08);
+    }
+    .hero {
+      padding: 28px 42px 24px;
+      background: linear-gradient(135deg, var(--primary) 0%, #16697a 60%, #1e7f8f 100%);
+      color: var(--white);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+    .brand img {
+      width: 220px;
+      max-width: 100%;
+      background: rgba(255,255,255,0.96);
+      border-radius: 16px;
+      padding: 10px 14px;
+    }
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.1;
+    }
+    .hero p {
+      margin: 0;
+      max-width: 760px;
+      font-size: 15px;
+      color: rgba(255, 255, 255, 0.92);
+    }
+    .meta {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+      font-size: 13px;
+    }
+    .meta span {
+      padding: 8px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .section {
+      padding: 28px 42px 0;
+    }
+    .section h2 {
+      margin: 0 0 10px;
+      color: var(--primary);
+      font-size: 22px;
+    }
+    .section p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 13px;
+      table-layout: fixed;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 12px;
+      vertical-align: top;
+      text-align: left;
+      word-wrap: break-word;
+    }
+    th {
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    td strong { color: var(--primary); }
+    .note-box {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #9a3412;
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      background: #fcfeff;
+    }
+    .card h3 {
+      margin: 0 0 10px;
+      color: var(--primary);
+      font-size: 16px;
+    }
+    .card ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .card li + li { margin-top: 6px; }
+    .modules td:first-child {
+      width: 18%;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .footer {
+      padding: 28px 42px 36px;
+    }
+    .footer p {
+      margin: 0 0 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    @media print {
+      body { background: #ffffff; }
+      .page {
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="brand">
+        <img src="public/logo_plataforma_digital.png" alt="Logo Edupleace" />
+      </div>
+      <h1>Cotizacion Comercial</h1>
+      <p>
+        Propuesta referencial de licenciamiento mensual e implementacion para Edupleace,
+        bajo un modelo SaaS por estudiante activo con planes escalables por modulos.
+      </p>
+      <div class="meta">
+        <span>Moneda: COP</span>
+        <span>Modelo: Cargo fijo mensual + valor por estudiante</span>
+        <span>Vigencia sugerida: 30 dias</span>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Planes Comerciales</h2>
+      <p>
+        La facturacion principal se realiza por estudiante activo matriculado. Los acudientes se incluyen
+        sin costo adicional y los usuarios internos van cubiertos hasta el limite de cada plan.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>Cargo fijo mensual</th>
+            <th>Valor por estudiante</th>
+            <th>Ideal para</th>
+            <th>Usuarios incluidos</th>
+            <th>Implementacion</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Esencial</strong></td>
+            <td><strong>COP 350.000</strong></td>
+            <td><strong>Desde COP 3.000</strong></td>
+            <td>100 a 300 estudiantes</td>
+            <td>Hasta 25 profesores y 8 directivos o administrativos. Acudientes incluidos.</td>
+            <td><strong>COP 4.000.000 a 7.000.000</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Academico</strong></td>
+            <td><strong>COP 500.000</strong></td>
+            <td><strong>Desde COP 3.800</strong></td>
+            <td>200 a 600 estudiantes</td>
+            <td>Hasta 45 profesores y 12 directivos o administrativos. Acudientes incluidos.</td>
+            <td><strong>COP 7.000.000 a 12.000.000</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Institucional</strong></td>
+            <td><strong>COP 750.000</strong></td>
+            <td><strong>Desde COP 4.500</strong></td>
+            <td>300 a 900 estudiantes</td>
+            <td>Hasta 70 profesores y 20 directivos o administrativos. Acudientes incluidos.</td>
+            <td><strong>COP 10.000.000 a 18.000.000</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Integral</strong></td>
+            <td><strong>COP 1.100.000</strong></td>
+            <td><strong>Desde COP 5.500</strong></td>
+            <td>400 a 1.500 o mas</td>
+            <td>Hasta 100 profesores y 30 directivos o administrativos. Acudientes incluidos.</td>
+            <td><strong>COP 15.000.000 a 30.000.000</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note-box">&iquest;Qu&eacute; pagar&iacute;as mensual?: <strong>cargo fijo mensual + (numero de estudiantes activos x tarifa del plan)</strong>.</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Modulos Por Plan</h2>
+      <table class="modules">
+        <tbody>
+          <tr>
+            <td>Esencial</td>
+            <td>Estudiantes, profesores, directivos, usuarios, datos del plantel, mensajes, notificaciones y roles basicos.</td>
+          </tr>
+          <tr>
+            <td>Academico</td>
+            <td>Todo el plan Esencial mas tareas, evaluaciones, asistencia, inasistencias, horarios, asignaturas, boletines y certificados.</td>
+          </tr>
+          <tr>
+            <td>Institucional</td>
+            <td>Todo el plan Academico mas empleados, permisos, roles avanzados, reportes, circulares, anuncios, portal de acudientes y configuraciones institucionales.</td>
+          </tr>
+          <tr>
+            <td>Integral</td>
+            <td>Todo el plan Institucional mas pagos, caja, items de cobro, datos de cobro, servicios complementarios, admisiones CRM y comunicaciones premium.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>Servicios y Extras</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>Extras mensuales</h3>
+          <ul>
+            <li>Paquete de 10 usuarios administrativos extra: COP 200.000 a 300.000 / mes.</li>
+            <li>Paquete de 20 docentes extra: COP 250.000 a 400.000 / mes.</li>
+            <li>Sede adicional: COP 300.000 a 700.000 / mes.</li>
+            <li>Soporte prioritario: COP 300.000 a 800.000 / mes.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Servicios adicionales</h3>
+          <ul>
+            <li>Migracion de datos: desde COP 1.500.000.</li>
+            <li>Capacitacion adicional: COP 250.000 a 400.000 por sesion.</li>
+            <li>Personalizaciones o nuevos desarrollos: cotizacion separada.</li>
+            <li>SMS, WhatsApp y pasarela de pagos: se cobran segun consumo o tarifa del proveedor.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Condiciones Comerciales</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>Incluye</h3>
+          <ul>
+            <li>Acceso a la plataforma segun el plan contratado.</li>
+            <li>Soporte funcional basico.</li>
+            <li>Mantenimiento correctivo y actualizaciones menores.</li>
+            <li>Parametrizacion inicial segun el alcance acordado.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>No incluye</h3>
+          <ul>
+            <li>Comisiones de recaudo de pasarelas de pago.</li>
+            <li>Consumo de SMS, WhatsApp o correo transaccional fuera de lo pactado.</li>
+            <li>Desarrollos a la medida no contemplados en el plan.</li>
+            <li>Migraciones complejas o carga masiva extraordinaria sin evaluacion previa.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="footer">
+      <p>Nuestros planes inician desde COP 3.000 por estudiante al mes, mas un cargo fijo mensual segun el alcance funcional y el tamano de la operacion institucional.</p>
+      <p>Esta cotizacion es referencial y puede ajustarse segun el numero de estudiantes, usuarios internos, sedes, personalizacion e integraciones requeridas.</p>
+    </section>
+  </main>
+</body>
+</html>
+
+
+
+

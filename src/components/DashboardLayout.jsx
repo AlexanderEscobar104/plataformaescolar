@@ -149,6 +149,22 @@ function ChevronIcon() {
   )
 }
 
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.43 1.41-1.41-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z" />
+    </svg>
+  )
+}
+
+function filterSidebarItems(items, searchQuery, groupLabel = '') {
+  if (!searchQuery) return items
+  return items.filter((item) => {
+    const haystack = `${item.label} ${item.to} ${groupLabel}`.toLowerCase()
+    return haystack.includes(searchQuery)
+  })
+}
+
 const mainItemsBase = [
   { label: 'Inicio', to: '/dashboard', Icon: HomeIcon },
 ]
@@ -167,6 +183,10 @@ function DashboardLayout() {
     hasPermission,
     userPermissions,
     userNitRut,
+    hasPlanModule,
+    currentPlan,
+    planStatus,
+    planModuleAccessBlocked,
     userRole: authUserRole,
     userProfile,
   } = useAuth()
@@ -178,6 +198,7 @@ function DashboardLayout() {
   const [unreadToast, setUnreadToast] = useState('')
   const [todayEventsToast, setTodayEventsToast] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [menuSearch, setMenuSearch] = useState('')
   const [academicMenuOpen, setAcademicMenuOpen] = useState(false)
   const [reportMenuOpen, setReportMenuOpen] = useState(false)
   const [memberMenuOpen, setMemberMenuOpen] = useState(false)
@@ -188,17 +209,52 @@ function DashboardLayout() {
   const [performanceMenuOpen, setPerformanceMenuOpen] = useState(false)
   const [paymentsMenuOpen, setPaymentsMenuOpen] = useState(false)
   const [configMenuOpen, setConfigMenuOpen] = useState(false)
+  const sidebarRef = useRef(null)
   const [modalAnnouncementsQueue, setModalAnnouncementsQueue] = useState([])
   const [modalAnnouncementIndex, setModalAnnouncementIndex] = useState(0)
   const [modalParticipationQueue, setModalParticipationQueue] = useState([])
   const [modalParticipationIndex, setModalParticipationIndex] = useState(0)
   const isGuardianUser = userRole === 'acudiente'
+  const planRestrictedHome = isGuardianUser ? '/dashboard/acudiente' : '/dashboard'
+  const shouldRestrictMenusByPlan = Boolean(planModuleAccessBlocked)
 
   useEffect(() => {
     if (isGuardianUser && location.pathname === '/dashboard') {
       navigate('/dashboard/acudiente', { replace: true })
     }
   }, [isGuardianUser, location.pathname, navigate])
+
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (!menuOpen) return undefined
+
+    const handlePointerDown = (event) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (sidebarRef.current?.contains(target)) return
+      setMenuOpen(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [menuOpen])
+
+  useEffect(() => {
+    if (!shouldRestrictMenusByPlan) return
+
+    const allowedPaths = new Set([
+      planRestrictedHome,
+      '/dashboard/cambiar-clave',
+      '/dashboard/creacion-planes',
+      '/dashboard/tipo-reportes',
+    ])
+    if (!allowedPaths.has(location.pathname)) {
+      navigate(planRestrictedHome, { replace: true })
+    }
+  }, [location.pathname, navigate, planRestrictedHome, shouldRestrictMenusByPlan])
 
   // Exclusive accordion: opening one group closes all others
   const openSidebarGroup = (group) => {
@@ -219,32 +275,44 @@ function DashboardLayout() {
   const canCreateStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_CREATE)
   const canEditStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_EDIT)
   const canDeleteStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_DELETE)
-  const canAccessStudentsModule = canViewStudents || canCreateStudents || canEditStudents || canDeleteStudents
+  const canAccessStudentsModule =
+    (canViewStudents || canCreateStudents || canEditStudents || canDeleteStudents) &&
+    hasPlanModule('crear-estudiantes')
   const canViewTeachers = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_VIEW)
   const canCreateTeachers = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_CREATE)
   const canEditTeachers = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_EDIT)
   const canDeleteTeachers = hasPermission(PERMISSION_KEYS.MEMBERS_PROFESORES_DELETE)
-  const canAccessTeachersModule = canViewTeachers || canCreateTeachers || canEditTeachers || canDeleteTeachers
+  const canAccessTeachersModule =
+    (canViewTeachers || canCreateTeachers || canEditTeachers || canDeleteTeachers) &&
+    hasPlanModule('crear-profesores')
   const canViewDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_VIEW)
   const canCreateDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_CREATE)
   const canEditDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_EDIT)
   const canDeleteDirectivos = hasPermission(PERMISSION_KEYS.MEMBERS_DIRECTIVOS_DELETE)
-  const canAccessDirectivosModule = canViewDirectivos || canCreateDirectivos || canEditDirectivos || canDeleteDirectivos
+  const canAccessDirectivosModule =
+    (canViewDirectivos || canCreateDirectivos || canEditDirectivos || canDeleteDirectivos) &&
+    hasPlanModule('crear-directivos')
   const canViewAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_VIEW)
   const canCreateAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_CREATE)
   const canEditAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_EDIT)
   const canDeleteAspirantes = hasPermission(PERMISSION_KEYS.MEMBERS_ASPIRANTES_DELETE)
-  const canAccessAspirantesModule = canViewAspirantes || canCreateAspirantes || canEditAspirantes || canDeleteAspirantes
+  const canAccessAspirantesModule =
+    (canViewAspirantes || canCreateAspirantes || canEditAspirantes || canDeleteAspirantes) &&
+    hasPlanModule('crear-aspirantes')
   const canViewGuardians = hasPermission(PERMISSION_KEYS.MEMBERS_ACUDIENTES_VIEW)
   const canCreateGuardians = hasPermission(PERMISSION_KEYS.MEMBERS_ACUDIENTES_CREATE)
   const canEditGuardians = hasPermission(PERMISSION_KEYS.MEMBERS_ACUDIENTES_EDIT)
   const canDeleteGuardians = hasPermission(PERMISSION_KEYS.MEMBERS_ACUDIENTES_DELETE)
-  const canAccessGuardiansModule = canViewGuardians || canCreateGuardians || canEditGuardians || canDeleteGuardians
+  const canAccessGuardiansModule =
+    (canViewGuardians || canCreateGuardians || canEditGuardians || canDeleteGuardians) &&
+    hasPlanModule('acudientes')
   const canViewEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_VIEW)
   const canCreateEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_CREATE)
   const canEditEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_EDIT)
   const canDeleteEmployees = hasPermission(PERMISSION_KEYS.EMPLEADOS_DELETE)
-  const canAccessEmployeesModule = canViewEmployees || canCreateEmployees || canEditEmployees || canDeleteEmployees
+  const canAccessEmployeesModule =
+    (canViewEmployees || canCreateEmployees || canEditEmployees || canDeleteEmployees) &&
+    hasPlanModule('empleados')
   const canManageAcademicSetup = hasPermission(PERMISSION_KEYS.ACADEMIC_SETUP_MANAGE)
   const canManageEvents = hasPermission(PERMISSION_KEYS.EVENTS_MANAGE) || canManageAcademicSetup
   const canManageCirculars = hasPermission(PERMISSION_KEYS.CIRCULARS_MANAGE) || canManageAcademicSetup
@@ -317,6 +385,10 @@ function DashboardLayout() {
   const canManageSubjects = hasPermission(PERMISSION_KEYS.SUBJECTS_MANAGE) || canManageAcademicSetup
   const canViewPlantelData = hasPermission(PERMISSION_KEYS.PLANTEL_VIEW)
   const canManagePermissions = hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
+  const canViewSedes =
+    hasPermission(PERMISSION_KEYS.SEDES_VIEW) ||
+    hasPermission(PERMISSION_KEYS.SEDES_MANAGE) ||
+    canManagePermissions
   const canManageChatSettings = hasPermission(PERMISSION_KEYS.CONFIG_CHAT_MANAGE) || canManagePermissions
   const canManageMailServerSettings =
     hasPermission(PERMISSION_KEYS.CONFIG_MAIL_SERVER_MANAGE) || canManagePermissions
@@ -336,18 +408,38 @@ function DashboardLayout() {
   const canManageRoles = hasPermission(PERMISSION_KEYS.ROLES_MANAGE)
   const canManageAnnouncements = hasPermission(PERMISSION_KEYS.ANNOUNCEMENTS_MANAGE)
   const canBulkUpload = hasPermission(PERMISSION_KEYS.BULK_UPLOAD_MANAGE)
-  const canViewTasks = hasPermission(PERMISSION_KEYS.TASKS_VIEW)
-  const canViewEvaluations = hasPermission(PERMISSION_KEYS.EVALUATIONS_VIEW)
-  const canViewInasistencias = hasPermission(PERMISSION_KEYS.INASISTENCIAS_VIEW)
-  const canViewAsistencia = hasPermission(PERMISSION_KEYS.ASISTENCIA_VIEW) || canViewInasistencias
-  const canViewPermisos = hasPermission(PERMISSION_KEYS.PERMISOS_VIEW)
-  const canViewReports = hasPermission(PERMISSION_KEYS.REPORTS_VIEW)
-  const canViewManagementDashboard = hasPermission(PERMISSION_KEYS.MANAGEMENT_DASHBOARD_VIEW)
-  const canViewPayments = hasPermission(PERMISSION_KEYS.PAYMENTS_VIEW)
+  const canViewTasks = hasPermission(PERMISSION_KEYS.TASKS_VIEW) && hasPlanModule('tareas')
+  const canViewEvaluations = hasPermission(PERMISSION_KEYS.EVALUATIONS_VIEW) && hasPlanModule('evaluaciones')
+  const canViewInasistencias = hasPermission(PERMISSION_KEYS.INASISTENCIAS_VIEW) && hasPlanModule('inasistencias')
+  const canViewAsistencia = (hasPermission(PERMISSION_KEYS.ASISTENCIA_VIEW) && hasPlanModule('asistencia')) || canViewInasistencias
+  const canViewPermisos = hasPermission(PERMISSION_KEYS.PERMISOS_VIEW) && hasPlanModule('solicitar-permiso')
+  const canViewReports = hasPermission(PERMISSION_KEYS.REPORTS_VIEW) && hasPlanModule('reportes')
+  const canViewSystemAudit =
+    (hasPermission(PERMISSION_KEYS.REPORTS_VIEW) && hasPlanModule('auditoria-sistema')) ||
+    hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE) ||
+    hasPermission(PERMISSION_KEYS.USERS_VIEW)
+  const canViewManagementDashboard = hasPermission(PERMISSION_KEYS.MANAGEMENT_DASHBOARD_VIEW) && hasPlanModule('gerencial')
+  const canViewPayments = hasPermission(PERMISSION_KEYS.PAYMENTS_VIEW) && hasPlanModule('pagos')
+  const canViewPaymentPlatformsModule =
+    hasPlanModule('pagos-plataformas-dataico') ||
+    hasPlanModule('pagos-plataformas-epayco') ||
+    hasPlanModule('pagos-plataformas-wompi') ||
+    hasPlanModule('pagos-plataformas-bold')
+  const canViewDynamicMemberMenus = hasPlanModule('miembros-dinamicos')
+  const canViewChangePasswordModule = hasPlanModule('cambiar-clave')
+  const canViewAttendanceConfigModule = hasPlanModule('configuracion-asistencia')
+  const canViewLinkedDevicesModule = hasPlanModule('dispositivos-vinculados')
+  const canViewAnnouncementsModule = hasPlanModule('anuncios')
   const canViewAdmissions = hasPermission(PERMISSION_KEYS.ADMISSIONS_CRM_VIEW)
   const canManageAdmissions = hasPermission(PERMISSION_KEYS.ADMISSIONS_CRM_MANAGE)
   const canManageAdmissionsFollowups = hasPermission(PERMISSION_KEYS.ADMISSIONS_FOLLOWUPS_MANAGE)
   const canViewAdmissionsReports = hasPermission(PERMISSION_KEYS.ADMISSIONS_REPORTS_VIEW)
+  const canViewMatriculas =
+    hasPermission(PERMISSION_KEYS.MATRICULAS_VIEW) ||
+    hasPermission(PERMISSION_KEYS.MATRICULAS_MANAGE) ||
+    hasPermission(PERMISSION_KEYS.ADMISSIONS_CONVERT_ENROLLMENT) ||
+    hasPermission(PERMISSION_KEYS.ADMISSIONS_CRM_VIEW) ||
+    canManagePermissions
   const canAccessAdmissionsModule = canViewAdmissions || canManageAdmissions || canManageAdmissionsFollowups
   const canViewWhatsAppModule = hasPermission(PERMISSION_KEYS.WHATSAPP_MODULE_VIEW)
   const canSendWhatsApp = hasPermission(PERMISSION_KEYS.WHATSAPP_SEND)
@@ -385,16 +477,54 @@ function DashboardLayout() {
   const canManagePaymentsResoluciones = hasPermission(PERMISSION_KEYS.PAYMENTS_RESOLUCIONES_MANAGE)
   const canManagePaymentsCaja = hasPermission(PERMISSION_KEYS.PAYMENTS_CAJA_MANAGE)
   const canManagePaymentsDatosCobro = hasPermission(PERMISSION_KEYS.PAYMENTS_DATOS_COBRO_MANAGE)
+  const canManagePaymentsPlatforms = hasPermission(PERMISSION_KEYS.PAYMENTS_PLATFORMS_MANAGE)
   const canManagePaymentsItemCobro = hasPermission(PERMISSION_KEYS.PAYMENTS_ITEM_COBRO_MANAGE)
   const canManagePaymentsServiciosComplementarios = hasPermission(PERMISSION_KEYS.PAYMENTS_SERVICIOS_COMPLEMENTARIOS_MANAGE)
-  const canViewSchedule = hasPermission(PERMISSION_KEYS.SCHEDULE_VIEW) || hasPermission(PERMISSION_KEYS.SCHEDULE_EDIT)
+  const canViewInicioModule = hasPlanModule('inicio')
+  const canViewWhatsAppInboxModule = hasPlanModule('whatsapp-bandeja')
+  const canViewWhatsAppTemplatesModule = hasPlanModule('whatsapp-plantillas')
+  const canViewWhatsAppCampaignsModule = hasPlanModule('whatsapp-campanas')
+  const canViewWhatsAppSettingsModule = hasPlanModule('whatsapp-configuracion')
+  const canSendSmsModule = hasPlanModule('sms-enviar')
+  const canViewSmsHistoryModule = hasPlanModule('sms-historial')
+  const canViewSmsTemplatesModule = hasPlanModule('sms-plantillas')
+  const canViewSmsSettingsModule = hasPlanModule('sms-configuracion')
+  const canViewVotacionesModule = hasPlanModule('votaciones')
+  const canViewEncuestasModule = hasPlanModule('encuestas')
+  const canViewDesempenoDashboardModule = hasPlanModule('desempeno')
+  const canViewDesempenoPeriodsModule = hasPlanModule('desempeno-periodos')
+  const canViewDesempenoTemplatesModule = hasPlanModule('desempeno-plantillas')
+  const canViewDesempenoAssignmentsModule = hasPlanModule('desempeno-asignaciones')
+  const canViewDesempenoEvaluationsModule = hasPlanModule('desempeno-evaluaciones')
+  const canViewDesempenoResultsModule = hasPlanModule('desempeno-resultados')
+  const canViewDesempenoImprovementModule = hasPlanModule('desempeno-planes-mejora')
+  const canViewDesempenoHistoryModule = hasPlanModule('desempeno-historial')
+  const canViewDesempenoReportsModule = hasPlanModule('desempeno-reportes')
+  const canViewMyDesempenoModule = hasPlanModule('desempeno-mi-desempeno')
+  const canViewDatosPlantelModule = hasPlanModule('datos-plantel')
+  const canViewSedesModule = hasPlanModule('sedes')
+  const canViewTipoCertificadoModule = hasPlanModule('tipo-certificado')
+  const canViewPlantillasCertificadosModule = hasPlanModule('plantillas-certificados')
+  const canViewBoletinesStructureModule = hasPlanModule('estructura-boletines')
+  const canViewTipoInasistenciasModule = hasPlanModule('tipo-inasistencias')
+  const canViewTipoPermisosModule = hasPlanModule('tipo-permisos')
+  const canViewPermissionsModule = hasPlanModule('permisos')
+  const canViewChatSettingsModule = hasPlanModule('configuracion-chat')
+  const canViewMailServerSettingsModule = hasPlanModule('datos-servidor-correo')
+  const canViewMessageSettingsModule = hasPlanModule('configuracion-mensajes')
+  const canViewNotificationSettingsModule = hasPlanModule('configuracion-notificaciones')
+  const canViewReportTypesModule = hasPlanModule('configuracion-tipos-reporte')
+  const canViewGuardianPaymentsModule = hasPlanModule('pagos')
+  const canViewSchedule = (hasPermission(PERMISSION_KEYS.SCHEDULE_VIEW) || hasPermission(PERMISSION_KEYS.SCHEDULE_EDIT)) && hasPlanModule('horario')
   const canViewCertificados =
-    hasPermission(PERMISSION_KEYS.CERTIFICADOS_VIEW) ||
-    hasPermission(PERMISSION_KEYS.CERTIFICADOS_GENERATE)
+    (hasPermission(PERMISSION_KEYS.CERTIFICADOS_VIEW) ||
+    hasPermission(PERMISSION_KEYS.CERTIFICADOS_GENERATE)) &&
+    hasPlanModule('reconocimientos')
   const canViewBoletines =
-    hasPermission(PERMISSION_KEYS.BOLETINES_VIEW) ||
+    (hasPermission(PERMISSION_KEYS.BOLETINES_VIEW) ||
     hasPermission(PERMISSION_KEYS.BOLETINES_GENERATE) ||
-    hasPermission(PERMISSION_KEYS.BOLETINES_EDIT)
+    hasPermission(PERMISSION_KEYS.BOLETINES_EDIT)) &&
+    hasPlanModule('boletines')
   const canManageCertificadosTemplates =
     hasPermission(PERMISSION_KEYS.CONFIG_CERTIFICADOS_TEMPLATES_MANAGE) || canManagePermissions
   const canManageBoletinesStructure =
@@ -484,10 +614,10 @@ function DashboardLayout() {
     if (canViewBoletines) {
       items.push({ label: 'Boletines', to: '/dashboard/boletines', Icon: ReportsIcon })
     }
-    if (canManageEvents) {
+    if (canManageEvents && hasPlanModule('eventos')) {
       items.push({ label: 'Eventos', to: '/dashboard/eventos', Icon: EvaluationsIcon })
     }
-    if (canManageCirculars) {
+    if (canManageCirculars && hasPlanModule('circulares')) {
       items.push({ label: 'Circulares', to: '/dashboard/circulares', Icon: ReportsIcon })
     }
     return items
@@ -497,12 +627,15 @@ function DashboardLayout() {
     if (!canViewPayments) return []
 
     const items = [{ label: 'Facturacion y recibos', to: '/dashboard/pagos', Icon: PaymentsIcon }]
-    if (canManagePaymentsImpuestos) items.push({ label: 'Impuestos', to: '/dashboard/impuestos', Icon: PaymentsIcon })
-    if (canManagePaymentsResoluciones) items.push({ label: 'Resoluciones', to: '/dashboard/resoluciones', Icon: PaymentsIcon })
-    if (canManagePaymentsCaja) items.push({ label: 'Caja', to: '/dashboard/caja', Icon: PaymentsIcon })
-    if (canManagePaymentsDatosCobro) items.push({ label: 'Datos de cobro', to: '/dashboard/datos-cobro', Icon: GearIcon })
-    if (canManagePaymentsItemCobro) items.push({ label: 'Item de cobro', to: '/dashboard/item-cobro', Icon: PaymentsIcon })
-    if (canManagePaymentsServiciosComplementarios) {
+    if (canManagePaymentsImpuestos && hasPlanModule('impuestos')) items.push({ label: 'Impuestos', to: '/dashboard/impuestos', Icon: PaymentsIcon })
+    if (canManagePaymentsResoluciones && hasPlanModule('resoluciones')) items.push({ label: 'Resoluciones', to: '/dashboard/resoluciones', Icon: PaymentsIcon })
+    if (canManagePaymentsCaja && hasPlanModule('caja')) items.push({ label: 'Caja', to: '/dashboard/caja', Icon: PaymentsIcon })
+    if (canManagePaymentsDatosCobro && hasPlanModule('datos-cobro')) items.push({ label: 'Datos de cobro', to: '/dashboard/datos-cobro', Icon: GearIcon })
+    if (canManagePaymentsPlatforms && canViewPaymentPlatformsModule) {
+      items.push({ label: 'Configuracion de plataformas', to: '/dashboard/pagos/plataformas', Icon: GearIcon })
+    }
+    if (canManagePaymentsItemCobro && hasPlanModule('item-cobro')) items.push({ label: 'Item de cobro', to: '/dashboard/item-cobro', Icon: PaymentsIcon })
+    if (canManagePaymentsServiciosComplementarios && hasPlanModule('servicios-complementarios')) {
       items.push({ label: 'Servicios complementarios', to: '/dashboard/servicios-complementarios', Icon: GearIcon })
     }
     return items
@@ -512,6 +645,8 @@ function DashboardLayout() {
     canManagePaymentsResoluciones,
     canManagePaymentsCaja,
     canManagePaymentsDatosCobro,
+    canManagePaymentsPlatforms,
+    canViewPaymentPlatformsModule,
     canManagePaymentsItemCobro,
     canManagePaymentsServiciosComplementarios,
   ])
@@ -554,6 +689,7 @@ function DashboardLayout() {
 
     items.push(
       ...customMemberRoles
+        .filter(() => canViewDynamicMemberMenus)
         .filter((r) => hasPermission(buildDynamicMemberPermissionKey(r.id, 'view')))
         .map((r) => ({
           label: `Crear ${r.name}`,
@@ -575,82 +711,103 @@ function DashboardLayout() {
     canAccessStudentsModule,
     canAccessTeachersModule,
     customMemberRoles,
+    canViewDynamicMemberMenus,
     hasAnyDynamicMemberPermission,
     userRole,
     hasPermission,
   ])
 
   const admissionsItems = useMemo(() => {
-    if (!canAccessAdmissionsModule && !canViewAdmissionsReports) return []
+    if (!canAccessAdmissionsModule && !canViewAdmissionsReports && !canViewMatriculas) return []
 
     const items = []
-    if (canAccessAdmissionsModule) items.push({ label: 'CRM Admisiones', to: '/dashboard/admisiones/crm', Icon: ReportsIcon })
-    if (canAccessAdmissionsModule) items.push({ label: 'Leads Admisiones', to: '/dashboard/admisiones/leads', Icon: StudentsIcon })
-    if (canAccessAdmissionsModule) items.push({ label: 'Agenda admisiones', to: '/dashboard/admisiones/agenda', Icon: ScheduleIcon })
-    if (canViewAdmissionsReports || canAccessAdmissionsModule) items.push({ label: 'Reportes admisiones', to: '/dashboard/admisiones/reportes', Icon: ReportsIcon })
+    if (canAccessAdmissionsModule && hasPlanModule('admisiones-crm')) items.push({ label: 'CRM Admisiones', to: '/dashboard/admisiones/crm', Icon: ReportsIcon })
+    if (canAccessAdmissionsModule && hasPlanModule('admisiones-leads')) items.push({ label: 'Leads Admisiones', to: '/dashboard/admisiones/leads', Icon: StudentsIcon })
+    if (canAccessAdmissionsModule && hasPlanModule('admisiones-agenda')) items.push({ label: 'Agenda admisiones', to: '/dashboard/admisiones/agenda', Icon: ScheduleIcon })
+    if ((canViewAdmissionsReports || canAccessAdmissionsModule) && hasPlanModule('admisiones-reportes')) items.push({ label: 'Reportes admisiones', to: '/dashboard/admisiones/reportes', Icon: ReportsIcon })
+    if (canViewMatriculas && hasPlanModule('matriculas')) items.push({ label: 'Matriculas', to: '/dashboard/matriculas', Icon: StudentsIcon })
     return items
-  }, [canAccessAdmissionsModule, canViewAdmissionsReports])
+  }, [canAccessAdmissionsModule, canViewAdmissionsReports, canViewMatriculas])
 
   const whatsappItems = useMemo(() => {
     if (!canViewWhatsAppModule) return []
 
     const items = []
-    items.push({ label: 'Bandeja WhatsApp', to: '/dashboard/whatsapp/bandeja', Icon: MessageIcon })
-    if (canManageWhatsAppTemplates) items.push({ label: 'Plantillas WhatsApp', to: '/dashboard/whatsapp/plantillas', Icon: MessageIcon })
-    if (canManageWhatsAppCampaigns) items.push({ label: 'Campanas WhatsApp', to: '/dashboard/whatsapp/campanas', Icon: MessageIcon })
-    if (canManageWhatsAppSettings) items.push({ label: 'Configuracion WhatsApp', to: '/dashboard/whatsapp/configuracion', Icon: GearIcon })
+    if (canViewWhatsAppInboxModule) items.push({ label: 'Bandeja WhatsApp', to: '/dashboard/whatsapp/bandeja', Icon: MessageIcon })
+    if (canManageWhatsAppTemplates && canViewWhatsAppTemplatesModule) items.push({ label: 'Plantillas WhatsApp', to: '/dashboard/whatsapp/plantillas', Icon: MessageIcon })
+    if (canManageWhatsAppCampaigns && canViewWhatsAppCampaignsModule) items.push({ label: 'Campanas WhatsApp', to: '/dashboard/whatsapp/campanas', Icon: MessageIcon })
+    if (canManageWhatsAppSettings && canViewWhatsAppSettingsModule) items.push({ label: 'Configuracion WhatsApp', to: '/dashboard/whatsapp/configuracion', Icon: GearIcon })
     return items
-  }, [canManageWhatsAppCampaigns, canManageWhatsAppSettings, canManageWhatsAppTemplates, canViewWhatsAppModule])
+  }, [
+    canManageWhatsAppCampaigns,
+    canManageWhatsAppSettings,
+    canManageWhatsAppTemplates,
+    canViewWhatsAppCampaignsModule,
+    canViewWhatsAppInboxModule,
+    canViewWhatsAppModule,
+    canViewWhatsAppSettingsModule,
+    canViewWhatsAppTemplatesModule,
+  ])
 
   const smsItems = useMemo(() => {
     if (!canViewSmsModule) return []
 
     const items = []
-    if (canSendSms) items.push({ label: 'Enviar SMS', to: '/dashboard/sms/enviar', Icon: MessageIcon })
-    if (canViewSmsHistory) items.push({ label: 'Historial SMS', to: '/dashboard/sms/historial', Icon: ScheduleIcon })
-    if (canManageSmsTemplates) items.push({ label: 'Plantillas SMS', to: '/dashboard/sms/plantillas', Icon: MessageIcon })
-    if (canManageSmsSettings) items.push({ label: 'Configuracion SMS', to: '/dashboard/sms/configuracion', Icon: GearIcon })
+    if (canSendSms && canSendSmsModule) items.push({ label: 'Enviar SMS', to: '/dashboard/sms/enviar', Icon: MessageIcon })
+    if (canViewSmsHistory && canViewSmsHistoryModule) items.push({ label: 'Historial SMS', to: '/dashboard/sms/historial', Icon: ScheduleIcon })
+    if (canManageSmsTemplates && canViewSmsTemplatesModule) items.push({ label: 'Plantillas SMS', to: '/dashboard/sms/plantillas', Icon: MessageIcon })
+    if (canManageSmsSettings && canViewSmsSettingsModule) items.push({ label: 'Configuracion SMS', to: '/dashboard/sms/configuracion', Icon: GearIcon })
     return items
-  }, [canManageSmsSettings, canManageSmsTemplates, canSendSms, canViewSmsHistory, canViewSmsModule])
+  }, [
+    canManageSmsSettings,
+    canManageSmsTemplates,
+    canSendSms,
+    canSendSmsModule,
+    canViewSmsHistory,
+    canViewSmsHistoryModule,
+    canViewSmsModule,
+    canViewSmsSettingsModule,
+    canViewSmsTemplatesModule,
+  ])
 
   const participationItems = useMemo(() => {
     const items = []
-    if (canManageVotaciones) items.push({ label: 'Votaciones', to: '/dashboard/votaciones', Icon: EvaluationsIcon })
-    if (canManageEncuestas) items.push({ label: 'Encuestas', to: '/dashboard/encuestas', Icon: MessageIcon })
+    if (canManageVotaciones && canViewVotacionesModule) items.push({ label: 'Votaciones', to: '/dashboard/votaciones', Icon: EvaluationsIcon })
+    if (canManageEncuestas && canViewEncuestasModule) items.push({ label: 'Encuestas', to: '/dashboard/encuestas', Icon: MessageIcon })
     return items
-  }, [canManageEncuestas, canManageVotaciones])
+  }, [canManageEncuestas, canManageVotaciones, canViewEncuestasModule, canViewVotacionesModule])
 
   const performanceItems = useMemo(() => {
     if (!canViewDesempenoModule) return []
 
     const items = []
-    if (canViewDesempenoDashboard) items.push({ label: 'Dashboard desempeno', to: '/dashboard/desempeno', Icon: ReportsIcon })
-    if (canViewDesempenoPeriods || canCreateDesempenoPeriods || canEditDesempenoPeriods || canCloseDesempenoPeriods) {
+    if (canViewDesempenoDashboard && canViewDesempenoDashboardModule) items.push({ label: 'Dashboard de desempeño', to: '/dashboard/desempeno', Icon: ReportsIcon })
+    if ((canViewDesempenoPeriods || canCreateDesempenoPeriods || canEditDesempenoPeriods || canCloseDesempenoPeriods) && canViewDesempenoPeriodsModule) {
       items.push({ label: 'Periodos', to: '/dashboard/desempeno/periodos', Icon: ScheduleIcon })
     }
-    if (canViewDesempenoTemplates || canCreateDesempenoTemplates || canEditDesempenoTemplates || canDeleteDesempenoTemplates) {
+    if ((canViewDesempenoTemplates || canCreateDesempenoTemplates || canEditDesempenoTemplates || canDeleteDesempenoTemplates) && canViewDesempenoTemplatesModule) {
       items.push({ label: 'Plantillas', to: '/dashboard/desempeno/plantillas', Icon: ReportsIcon })
     }
-    if (canViewDesempenoAssignments || canCreateDesempenoAssignments || canEditDesempenoAssignments || canDeleteDesempenoAssignments) {
+    if ((canViewDesempenoAssignments || canCreateDesempenoAssignments || canEditDesempenoAssignments || canDeleteDesempenoAssignments) && canViewDesempenoAssignmentsModule) {
       items.push({ label: 'Asignaciones', to: '/dashboard/desempeno/asignaciones', Icon: UserIcon })
     }
-    if (canViewDesempenoEvaluations || canCreateDesempenoEvaluations || canEditDesempenoEvaluations || canSubmitDesempenoEvaluations) {
+    if ((canViewDesempenoEvaluations || canCreateDesempenoEvaluations || canEditDesempenoEvaluations || canSubmitDesempenoEvaluations) && canViewDesempenoEvaluationsModule) {
       items.push({ label: 'Evaluaciones', to: '/dashboard/desempeno/evaluaciones', Icon: EvaluationsIcon })
     }
-    if (canViewDesempenoResults || canCreateDesempenoResults || canEditDesempenoResults || canApproveDesempenoResults) {
+    if ((canViewDesempenoResults || canCreateDesempenoResults || canEditDesempenoResults || canApproveDesempenoResults) && canViewDesempenoResultsModule) {
       items.push({ label: 'Resultados', to: '/dashboard/desempeno/resultados', Icon: ReportsIcon })
     }
-    if (canViewDesempenoImprovement || canCreateDesempenoImprovement || canEditDesempenoImprovement || canCloseDesempenoImprovement) {
+    if ((canViewDesempenoImprovement || canCreateDesempenoImprovement || canEditDesempenoImprovement || canCloseDesempenoImprovement) && canViewDesempenoImprovementModule) {
       items.push({ label: 'Planes de mejora', to: '/dashboard/desempeno/planes-mejora', Icon: TasksIcon })
     }
-    if (canViewDesempenoHistory) {
+    if (canViewDesempenoHistory && canViewDesempenoHistoryModule) {
       items.push({ label: 'Historial', to: '/dashboard/desempeno/historial', Icon: ScheduleIcon })
     }
-    if (canViewDesempenoReports || canExportDesempenoReports) {
+    if ((canViewDesempenoReports || canExportDesempenoReports) && canViewDesempenoReportsModule) {
       items.push({ label: 'Reportes', to: '/dashboard/desempeno/reportes', Icon: ReportsIcon })
     }
-    if (canViewMyDesempeno || canSelfEvaluateDesempeno) {
-      items.push({ label: 'Mi desempeno', to: '/dashboard/desempeno/mi-desempeno', Icon: UserIcon })
+    if ((canViewMyDesempeno || canSelfEvaluateDesempeno) && canViewMyDesempenoModule) {
+      items.push({ label: 'Mi desempeño', to: '/dashboard/desempeno/mi-desempeno', Icon: UserIcon })
     }
     return items
   }, [
@@ -679,12 +836,22 @@ function DashboardLayout() {
     canViewDesempenoImprovement,
     canViewDesempenoModule,
     canViewDesempenoPeriods,
+    canViewDesempenoPeriodsModule,
     canViewDesempenoReports,
+    canViewDesempenoReportsModule,
     canViewDesempenoResults,
+    canViewDesempenoResultsModule,
     canViewDesempenoTemplates,
+    canViewDesempenoTemplatesModule,
     canViewMyDesempeno,
+    canViewMyDesempenoModule,
     canSelfEvaluateDesempeno,
     canExportDesempenoReports,
+    canViewDesempenoAssignmentsModule,
+    canViewDesempenoDashboardModule,
+    canViewDesempenoEvaluationsModule,
+    canViewDesempenoHistoryModule,
+    canViewDesempenoImprovementModule,
   ])
 
   const guardianPortalItems = useMemo(() => {
@@ -692,115 +859,149 @@ function DashboardLayout() {
 
     return [
       { label: 'Inicio', to: '/dashboard/acudiente', Icon: HomeIcon },
-      { label: 'Mis estudiantes', to: '/dashboard/acudiente/estudiantes', Icon: StudentsIcon },
-      { label: 'Boletines', to: '/dashboard/acudiente/boletines', Icon: ReportsIcon },
-      { label: 'Asistencia', to: '/dashboard/acudiente/asistencia', Icon: AbsencesIcon },
-      { label: 'Inasistencias', to: '/dashboard/acudiente/inasistencias', Icon: AbsencesIcon },
-      { label: 'Tareas', to: '/dashboard/acudiente/tareas', Icon: TasksIcon },
-      { label: 'Evaluaciones', to: '/dashboard/acudiente/evaluaciones', Icon: EvaluationsIcon },
-      { label: 'Horario', to: '/dashboard/acudiente/horario', Icon: ScheduleIcon },
-      { label: 'Facturacion y recibos', to: '/dashboard/acudiente/pagos', Icon: PaymentsIcon },
-      { label: 'Mensajes', to: '/dashboard/acudiente/mensajes', Icon: MessageIcon },
-      { label: 'Notificaciones', to: '/dashboard/acudiente/notificaciones', Icon: BellIcon },
-      { label: 'Circulares', to: '/dashboard/acudiente/circulares', Icon: ReportsIcon },
-      ...(canViewGuardianVotaciones ? [{ label: 'Votaciones', to: '/dashboard/acudiente/votaciones', Icon: EvaluationsIcon }] : []),
-      ...(canViewGuardianEncuestas ? [{ label: 'Encuestas', to: '/dashboard/acudiente/encuestas', Icon: MessageIcon }] : []),
       { label: 'Mi perfil', to: '/dashboard/acudiente/perfil', Icon: UserIcon },
+      { label: 'Mis estudiantes', to: '/dashboard/acudiente/estudiantes', Icon: StudentsIcon },
+      ...(hasPlanModule('boletines') ? [{ label: 'Boletines', to: '/dashboard/acudiente/boletines', Icon: ReportsIcon }] : []),
+      ...(hasPlanModule('asistencia') ? [{ label: 'Asistencia', to: '/dashboard/acudiente/asistencia', Icon: AbsencesIcon }] : []),
+      ...(hasPlanModule('inasistencias') ? [{ label: 'Inasistencias', to: '/dashboard/acudiente/inasistencias', Icon: AbsencesIcon }] : []),
+      ...(hasPlanModule('tareas') ? [{ label: 'Tareas', to: '/dashboard/acudiente/tareas', Icon: TasksIcon }] : []),
+      ...(hasPlanModule('evaluaciones') ? [{ label: 'Evaluaciones', to: '/dashboard/acudiente/evaluaciones', Icon: EvaluationsIcon }] : []),
+      ...(hasPlanModule('horario') ? [{ label: 'Horario', to: '/dashboard/acudiente/horario', Icon: ScheduleIcon }] : []),
+      ...(canViewGuardianPaymentsModule ? [{ label: 'Pagos', to: '/dashboard/acudiente/pagos', Icon: PaymentsIcon }] : []),
+      ...(hasPlanModule('circulares') ? [{ label: 'Circulares', to: '/dashboard/acudiente/circulares', Icon: ReportsIcon }] : []),
+      ...(canViewGuardianVotaciones && canViewVotacionesModule ? [{ label: 'Votaciones', to: '/dashboard/acudiente/votaciones', Icon: EvaluationsIcon }] : []),
+      ...(canViewGuardianEncuestas && canViewEncuestasModule ? [{ label: 'Encuestas', to: '/dashboard/acudiente/encuestas', Icon: MessageIcon }] : []),
     ]
-  }, [canViewGuardianEncuestas, canViewGuardianVotaciones, isGuardianUser])
+  }, [
+    canViewEncuestasModule,
+    canViewGuardianEncuestas,
+    canViewGuardianPaymentsModule,
+    canViewGuardianVotaciones,
+    canViewVotacionesModule,
+    hasPlanModule,
+    isGuardianUser,
+  ])
 
   const mainItems = useMemo(() => {
-    const items = [...mainItemsBase]
+    const items = canViewInicioModule ? [...mainItemsBase] : []
     if (canViewManagementDashboard) {
       items.push({ label: 'Dashboard gerencial', to: '/dashboard/gerencial', Icon: ReportsIcon })
     }
     return items
-  }, [canViewManagementDashboard])
+  }, [canViewInicioModule, canViewManagementDashboard])
 
   const reportItems = useMemo(() => {
-    return canViewReports ? reportItemsBase : []
-  }, [canViewReports])
+    const items = canViewReports ? [...reportItemsBase] : []
+    if (canViewSystemAudit) {
+      items.push({ label: 'Auditoria del sistema', to: '/dashboard/auditoria-sistema', Icon: ReportsIcon })
+    }
+    return items
+  }, [canViewReports, canViewSystemAudit])
   const configItems = useMemo(() => {
-    const items = [{ label: 'Cambiar clave', to: '/dashboard/cambiar-clave', Icon: GearIcon }]
+    const items = []
 
-    if (canViewPlantelData) {
-      items.push({ label: 'Datos del plantel', to: '/dashboard/datos-plantel', Icon: HomeIcon })
+    if (canViewChangePasswordModule) {
+      items.push({ label: 'Cambiar clave', to: '/dashboard/cambiar-clave', Icon: GearIcon })
     }
 
-    if (canManageAcademicSetup) {
+    if (canViewPlantelData && canViewDatosPlantelModule) {
+      items.push({ label: 'Datos del plantel', to: '/dashboard/datos-plantel', Icon: HomeIcon })
+    }
+    if (canViewSedes && canViewSedesModule) {
+      items.push({ label: 'Sedes', to: '/dashboard/sedes', Icon: HomeIcon })
+    }
+
+    if (canManageAcademicSetup && hasPlanModule('camaras-asistencia')) {
       items.push({ label: 'Lectores de asistencia', to: '/dashboard/camaras-asistencia', Icon: MessageIcon })
     }
 
-    if (canManageTipoCertificado || canManageAcademicSetup) {
+    if ((canManageTipoCertificado || canManageAcademicSetup) && canViewTipoCertificadoModule) {
       items.push({ label: 'Tipo de certificado', to: '/dashboard/tipo-certificado', Icon: ReportsIcon })
     }
-    if (canManageCertificadosTemplates) {
+    if (canManageCertificadosTemplates && canViewPlantillasCertificadosModule) {
       items.push({ label: 'Plantillas de certificados', to: '/dashboard/plantillas-certificados', Icon: ReportsIcon })
     }
-    if (canManageBoletinesStructure) {
+    if (canManageBoletinesStructure && canViewBoletinesStructureModule) {
       items.push({ label: 'Estructura de boletines', to: '/dashboard/estructura-boletines', Icon: ReportsIcon })
     }
 
-    if (canManageSubjects) {
+    if (canManageSubjects && hasPlanModule('crear-asignaturas')) {
       items.push({ label: 'Crear asignaturas', to: '/dashboard/crear-asignaturas', Icon: ReportsIcon })
     }
 
-    if (canBulkUpload) {
+    if (canBulkUpload && hasPlanModule('cargue-masivo')) {
       items.push({ label: 'Cargue masivo', to: '/dashboard/cargue-masivo', Icon: TasksIcon })
     }
 
-    if (canManageTipoInasistencias || canViewInasistencias) {
+    if ((canManageTipoInasistencias || canViewInasistencias) && canViewTipoInasistenciasModule) {
       items.push({ label: 'Tipos de inasistencia', to: '/dashboard/tipo-inasistencias', Icon: AbsencesIcon })
     }
-    if (canManageTipoPermisos || canViewPermisos) {
+    if ((canManageTipoPermisos || canViewPermisos) && canViewTipoPermisosModule) {
       items.push({ label: 'Tipos de permiso', to: '/dashboard/tipo-permisos', Icon: AbsencesIcon })
     }
 
-    if (canManagePermissions) {
+    if (canManagePermissions && canViewPermissionsModule) {
       items.push({ label: 'Permisos', to: '/dashboard/permisos', Icon: UserIcon })
     }
 
-    if (canManageChatSettings) {
+    if (canManageChatSettings && canViewChatSettingsModule) {
       items.push({ label: 'Configuracion de chat', to: '/dashboard/configuracion-chat', Icon: MessageIcon })
     }
-    if (canManageMailServerSettings) {
+    if (canManageMailServerSettings && canViewMailServerSettingsModule) {
       items.push({ label: 'Datos del servidor de correo', to: '/dashboard/datos-servidor-correo', Icon: MessageIcon })
     }
-    if (canManageMessageSettings) {
+    if (canManageMessageSettings && canViewMessageSettingsModule) {
       items.push({ label: 'Configuracion de mensajes', to: '/dashboard/configuracion-mensajes', Icon: MessageIcon })
     }
-    if (canManageNotificationSettings) {
+    if (canManageNotificationSettings && canViewNotificationSettingsModule) {
       items.push({ label: 'Configuracion de notificaciones', to: '/dashboard/configuracion-notificaciones', Icon: BellIcon })
     }
-    if (hasPermission(PERMISSION_KEYS.ASISTENCIA_CONFIG_MANAGE) || canManagePermissions) {
+    if ((hasPermission(PERMISSION_KEYS.ASISTENCIA_CONFIG_MANAGE) || canManagePermissions) && canViewAttendanceConfigModule) {
       items.push({ label: 'Configuracion de asistencia', to: '/dashboard/configuracion-asistencia', Icon: AbsencesIcon })
     }
-    if (canManageReportTypeSettings) {
+    if (canManageReportTypeSettings && canViewReportTypesModule) {
       items.push({ label: 'Configuracion tipos de reporte', to: '/dashboard/configuracion-tipos-reporte', Icon: ReportsIcon })
     }
-    if (canViewLinkedDevices) {
+    if (canViewLinkedDevices && canViewLinkedDevicesModule) {
       items.push({ label: 'Dispositivos vinculados', to: '/dashboard/dispositivos-vinculados', Icon: UserIcon })
     }
 
-    if (canManageRoles) {
+    if (canManageRoles && hasPlanModule('roles')) {
       items.push({ label: 'Roles', to: '/dashboard/roles', Icon: GearIcon })
     }
 
-    if (canManageAnnouncements) {
+    if (canManageAnnouncements && canViewAnnouncementsModule) {
       items.push({ label: 'Anuncios', to: '/dashboard/anuncios', Icon: HomeIcon })
     }
 
-    if (hasPermission(PERMISSION_KEYS.CONFIG_TIPO_EMPLEADO_MANAGE)) {
+    if (hasPermission(PERMISSION_KEYS.CONFIG_TIPO_EMPLEADO_MANAGE) && hasPlanModule('tipo-empleado')) {
       items.push({ label: 'Tipo empleado', to: '/dashboard/tipo-empleado', Icon: UserIcon })
     }
 
-    if (canManageStorage) {
+    if (canManageStorage && hasPlanModule('almacenamiento')) {
       items.push({ label: 'Almacenamiento', to: '/dashboard/almacenamiento', Icon: GearIcon })
     }
 
     return items
   }, [
     canBulkUpload,
+    canViewAnnouncementsModule,
+    canViewAttendanceConfigModule,
+    canViewChangePasswordModule,
+    canViewDatosPlantelModule,
+    canViewSedesModule,
+    canViewBoletinesStructureModule,
+    canViewChatSettingsModule,
+    canViewLinkedDevicesModule,
+    canViewMailServerSettingsModule,
+    canViewMessageSettingsModule,
+    canViewNotificationSettingsModule,
+    canViewPermissionsModule,
+    canViewPlantillasCertificadosModule,
+    canViewReportTypesModule,
+    canViewTipoCertificadoModule,
+    canViewTipoInasistenciasModule,
+    canViewTipoPermisosModule,
     canManageAcademicSetup,
     canManageCirculars,
     canManageChatSettings,
@@ -819,12 +1020,83 @@ function DashboardLayout() {
     canManageTipoInasistencias,
     canManageTipoPermisos,
     canViewPlantelData,
+    canViewSedes,
     canViewLinkedDevices,
     canViewInasistencias,
     canViewPermisos,
     canManageStorage,
     hasPermission,
   ])
+  const menuSearchQuery = menuSearch.trim().toLowerCase()
+  const isSearchingMenus = menuSearchQuery.length > 0
+  const filteredGuardianPortalItems = useMemo(
+    () => filterSidebarItems(guardianPortalItems, menuSearchQuery),
+    [guardianPortalItems, menuSearchQuery],
+  )
+  const filteredMainItems = useMemo(
+    () => filterSidebarItems(mainItems, menuSearchQuery),
+    [mainItems, menuSearchQuery],
+  )
+  const filteredAcademicItems = useMemo(
+    () => filterSidebarItems(academicItems, menuSearchQuery, 'Academico'),
+    [academicItems, menuSearchQuery],
+  )
+  const filteredParticipationItems = useMemo(
+    () => filterSidebarItems(participationItems, menuSearchQuery, 'Participacion'),
+    [participationItems, menuSearchQuery],
+  )
+  const filteredPerformanceItems = useMemo(
+    () => filterSidebarItems(performanceItems, menuSearchQuery, 'Desempeño'),
+    [performanceItems, menuSearchQuery],
+  )
+  const filteredMemberItems = useMemo(
+    () => filterSidebarItems(memberItems, menuSearchQuery, 'Gestion de Miembros'),
+    [memberItems, menuSearchQuery],
+  )
+  const filteredAdmissionsItems = useMemo(
+    () => filterSidebarItems(admissionsItems, menuSearchQuery, 'Admisiones'),
+    [admissionsItems, menuSearchQuery],
+  )
+  const filteredWhatsappItems = useMemo(
+    () => filterSidebarItems(whatsappItems, menuSearchQuery, 'WhatsApp'),
+    [whatsappItems, menuSearchQuery],
+  )
+  const filteredSmsItems = useMemo(
+    () => filterSidebarItems(smsItems, menuSearchQuery, 'SMS'),
+    [smsItems, menuSearchQuery],
+  )
+  const filteredPaymentsItems = useMemo(
+    () => filterSidebarItems(paymentsItems, menuSearchQuery, 'Pagos'),
+    [paymentsItems, menuSearchQuery],
+  )
+  const filteredReportItems = useMemo(
+    () => filterSidebarItems(reportItems, menuSearchQuery, 'Reportes'),
+    [reportItems, menuSearchQuery],
+  )
+  const filteredConfigItems = useMemo(
+    () => filterSidebarItems(configItems, menuSearchQuery, 'Configuracion'),
+    [configItems, menuSearchQuery],
+  )
+  const visibleGuardianPortalItems = shouldRestrictMenusByPlan
+    ? guardianPortalItems.filter((item) => item.to === '/dashboard/acudiente')
+    : filteredGuardianPortalItems
+  const visibleMainItems = shouldRestrictMenusByPlan
+    ? filteredMainItems.filter((item) => item.to === '/dashboard')
+    : filteredMainItems
+  const visibleAcademicItems = shouldRestrictMenusByPlan ? [] : filteredAcademicItems
+  const visibleParticipationItems = shouldRestrictMenusByPlan ? [] : filteredParticipationItems
+  const visiblePerformanceItems = shouldRestrictMenusByPlan ? [] : filteredPerformanceItems
+  const visibleMemberItems = shouldRestrictMenusByPlan ? [] : filteredMemberItems
+  const visibleAdmissionsItems = shouldRestrictMenusByPlan ? [] : filteredAdmissionsItems
+  const visibleWhatsappItems = shouldRestrictMenusByPlan ? [] : filteredWhatsappItems
+  const visibleSmsItems = shouldRestrictMenusByPlan ? [] : filteredSmsItems
+  const visiblePaymentsItems = shouldRestrictMenusByPlan ? [] : filteredPaymentsItems
+  const visibleReportItems = shouldRestrictMenusByPlan
+    ? filteredReportItems.filter((item) => item.to === '/dashboard/tipo-reportes')
+    : filteredReportItems
+  const visibleConfigItems = shouldRestrictMenusByPlan
+    ? filteredConfigItems.filter((item) => item.to === '/dashboard/cambiar-clave')
+    : filteredConfigItems
   const allItems = isGuardianUser
     ? guardianPortalItems
     : [...mainItems, ...paymentsItems, ...academicItems, ...participationItems, ...performanceItems, ...reportItems, ...memberItems, ...admissionsItems, ...whatsappItems, ...smsItems, ...configItems]
@@ -1428,7 +1700,7 @@ function DashboardLayout() {
 
   return (
     <div className="dashboard-shell">
-      <aside className={`sidebar${menuOpen ? ' open' : ''}`}>
+      <aside ref={sidebarRef} className={`sidebar${menuOpen ? ' open' : ''}`}>
         <div className="sidebar-brand">
           <img
             src={brandLogo}
@@ -1438,8 +1710,18 @@ function DashboardLayout() {
           />
         </div>
         <nav className="sidebar-nav">
+          <label className="sidebar-menu-search" htmlFor="sidebar-menu-search">
+            <SearchIcon />
+            <input
+              id="sidebar-menu-search"
+              type="search"
+              value={menuSearch}
+              onChange={(event) => setMenuSearch(event.target.value)}
+              placeholder="Buscar menu..."
+            />
+          </label>
           {isGuardianUser ? (
-            guardianPortalItems.map((item) => (
+            visibleGuardianPortalItems.length > 0 ? visibleGuardianPortalItems.map((item) => (
               <NavLink
                 key={item.to}
                 className={({ isActive }) =>
@@ -1452,10 +1734,12 @@ function DashboardLayout() {
                 <item.Icon />
                 <span>{item.label}</span>
               </NavLink>
-            ))
+            )) : (
+            <p className="sidebar-menu-empty">No se encontraron menus.</p>
+            )
           ) : (
             <>
-              {mainItems.map((item) => (
+              {visibleMainItems.map((item) => (
                 <NavLink
                   key={item.to}
                   className={({ isActive }) =>
@@ -1469,18 +1753,19 @@ function DashboardLayout() {
                   <span>{item.label}</span>
                 </NavLink>
               ))}
+              {visibleAcademicItems.length > 0 && (
               <div className="sidebar-group sidebar-group-members">
                 <button
                   type="button"
-                  className={`sidebar-group-toggle sidebar-group-toggle-members${academicMenuOpen ? ' open' : ''}`}
+                  className={`sidebar-group-toggle sidebar-group-toggle-members${academicMenuOpen || isSearchingMenus ? ' open' : ''}`}
                   onClick={() => openSidebarGroup('academic')}
-                  aria-expanded={academicMenuOpen}
+                  aria-expanded={academicMenuOpen || isSearchingMenus}
                 >
                   <span className="sidebar-group-title">Academico</span>
                   <ChevronIcon />
                 </button>
-                <div className={`sidebar-submenu sidebar-submenu-members${academicMenuOpen ? ' open' : ''}`}>
-                  {academicItems.map((item) => (
+                <div className={`sidebar-submenu sidebar-submenu-members${academicMenuOpen || isSearchingMenus ? ' open' : ''}`}>
+                  {visibleAcademicItems.map((item) => (
                     <NavLink
                       key={item.to}
                       className={({ isActive }) =>
@@ -1495,19 +1780,20 @@ function DashboardLayout() {
                   ))}
                 </div>
               </div>
-              {participationItems.length > 0 && (
+              )}
+              {visibleParticipationItems.length > 0 && (
                 <div className="sidebar-group sidebar-group-members">
                   <button
                     type="button"
-                    className={`sidebar-group-toggle sidebar-group-toggle-members${participationMenuOpen ? ' open' : ''}`}
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${participationMenuOpen || isSearchingMenus ? ' open' : ''}`}
                     onClick={() => openSidebarGroup('participation')}
-                    aria-expanded={participationMenuOpen}
+                    aria-expanded={participationMenuOpen || isSearchingMenus}
                   >
                     <span className="sidebar-group-title">Participacion</span>
                     <ChevronIcon />
                   </button>
-                  <div className={`sidebar-submenu sidebar-submenu-members${participationMenuOpen ? ' open' : ''}`}>
-                    {participationItems.map((item) => (
+                  <div className={`sidebar-submenu sidebar-submenu-members${participationMenuOpen || isSearchingMenus ? ' open' : ''}`}>
+                    {visibleParticipationItems.map((item) => (
                       <NavLink
                         key={item.to}
                         className={({ isActive }) =>
@@ -1523,19 +1809,19 @@ function DashboardLayout() {
                   </div>
                 </div>
               )}
-              {performanceItems.length > 0 && (
+              {visiblePerformanceItems.length > 0 && (
                 <div className="sidebar-group sidebar-group-members">
                   <button
                     type="button"
-                    className={`sidebar-group-toggle sidebar-group-toggle-members${performanceMenuOpen ? ' open' : ''}`}
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${performanceMenuOpen || isSearchingMenus ? ' open' : ''}`}
                     onClick={() => openSidebarGroup('performance')}
-                    aria-expanded={performanceMenuOpen}
+                    aria-expanded={performanceMenuOpen || isSearchingMenus}
                   >
-                    <span className="sidebar-group-title">Desempeno</span>
+                    <span className="sidebar-group-title">Desempeño</span>
                     <ChevronIcon />
                   </button>
-                  <div className={`sidebar-submenu sidebar-submenu-members${performanceMenuOpen ? ' open' : ''}`}>
-                    {performanceItems.map((item) => (
+                  <div className={`sidebar-submenu sidebar-submenu-members${performanceMenuOpen || isSearchingMenus ? ' open' : ''}`}>
+                    {visiblePerformanceItems.map((item) => (
                       <NavLink
                         key={item.to}
                         className={({ isActive }) =>
@@ -1551,19 +1837,19 @@ function DashboardLayout() {
                   </div>
                 </div>
               )}
-              {memberItems.length > 0 && (
+              {visibleMemberItems.length > 0 && (
                 <div className="sidebar-group sidebar-group-members">
                   <button
                     type="button"
-                    className={`sidebar-group-toggle sidebar-group-toggle-members${memberMenuOpen ? ' open' : ''}`}
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${memberMenuOpen || isSearchingMenus ? ' open' : ''}`}
                     onClick={() => openSidebarGroup('member')}
-                    aria-expanded={memberMenuOpen}
+                    aria-expanded={memberMenuOpen || isSearchingMenus}
                   >
                     <span className="sidebar-group-title">Gestion de Miembros</span>
                     <ChevronIcon />
                   </button>
-                  <div className={`sidebar-submenu sidebar-submenu-members${memberMenuOpen ? ' open' : ''}`}>
-                    {memberItems.map((item) => (
+                  <div className={`sidebar-submenu sidebar-submenu-members${memberMenuOpen || isSearchingMenus ? ' open' : ''}`}>
+                    {visibleMemberItems.map((item) => (
                       <NavLink
                         key={item.to}
                         className={({ isActive }) =>
@@ -1579,19 +1865,19 @@ function DashboardLayout() {
                   </div>
                 </div>
               )}
-              {admissionsItems.length > 0 && (
+              {visibleAdmissionsItems.length > 0 && (
                 <div className="sidebar-group sidebar-group-members">
                   <button
                     type="button"
-                    className={`sidebar-group-toggle sidebar-group-toggle-members${admissionsMenuOpen ? ' open' : ''}`}
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${admissionsMenuOpen || isSearchingMenus ? ' open' : ''}`}
                     onClick={() => openSidebarGroup('admissions')}
-                    aria-expanded={admissionsMenuOpen}
+                    aria-expanded={admissionsMenuOpen || isSearchingMenus}
                   >
                     <span className="sidebar-group-title">Admisiones</span>
                     <ChevronIcon />
                   </button>
-                  <div className={`sidebar-submenu sidebar-submenu-members${admissionsMenuOpen ? ' open' : ''}`}>
-                    {admissionsItems.map((item) => (
+                  <div className={`sidebar-submenu sidebar-submenu-members${admissionsMenuOpen || isSearchingMenus ? ' open' : ''}`}>
+                    {visibleAdmissionsItems.map((item) => (
                       <NavLink
                         key={item.to}
                         className={({ isActive }) =>
@@ -1607,19 +1893,19 @@ function DashboardLayout() {
                   </div>
                 </div>
               )}
-              {whatsappItems.length > 0 && (
+              {visibleWhatsappItems.length > 0 && (
                 <div className="sidebar-group sidebar-group-members">
                   <button
                     type="button"
-                    className={`sidebar-group-toggle sidebar-group-toggle-members${whatsAppMenuOpen ? ' open' : ''}`}
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${whatsAppMenuOpen || isSearchingMenus ? ' open' : ''}`}
                     onClick={() => openSidebarGroup('whatsapp')}
-                    aria-expanded={whatsAppMenuOpen}
+                    aria-expanded={whatsAppMenuOpen || isSearchingMenus}
                   >
                     <span className="sidebar-group-title">WhatsApp</span>
                     <ChevronIcon />
                   </button>
-                  <div className={`sidebar-submenu sidebar-submenu-members${whatsAppMenuOpen ? ' open' : ''}`}>
-                    {whatsappItems.map((item) => (
+                  <div className={`sidebar-submenu sidebar-submenu-members${whatsAppMenuOpen || isSearchingMenus ? ' open' : ''}`}>
+                    {visibleWhatsappItems.map((item) => (
                       <NavLink
                         key={item.to}
                         className={({ isActive }) =>
@@ -1635,19 +1921,19 @@ function DashboardLayout() {
                   </div>
                 </div>
               )}
-              {smsItems.length > 0 && (
+              {visibleSmsItems.length > 0 && (
                 <div className="sidebar-group sidebar-group-members">
                   <button
                     type="button"
-                    className={`sidebar-group-toggle sidebar-group-toggle-members${smsMenuOpen ? ' open' : ''}`}
+                    className={`sidebar-group-toggle sidebar-group-toggle-members${smsMenuOpen || isSearchingMenus ? ' open' : ''}`}
                     onClick={() => openSidebarGroup('sms')}
-                    aria-expanded={smsMenuOpen}
+                    aria-expanded={smsMenuOpen || isSearchingMenus}
                   >
                     <span className="sidebar-group-title">SMS</span>
                     <ChevronIcon />
                   </button>
-                  <div className={`sidebar-submenu sidebar-submenu-members${smsMenuOpen ? ' open' : ''}`}>
-                    {smsItems.map((item) => (
+                  <div className={`sidebar-submenu sidebar-submenu-members${smsMenuOpen || isSearchingMenus ? ' open' : ''}`}>
+                    {visibleSmsItems.map((item) => (
                       <NavLink
                         key={item.to}
                         className={({ isActive }) =>
@@ -1663,18 +1949,19 @@ function DashboardLayout() {
                   </div>
                 </div>
               )}
+              {visiblePaymentsItems.length > 0 && (
               <div className="sidebar-group sidebar-group-members">
                 <button
                   type="button"
-                  className={`sidebar-group-toggle sidebar-group-toggle-members${paymentsMenuOpen ? ' open' : ''}`}
+                  className={`sidebar-group-toggle sidebar-group-toggle-members${paymentsMenuOpen || isSearchingMenus ? ' open' : ''}`}
                   onClick={() => openSidebarGroup('payments')}
-                  aria-expanded={paymentsMenuOpen}
+                  aria-expanded={paymentsMenuOpen || isSearchingMenus}
                 >
                   <span className="sidebar-group-title">PAGOS</span>
                   <ChevronIcon />
                 </button>
-                <div className={`sidebar-submenu sidebar-submenu-members${paymentsMenuOpen ? ' open' : ''}`}>
-                  {paymentsItems.map((item) => (
+                <div className={`sidebar-submenu sidebar-submenu-members${paymentsMenuOpen || isSearchingMenus ? ' open' : ''}`}>
+                  {visiblePaymentsItems.map((item) => (
                     <NavLink
                       key={item.to}
                       className={({ isActive }) =>
@@ -1689,18 +1976,20 @@ function DashboardLayout() {
                   ))}
                 </div>
               </div>
+              )}
+              {visibleReportItems.length > 0 && (
               <div className="sidebar-group sidebar-group-members">
                 <button
                   type="button"
-                  className={`sidebar-group-toggle sidebar-group-toggle-members${reportMenuOpen ? ' open' : ''}`}
+                  className={`sidebar-group-toggle sidebar-group-toggle-members${reportMenuOpen || isSearchingMenus ? ' open' : ''}`}
                   onClick={() => openSidebarGroup('report')}
-                  aria-expanded={reportMenuOpen}
+                  aria-expanded={reportMenuOpen || isSearchingMenus}
                 >
                   <span className="sidebar-group-title">Reportes</span>
                   <ChevronIcon />
                 </button>
-                <div className={`sidebar-submenu sidebar-submenu-members${reportMenuOpen ? ' open' : ''}`}>
-                  {reportItems.map((item) => (
+                <div className={`sidebar-submenu sidebar-submenu-members${reportMenuOpen || isSearchingMenus ? ' open' : ''}`}>
+                  {visibleReportItems.map((item) => (
                     <NavLink
                       key={item.to}
                       className={({ isActive }) =>
@@ -1715,18 +2004,20 @@ function DashboardLayout() {
                   ))}
                 </div>
               </div>
+              )}
+              {visibleConfigItems.length > 0 && (
               <div className="sidebar-group sidebar-group-members">
                 <button
                   type="button"
-                  className={`sidebar-group-toggle sidebar-group-toggle-members${configMenuOpen ? ' open' : ''}`}
+                  className={`sidebar-group-toggle sidebar-group-toggle-members${configMenuOpen || isSearchingMenus ? ' open' : ''}`}
                   onClick={() => openSidebarGroup('config')}
-                  aria-expanded={configMenuOpen}
+                  aria-expanded={configMenuOpen || isSearchingMenus}
                 >
                   <span className="sidebar-group-title">Configuracion</span>
                   <ChevronIcon />
                 </button>
-                <div className={`sidebar-submenu sidebar-submenu-members${configMenuOpen ? ' open' : ''}`}>
-                  {configItems.map((item) => (
+                <div className={`sidebar-submenu sidebar-submenu-members${configMenuOpen || isSearchingMenus ? ' open' : ''}`}>
+                  {visibleConfigItems.map((item) => (
                     <NavLink
                       key={item.to}
                       className={({ isActive }) =>
@@ -1741,6 +2032,21 @@ function DashboardLayout() {
                   ))}
                 </div>
               </div>
+              )}
+              {isSearchingMenus &&
+                visibleMainItems.length === 0 &&
+                visibleAcademicItems.length === 0 &&
+                visibleParticipationItems.length === 0 &&
+                visiblePerformanceItems.length === 0 &&
+                visibleMemberItems.length === 0 &&
+                visibleAdmissionsItems.length === 0 &&
+                visibleWhatsappItems.length === 0 &&
+                visibleSmsItems.length === 0 &&
+                visiblePaymentsItems.length === 0 &&
+                visibleReportItems.length === 0 &&
+                visibleConfigItems.length === 0 && (
+                  <p className="sidebar-menu-empty">No se encontraron menus.</p>
+                )}
             </>
           )}
         </nav>
@@ -1763,6 +2069,25 @@ function DashboardLayout() {
       )}
 
       <section className="dashboard-main">
+        {shouldRestrictMenusByPlan && (
+          <div
+            style={{
+              margin: '0 0 16px',
+              padding: '14px 16px',
+              borderRadius: '16px',
+              border: '1px solid rgba(239, 68, 68, 0.18)',
+              background: 'rgba(254, 242, 242, 0.92)',
+              color: '#991b1b',
+            }}
+          >
+            <strong style={{ display: 'block', marginBottom: '4px' }}>
+              Modulos bloqueados por vencimiento del plan
+            </strong>
+            <span style={{ fontSize: '0.95rem' }}>
+              El plan {currentPlan?.nombrePlan || 'actual'} esta en estado {String(planStatus || 'vencido').toLowerCase()} y tiene activado el bloqueo de modulos al vencer.
+            </span>
+          </div>
+        )}
         <header className="topbar">
           <div>
             <button

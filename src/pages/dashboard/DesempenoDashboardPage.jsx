@@ -86,7 +86,7 @@ function DesempenoDashboardPage() {
       <div className="dashboard-module-hero">
         <div className="dashboard-module-hero-copy">
           <span className="dashboard-module-eyebrow">Desempeno</span>
-          <h2>Dashboard de desempeno</h2>
+          <h2>Dashboard de desempeño</h2>
           <p>Primera fase del modulo para preparar periodos y plantillas de evaluacion de desempeno por cargo.</p>
           {!canView && <p className="feedback">No tienes permisos para ver este modulo.</p>}
           {feedback && <p className="feedback">{feedback}</p>}

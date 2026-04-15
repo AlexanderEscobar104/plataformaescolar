@@ -142,6 +142,27 @@ function buildTrendMeta(current, previous) {
   }
 }
 
+function safePercentage(numerator, denominator, digits = 1) {
+  const top = Number(numerator) || 0
+  const bottom = Number(denominator) || 0
+  if (bottom <= 0) return 0
+  return Number(((top / bottom) * 100).toFixed(digits))
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function formatPlanStatus(status) {
+  const normalized = String(status || '').trim().toLowerCase()
+  if (normalized === 'trial') return 'prueba'
+  if (normalized === 'grace') return 'cortesia'
+  if (normalized === 'scheduled') return 'programado'
+  if (normalized === 'expired') return 'vencido'
+  if (normalized === 'inactive') return 'inactivo'
+  return normalized || 'activo'
+}
+
 function computeOverallAverageFromNotasMap(notasMap) {
   if (!notasMap || typeof notasMap !== 'object') return null
   const values = Object.values(notasMap)
@@ -173,7 +194,7 @@ function buildStudentDisplayName(student) {
 }
 
 function ManagementDashboardPage() {
-  const { hasPermission, userNitRut } = useAuth()
+  const { hasPermission, userNitRut, currentPlan, planStatus } = useAuth()
   const canView = hasPermission(PERMISSION_KEYS.MANAGEMENT_DASHBOARD_VIEW)
   const canExportExcel = hasPermission(PERMISSION_KEYS.EXPORT_EXCEL)
   const [loading, setLoading] = useState(true)
@@ -403,31 +424,56 @@ function ManagementDashboardPage() {
     const activeStudents = filteredStudents.length
     const todayAttendance = filteredAttendance.filter((item) => String(item.fecha || '').trim() === todayIso)
     const presentToday = todayAttendance.filter((item) => String(item.asistencia || '').trim().toLowerCase() === 'si').length
-    const attendanceRate = activeStudents > 0 ? ((presentToday / activeStudents) * 100).toFixed(1) : '0.0'
+    const attendanceRate = safePercentage(presentToday, activeStudents, 1).toFixed(1)
     const validCharges = filteredCharges.filter((item) => normalizeChargeStatus(item) !== 'anulado')
+    const totalChargedAmount = validCharges.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
     const pendingBalance = validCharges.reduce((sum, item) => sum + (Number(item.balance) || 0), 0)
-    const overdueBalance = validCharges
-      .filter((item) => {
-        const dueDate = String(item.dueDate || '').trim()
-        return dueDate && dueDate < todayIso && (Number(item.balance) || 0) > 0
-      })
+    const overdueCharges = validCharges.filter((item) => {
+      const dueDate = String(item.dueDate || '').trim()
+      return dueDate && dueDate < todayIso && (Number(item.balance) || 0) > 0
+    })
+    const overdueBalance = overdueCharges
       .reduce((sum, item) => sum + (Number(item.balance) || 0), 0)
+    const collectedAmount = Math.max(totalChargedAmount - pendingBalance, 0)
+    const collectionRate = safePercentage(collectedAmount, totalChargedAmount, 1)
     const paymentsToday = filteredTransactions
-      .filter((item) => toDateValue(item.createdAt) === todayIso)
+      .filter((item) => {
+        return toDateValue(item.createdAt) === todayIso
+      })
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
     const newLeads = filteredLeads.filter((item) => toDateValue(item.createdAt) === todayIso).length
     const enrolled = filteredLeads.filter((item) => String(item.stage || '').trim() === 'matriculado').length
+    const leadConversionRate = safePercentage(enrolled, filteredLeads.length, 1)
+    const deliveredOrRead = filteredWhatsAppMessages.filter((item) =>
+      ['entregado', 'leido'].includes(String(item.status || '').trim().toLowerCase()),
+    ).length
+    const whatsappEffectiveRate = safePercentage(deliveredOrRead, filteredWhatsAppMessages.length, 1)
+    const operationalHealthScore = Math.round(
+      (
+        clamp(Number(attendanceRate), 0, 100) * 0.35 +
+        clamp(collectionRate, 0, 100) * 0.35 +
+        clamp(leadConversionRate, 0, 100) * 0.15 +
+        clamp(whatsappEffectiveRate, 0, 100) * 0.15
+      ),
+    )
 
     return {
       activeStudents,
       attendanceRate,
+      totalChargedAmount,
+      collectedAmount,
+      collectionRate,
       pendingBalance,
       overdueBalance,
+      overdueCount: overdueCharges.length,
       paymentsToday,
       newLeads,
       enrolled,
+      leadConversionRate,
+      whatsappEffectiveRate,
+      operationalHealthScore,
     }
-  }, [filteredAttendance, filteredCharges, filteredLeads, filteredStudents, filteredTransactions, todayIso])
+  }, [filteredAttendance, filteredCharges, filteredLeads, filteredStudents, filteredTransactions, filteredWhatsAppMessages, todayIso])
 
   const executiveAlerts = useMemo(() => {
     const alerts = []
@@ -771,6 +817,70 @@ function ManagementDashboardPage() {
     ]
   }, [advisorRanking, gradeDebtRanking, trendCards])
 
+  const executivePulseCards = useMemo(() => ([
+    {
+      key: 'health',
+      label: 'Salud operativa',
+      value: `${metrics.operationalHealthScore}/100`,
+      help: 'Cruza asistencia, recaudo, conversion y efectividad de WhatsApp.',
+    },
+    {
+      key: 'collection',
+      label: 'Eficiencia de recaudo',
+      value: `${metrics.collectionRate}%`,
+      help: `${formatCurrency(metrics.collectedAmount)} recuperados de ${formatCurrency(metrics.totalChargedAmount)} facturados.`,
+    },
+    {
+      key: 'leads',
+      label: 'Conversion comercial',
+      value: `${metrics.leadConversionRate}%`,
+      help: `${metrics.enrolled} matriculados de ${filteredLeads.length} leads visibles.`,
+    },
+    {
+      key: 'whatsapp',
+      label: 'WhatsApp efectivo',
+      value: `${metrics.whatsappEffectiveRate}%`,
+      help: `${filteredWhatsAppMessages.length} mensajes dentro del rango filtrado.`,
+    },
+  ]), [
+    filteredLeads.length,
+    filteredWhatsAppMessages.length,
+    metrics.collectedAmount,
+    metrics.collectionRate,
+    metrics.enrolled,
+    metrics.leadConversionRate,
+    metrics.operationalHealthScore,
+    metrics.totalChargedAmount,
+    metrics.whatsappEffectiveRate,
+  ])
+
+  const executiveFocusList = useMemo(() => ([
+    {
+      title: 'Cobertura de cartera',
+      value: `${metrics.collectionRate}%`,
+      detail: `${metrics.overdueCount} cargos vencidos acumulan ${formatCurrency(metrics.overdueBalance)}.`,
+    },
+    {
+      title: 'Capacidad comercial',
+      value: `${metrics.leadConversionRate}%`,
+      detail: `${metrics.newLeads} leads nuevos hoy y ${metrics.enrolled} cierres en el rango actual.`,
+    },
+    {
+      title: 'Presencia estudiantil',
+      value: `${metrics.attendanceRate}%`,
+      detail: `${metrics.activeStudents} estudiantes activos alimentan el calculo diario.`,
+    },
+  ]), [
+    metrics.activeStudents,
+    metrics.attendanceRate,
+    metrics.collectionRate,
+    metrics.enrolled,
+    metrics.leadConversionRate,
+    metrics.newLeads,
+    metrics.overdueBalance,
+    metrics.overdueCount,
+  ])
+
   const handleExportExcel = async () => {
     const XLSX = await import('xlsx')
     const workbook = XLSX.utils.book_new()
@@ -790,11 +900,18 @@ function ManagementDashboardPage() {
     const metricsRows = [
       { Indicador: 'Estudiantes activos', Valor: metrics.activeStudents },
       { Indicador: 'Asistencia hoy %', Valor: Number(metrics.attendanceRate) || 0 },
+      { Indicador: 'Facturado visible', Valor: metrics.totalChargedAmount },
+      { Indicador: 'Recaudo acumulado visible', Valor: metrics.collectedAmount },
+      { Indicador: 'Eficiencia recaudo %', Valor: metrics.collectionRate },
       { Indicador: 'Saldo pendiente', Valor: metrics.pendingBalance },
       { Indicador: 'Cartera vencida', Valor: metrics.overdueBalance },
+      { Indicador: 'Cargos vencidos', Valor: metrics.overdueCount },
       { Indicador: 'Pagos del dia', Valor: metrics.paymentsToday },
       { Indicador: 'Leads nuevos', Valor: metrics.newLeads },
       { Indicador: 'Matriculados', Valor: metrics.enrolled },
+      { Indicador: 'Conversion leads %', Valor: metrics.leadConversionRate },
+      { Indicador: 'WhatsApp efectivo %', Valor: metrics.whatsappEffectiveRate },
+      { Indicador: 'Salud operativa', Valor: metrics.operationalHealthScore },
     ]
 
     const trendRows = trendCards.map((item) => ({
@@ -909,9 +1026,11 @@ function ManagementDashboardPage() {
           <p>Consulta el pulso ejecutivo del plantel con indicadores de estudiantes, cartera, admisiones y WhatsApp.</p>
         </div>
         <div className="dashboard-module-hero-note">
-          <strong>{metrics.attendanceRate}%</strong>
-          <span>Asistencia del dia</span>
-          <small>{metrics.activeStudents} estudiantes activos</small>
+          <strong>{metrics.operationalHealthScore}/100</strong>
+          <span>Salud operativa</span>
+          <small>
+            Plan {currentPlan?.nombrePlan || 'actual'} · estado {formatPlanStatus(planStatus)}
+          </small>
         </div>
       </div>
 
@@ -1007,6 +1126,11 @@ function ManagementDashboardPage() {
               <small className="whatsapp-stat-help">Sobre estudiantes activos</small>
             </article>
             <article className="home-left-card whatsapp-stat-card">
+              <strong className="whatsapp-stat-value">{metrics.collectionRate}%</strong>
+              <span className="whatsapp-stat-label">Eficiencia recaudo</span>
+              <small className="whatsapp-stat-help">{formatCurrency(metrics.collectedAmount)} recuperados</small>
+            </article>
+            <article className="home-left-card whatsapp-stat-card">
               <strong className="whatsapp-stat-value">{formatCurrency(metrics.pendingBalance)}</strong>
               <span className="whatsapp-stat-label">Saldo pendiente</span>
               <small className="whatsapp-stat-help">Cartera excluyendo anulados</small>
@@ -1026,6 +1150,26 @@ function ManagementDashboardPage() {
               <span className="whatsapp-stat-label">Matriculados</span>
               <small className="whatsapp-stat-help">Leads convertidos</small>
             </article>
+            <article className="home-left-card whatsapp-stat-card">
+              <strong className="whatsapp-stat-value">{metrics.leadConversionRate}%</strong>
+              <span className="whatsapp-stat-label">Conversion leads</span>
+              <small className="whatsapp-stat-help">Cierre comercial visible</small>
+            </article>
+            <article className="home-left-card whatsapp-stat-card">
+              <strong className="whatsapp-stat-value">{metrics.whatsappEffectiveRate}%</strong>
+              <span className="whatsapp-stat-label">WhatsApp efectivo</span>
+              <small className="whatsapp-stat-help">Entregados o leidos</small>
+            </article>
+          </div>
+
+          <div className="management-trends-grid">
+            {executivePulseCards.map((item) => (
+              <article key={item.key} className="management-trend-card">
+                <span className="management-kicker">{item.label}</span>
+                <strong>{item.value}</strong>
+                <p>{item.help}</p>
+              </article>
+            ))}
           </div>
 
           <div className="management-trends-grid">
@@ -1038,6 +1182,21 @@ function ManagementDashboardPage() {
                   <small>Anterior: {item.previousLabel}</small>
                 </div>
                 <p>{item.summary}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="management-ranking-grid">
+            {executiveFocusList.map((item) => (
+              <article key={item.title} className="management-ranking-card">
+                <header>
+                  <h3>{item.title}</h3>
+                  <small>Lectura ejecutiva inmediata</small>
+                </header>
+                <div className="management-top-student-card">
+                  <strong>{item.value}</strong>
+                  <small>{item.detail}</small>
+                </div>
               </article>
             ))}
           </div>

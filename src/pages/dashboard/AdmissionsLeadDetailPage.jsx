@@ -73,6 +73,15 @@ const WHATSAPP_EMPTY = {
   message: '',
 }
 
+const WHATSAPP_LANGUAGE_LABELS = {
+  es: 'Español',
+  en: 'English',
+}
+
+function formatWhatsAppLanguageLabel(value) {
+  return WHATSAPP_LANGUAGE_LABELS[String(value || '').trim().toLowerCase()] || String(value || '').trim().toUpperCase() || 'Idioma'
+}
+
 const ENROLLMENT_EMPTY = {
   studentDocumentType: 'registro civil',
   studentEmail: '',
@@ -886,6 +895,7 @@ function AdmissionsLeadDetailPage() {
         phone,
         message,
         templateName: selectedWhatsAppTemplate?.name || '',
+        templateLanguage: selectedWhatsAppTemplate?.language || '',
         sourceModule: 'admisiones',
         leadId,
         recipientName: String(form.guardianName || '').trim(),
@@ -1138,22 +1148,29 @@ function AdmissionsLeadDetailPage() {
       }
 
       if (enrollmentForm.createEnrollmentRecord && studentUser?.id) {
-        await setDocTracked(doc(db, 'matriculas', `${studentUser.id}_${String(form.schoolYear || new Date().getFullYear()).trim()}`), {
+        const enrollmentYear = String(form.schoolYear || new Date().getFullYear()).trim()
+        const enrollmentDocId = `${String(userNitRut || '').trim()}__${studentUser.id}__${enrollmentYear}`
+
+        await setDocTracked(doc(db, 'student_enrollments', enrollmentDocId), {
           nitRut: userNitRut,
           studentUid: studentUser.id,
           studentName: studentFullName,
           studentDocument,
           grade: studentGrade,
           group: studentGroup,
-          schoolYear: String(form.schoolYear || new Date().getFullYear()).trim(),
+          schoolYear: enrollmentYear,
+          academicYear: enrollmentYear,
           campus: String(form.campus || '').trim(),
           shift: String(form.shift || '').trim(),
           guardianUid,
           guardianName: String(form.guardianName || '').trim(),
           guardianEmail,
           leadId,
-          status: 'activa',
+          status: 'matriculado',
+          type: 'nueva',
           source: 'crm_admisiones',
+          enrollmentDate: serverTimestamp(),
+          enrolledAt: serverTimestamp(),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
           createdByUid: user?.uid || '',
@@ -1314,8 +1331,13 @@ function AdmissionsLeadDetailPage() {
           studentGrade,
           studentGroup,
           schoolYear: String(form.schoolYear || '').trim(),
+          academicYear: String(form.schoolYear || '').trim(),
           campus: String(form.campus || '').trim(),
           shift: String(form.shift || '').trim(),
+          enrollmentCollection: enrollmentForm.createEnrollmentRecord ? 'student_enrollments' : '',
+          enrollmentRecordId: enrollmentForm.createEnrollmentRecord && studentUser?.id
+            ? `${String(userNitRut || '').trim()}__${studentUser.id}__${String(form.schoolYear || new Date().getFullYear()).trim()}`
+            : '',
           initialPeriodLabel: enrollmentForm.generateInitialCharges ? initialPeriodLabel : '',
           initialDueDate: enrollmentForm.generateInitialCharges ? initialDueDate : '',
           generatedInitialCharges: Boolean(enrollmentForm.generateInitialCharges),
@@ -1867,7 +1889,7 @@ function AdmissionsLeadDetailPage() {
                 <select value={whatsAppForm.templateId} onChange={(event) => handleWhatsAppTemplateChange(event.target.value)}>
                   <option value="">Mensaje libre</option>
                   {whatsAppTemplates.map((item) => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
+                    <option key={item.id} value={item.id}>{`${item.name} (${formatWhatsAppLanguageLabel(item.language)})`}</option>
                   ))}
                 </select>
               </label>

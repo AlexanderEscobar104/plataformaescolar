@@ -16,6 +16,17 @@ const INVALID_TOKEN_ERRORS = new Set([
 ]);
 const cachedMailers = new Map();
 const STUDENT_BILLING_COLLECTION = 'estado_cuenta_estudiantes';
+const EPAYCO_ATTEMPTS_COLLECTION = 'payments_epayco_attempts';
+const EPAYCO_WEBHOOK_ACTOR_UID = 'epayco_webhook';
+const EPAYCO_WEBHOOK_ACTOR_NAME = 'ePayco webhook';
+const WOMPI_ATTEMPTS_COLLECTION = 'payments_wompi_attempts';
+const WOMPI_WEBHOOK_ACTOR_UID = 'wompi_webhook';
+const WOMPI_WEBHOOK_ACTOR_NAME = 'Wompi webhook';
+const BOLD_ATTEMPTS_COLLECTION = 'payments_bold_attempts';
+const BOLD_WEBHOOK_ACTOR_UID = 'bold_webhook';
+const BOLD_WEBHOOK_ACTOR_NAME = 'Bold webhook';
+const ATTENDANCE_TIME_ZONE = 'America/Bogota';
+const ATTENDANCE_UTC_OFFSET_HOURS = 5;
 const DEFAULT_SMS_TEMPLATES = [
   {
     slug: 'bienvenida',
@@ -34,8 +45,8 @@ const DEFAULT_SMS_TEMPLATES = [
     variables: ['acudiente', 'concepto', 'estudiante', 'fecha_vencimiento', 'saldo'],
   },
   {
-    slug: 'pago_vencido',
-    name: 'Pago vencido',
+    slug: 'recordatorio_pago_vencido',
+    name: 'Recordatorio de pago vencido',
     module: 'pagos',
     category: 'cobranza',
     body: 'Hola {{acudiente}}, el pago de {{concepto}} de {{estudiante}} ya esta vencido. Saldo actual: {{saldo}}.',
@@ -46,8 +57,8 @@ const DEFAULT_SMS_TEMPLATES = [
     name: 'Pago realizado',
     module: 'pagos',
     category: 'confirmacion',
-    body: 'Hola {{acudiente}}, registramos tu pago por {{valor}} para {{concepto}}. Recibo: {{numero_recibo}}. Gracias por tu pago.',
-    variables: ['acudiente', 'concepto', 'numero_recibo', 'valor'],
+    body: 'Hola {{acudiente}}, registramos tu pago por {{valor}} para {{concepto}} de {{estudiante}}. Recibo: {{numero_recibo}}. Gracias por tu pago.',
+    variables: ['acudiente', 'concepto', 'estudiante', 'numero_recibo', 'valor'],
   },
   {
     slug: 'pago_aplicado',
@@ -96,19 +107,24 @@ function parseAttendanceEventDate(rawValue) {
 
   const normalized = raw.replace(/\//g, '-').replace('T', ' ');
   const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
-  if (!match) return null;
+  if (match) {
+    const [, year, month, day, hour = '00', minute = '00', second = '00'] = match;
+    return {
+      isoDate: `${year}-${month}-${day}`,
+      isoDateTime: `${year}-${month}-${day}T${hour}:${minute}:${second}`,
+      year: Number(year),
+      month: Number(month),
+      day: Number(day),
+      hour: Number(hour),
+      minute: Number(minute),
+      second: Number(second),
+    };
+  }
 
-  const [, year, month, day, hour = '00', minute = '00', second = '00'] = match;
-  return {
-    isoDate: `${year}-${month}-${day}`,
-    isoDateTime: `${year}-${month}-${day}T${hour}:${minute}:${second}`,
-    year: Number(year),
-    month: Number(month),
-    day: Number(day),
-    hour: Number(hour),
-    minute: Number(minute),
-    second: Number(second),
-  };
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return getAttendanceTimeZoneParts(parsed);
 }
 
 function buildTimestampFromParts(parts) {
@@ -118,7 +134,7 @@ function buildTimestampFromParts(parts) {
     parts.year,
     Math.max(parts.month - 1, 0),
     parts.day,
-    parts.hour + 5,
+    parts.hour + ATTENDANCE_UTC_OFFSET_HOURS,
     parts.minute,
     parts.second,
   ));
@@ -128,6 +144,58 @@ function buildTimestampFromParts(parts) {
   }
 
   return admin.firestore.Timestamp.fromDate(utcDate);
+}
+
+function getAttendanceTimeZoneParts(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: ATTENDANCE_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    hourCycle: 'h23',
+  });
+
+  const partsMap = formatter.formatToParts(date).reduce((accumulator, item) => {
+    if (item.type !== 'literal') {
+      accumulator[item.type] = item.value;
+    }
+    return accumulator;
+  }, {});
+
+  const year = Number(partsMap.year);
+  const month = Number(partsMap.month);
+  const day = Number(partsMap.day);
+  const hour = Number(partsMap.hour);
+  const minute = Number(partsMap.minute);
+  const second = Number(partsMap.second);
+
+  if ([year, month, day, hour, minute, second].some((value) => Number.isNaN(value))) {
+    return null;
+  }
+
+  const isoDate = `${partsMap.year}-${partsMap.month}-${partsMap.day}`;
+  const isoDateTime = `${isoDate}T${partsMap.hour}:${partsMap.minute}:${partsMap.second}`;
+
+  return {
+    isoDate,
+    isoDateTime,
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+  };
+}
+
+function getAttendanceIsoDateForNow(baseDate = new Date()) {
+  return getAttendanceTimeZoneParts(baseDate)?.isoDate || '';
 }
 
 function resolveAttendanceMarkType(payload) {
@@ -292,6 +360,990 @@ function resolveChargeStatus(charge) {
   return explicitStatus || 'pendiente';
 }
 
+function applyPaymentToChargeRecord(charge, paymentAmount, paymentMeta = {}) {
+  const currentTotal = Number(charge?.totalAmount) || 0;
+  const currentPaid = Number(charge?.amountPaid) || 0;
+  const safePayment = Math.max(0, Number(paymentAmount) || 0);
+  const nextPaid = Math.min(currentTotal, currentPaid + safePayment);
+  const nextBalance = Math.max(0, currentTotal - nextPaid);
+
+  let nextStatus = 'pendiente';
+  if (nextPaid > 0 && nextBalance > 0) nextStatus = 'abonado';
+  if (nextBalance === 0 && currentTotal > 0) nextStatus = 'pagado';
+
+  const nextPayments = Array.isArray(charge?.payments) ? [...charge.payments] : [];
+  nextPayments.push({
+    amount: safePayment,
+    method: String(paymentMeta.method || '').trim(),
+    reference: String(paymentMeta.reference || '').trim(),
+    notes: String(paymentMeta.notes || '').trim(),
+    paidAtIso: String(paymentMeta.paidAtIso || new Date().toISOString()).trim(),
+    paidByUid: String(paymentMeta.paidByUid || '').trim(),
+    provider: String(paymentMeta.provider || '').trim(),
+    providerTransactionId: String(paymentMeta.providerTransactionId || '').trim(),
+    providerReference: String(paymentMeta.providerReference || '').trim(),
+  });
+
+  return {
+    amountPaid: nextPaid,
+    balance: nextBalance,
+    status: nextStatus,
+    payments: nextPayments,
+  };
+}
+
+function readBooleanEnvValue(key, fallback = false) {
+  const raw = String(readMailerConfigValue(key)).trim().toLowerCase();
+  if (!raw) return fallback;
+  return raw === 'true' || raw === '1' || raw === 'yes';
+}
+
+function getProjectId() {
+  return String(
+    process.env.GCLOUD_PROJECT ||
+    process.env.GCP_PROJECT ||
+    admin.app().options.projectId ||
+    '',
+  ).trim();
+}
+
+function getAppBaseUrl() {
+  const configured = String(readMailerConfigValue('APP_BASE_URL')).trim().replace(/\/+$/, '');
+  if (configured) return configured;
+
+  const projectId = getProjectId();
+  if (!projectId) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'No fue posible determinar la URL base de la aplicacion. Configura APP_BASE_URL en el backend.',
+    );
+  }
+
+  return `https://${projectId}.web.app`;
+}
+
+function getPaymentPlatformsConfigRefByNit(nitRut) {
+  const safeNit = normalizeTenantNit(nitRut);
+  return db.collection('configuracion').doc(`payment_platforms_${safeNit}`);
+}
+
+function resolveProviderConfig(rawConfig = {}, providerKey) {
+  const nested = rawConfig?.[providerKey];
+  if (nested && typeof nested === 'object') return nested;
+  return rawConfig || {};
+}
+
+function serializeEpaycoSettings(data = {}) {
+  const projectId = getProjectId();
+  return {
+    enabled: Boolean(data.enabled),
+    publicKey: String(data.publicKey || '').trim(),
+    customerId: String(data.customerId || '').trim(),
+    pKey: '',
+    hasPKey: Boolean(String(data.pKey || '').trim()),
+    test: data.test !== false,
+    responsePathAdmin: String(data.responsePathAdmin || '/dashboard/pagos').trim() || '/dashboard/pagos',
+    responsePathGuardian: String(data.responsePathGuardian || '/dashboard/acudiente/pagos').trim() || '/dashboard/acudiente/pagos',
+    webhookPath: '/epaycoConfirmationWebhook',
+    webhookUrl: projectId ? `https://us-central1-${projectId}.cloudfunctions.net/epaycoConfirmationWebhook` : '',
+  };
+}
+
+function serializeWompiSettings(data = {}) {
+  const projectId = getProjectId();
+  return {
+    enabled: Boolean(data.enabled),
+    publicKey: String(data.publicKey || '').trim(),
+    integritySecret: '',
+    hasIntegritySecret: Boolean(String(data.integritySecret || '').trim()),
+    eventSecret: '',
+    hasEventSecret: Boolean(String(data.eventSecret || '').trim()),
+    sandbox: data.sandbox !== false,
+    responsePathAdmin: String(data.responsePathAdmin || '/dashboard/pagos').trim() || '/dashboard/pagos',
+    responsePathGuardian: String(data.responsePathGuardian || '/dashboard/acudiente/pagos').trim() || '/dashboard/acudiente/pagos',
+    webhookPath: '/wompiEventWebhook',
+    webhookUrl: projectId ? `https://us-central1-${projectId}.cloudfunctions.net/wompiEventWebhook` : '',
+  };
+}
+
+function serializeBoldSettings(data = {}) {
+  const projectId = getProjectId();
+  return {
+    enabled: Boolean(data.enabled),
+    publicKey: String(data.publicKey || '').trim(),
+    secretKey: '',
+    hasSecretKey: Boolean(String(data.secretKey || '').trim()),
+    webhookSecret: '',
+    hasWebhookSecret: Boolean(String(data.webhookSecret || '').trim()),
+    sandbox: data.sandbox !== false,
+    responsePathAdmin: String(data.responsePathAdmin || '/dashboard/pagos').trim() || '/dashboard/pagos',
+    responsePathGuardian: String(data.responsePathGuardian || '/dashboard/acudiente/pagos').trim() || '/dashboard/acudiente/pagos',
+    webhookPath: '/boldWebhook',
+    webhookUrl: projectId ? `https://us-central1-${projectId}.cloudfunctions.net/boldWebhook` : '',
+  };
+}
+
+function serializeDataicoSettings(data = {}) {
+  return {
+    enabled: Boolean(data.enabled),
+    accountId: String(data.accountId || '').trim(),
+    authToken: '',
+    hasAuthToken: Boolean(String(data.authToken || '').trim()),
+    environment: String(data.environment || 'sandbox').trim().toLowerCase() === 'production' ? 'production' : 'sandbox',
+    invoicePrefix: String(data.invoicePrefix || '').trim().toUpperCase(),
+    autoIssueOnPayment: Boolean(data.autoIssueOnPayment),
+  };
+}
+
+async function getPaymentPlatformsConfigByNit(nitRut) {
+  const snapshot = await getPaymentPlatformsConfigRefByNit(nitRut).get();
+  return snapshot.exists ? snapshot.data() || {} : {};
+}
+
+async function getEpaycoSettingsByNit(nitRut) {
+  const config = await getPaymentPlatformsConfigByNit(nitRut);
+  const epaycoConfig = resolveProviderConfig(config, 'epayco');
+  const publicKey = String(epaycoConfig.publicKey || '').trim();
+  const customerId = String(epaycoConfig.customerId || '').trim();
+  const pKey = String(epaycoConfig.pKey || '').trim();
+  const test = epaycoConfig.test !== false;
+  const projectId = getProjectId();
+
+  if (!Boolean(epaycoConfig.enabled) || !publicKey || !customerId || !pKey) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'ePayco no esta configurado para este plantel.',
+    );
+  }
+
+  if (!projectId) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'No fue posible determinar el proyecto para construir la URL de confirmacion.',
+    );
+  }
+
+  return {
+    enabled: true,
+    publicKey,
+    customerId,
+    pKey,
+    test,
+    projectId,
+    appBaseUrl: getAppBaseUrl(),
+    responsePathAdmin: String(epaycoConfig.responsePathAdmin || '/dashboard/pagos').trim() || '/dashboard/pagos',
+    responsePathGuardian: String(epaycoConfig.responsePathGuardian || '/dashboard/acudiente/pagos').trim() || '/dashboard/acudiente/pagos',
+    confirmationUrl: `https://us-central1-${projectId}.cloudfunctions.net/epaycoConfirmationWebhook`,
+  };
+}
+
+async function getWompiSettingsByNit(nitRut) {
+  const config = await getPaymentPlatformsConfigByNit(nitRut);
+  const wompiConfig = resolveProviderConfig(config, 'wompi');
+  const publicKey = String(wompiConfig.publicKey || '').trim();
+  const integritySecret = String(wompiConfig.integritySecret || '').trim();
+  const eventSecret = String(wompiConfig.eventSecret || '').trim();
+
+  if (!Boolean(wompiConfig.enabled) || !publicKey || !integritySecret || !eventSecret) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Wompi no esta configurado para este plantel.',
+    );
+  }
+
+  return {
+    enabled: true,
+    publicKey,
+    integritySecret,
+    eventSecret,
+    sandbox: wompiConfig.sandbox !== false,
+    appBaseUrl: getAppBaseUrl(),
+    responsePathAdmin: String(wompiConfig.responsePathAdmin || '/dashboard/pagos').trim() || '/dashboard/pagos',
+    responsePathGuardian: String(wompiConfig.responsePathGuardian || '/dashboard/acudiente/pagos').trim() || '/dashboard/acudiente/pagos',
+    eventsUrl: getProjectId() ? `https://us-central1-${getProjectId()}.cloudfunctions.net/wompiEventWebhook` : '',
+  };
+}
+
+async function getBoldSettingsByNit(nitRut) {
+  const config = await getPaymentPlatformsConfigByNit(nitRut);
+  const boldConfig = resolveProviderConfig(config, 'bold');
+  const apiKey = String(boldConfig.publicKey || '').trim();
+  const secretKey = String(boldConfig.secretKey || '').trim();
+  const webhookSecret = String(boldConfig.webhookSecret || '').trim() || secretKey;
+
+  if (!Boolean(boldConfig.enabled) || !apiKey) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Bold no esta configurado para este plantel.',
+    );
+  }
+
+  return {
+    enabled: true,
+    apiKey,
+    secretKey,
+    webhookSecret,
+    sandbox: boldConfig.sandbox !== false,
+    appBaseUrl: getAppBaseUrl(),
+    responsePathAdmin: String(boldConfig.responsePathAdmin || '/dashboard/pagos').trim() || '/dashboard/pagos',
+    responsePathGuardian: String(boldConfig.responsePathGuardian || '/dashboard/acudiente/pagos').trim() || '/dashboard/acudiente/pagos',
+    webhookUrl: getProjectId() ? `https://us-central1-${getProjectId()}.cloudfunctions.net/boldWebhook` : '',
+  };
+}
+
+async function getDataicoSettingsByNit(nitRut) {
+  const config = await getPaymentPlatformsConfigByNit(nitRut);
+  const dataicoConfig = resolveProviderConfig(config, 'dataico');
+  const accountId = String(dataicoConfig.accountId || '').trim();
+  const authToken = String(dataicoConfig.authToken || '').trim();
+
+  if (!Boolean(dataicoConfig.enabled) || !accountId || !authToken) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Dataico no esta configurado para este plantel.',
+    );
+  }
+
+  return {
+    enabled: true,
+    accountId,
+    authToken,
+    environment: String(dataicoConfig.environment || 'sandbox').trim().toLowerCase() === 'production' ? 'production' : 'sandbox',
+    invoicePrefix: String(dataicoConfig.invoicePrefix || '').trim().toUpperCase(),
+    autoIssueOnPayment: Boolean(dataicoConfig.autoIssueOnPayment),
+  };
+}
+
+function resolveDataicoCustomerType(documentType) {
+  const normalized = normalizeIdentifier(documentType);
+  if (normalized === 'nit') return 'person-entity';
+  return 'person';
+}
+
+function resolveDataicoDocumentType(documentType) {
+  const normalized = normalizeIdentifier(documentType);
+  if (normalized === 'nit') return '31';
+  if (normalized === 'ce' || normalized === 'ceduladeextranjeria') return '22';
+  if (normalized === 'ti' || normalized === 'tarjetadeidentidad') return '12';
+  if (normalized === 'pp' || normalized === 'passport' || normalized === 'pasaporte') return '41';
+  return '13';
+}
+
+function buildDataicoInvoiceNumber(prefix, receiptData, transactionId) {
+  const safePrefix = String(prefix || '').trim().toUpperCase();
+  const receiptNumber = String(receiptData?.officialNumber || '').trim().toUpperCase();
+  if (receiptNumber) {
+    return receiptNumber.replace(/\s+/g, '');
+  }
+  const suffix = String(transactionId || '').trim().replace(/[^A-Z0-9]/gi, '').slice(-12).toUpperCase();
+  return `${safePrefix || 'FE'}${suffix || Date.now()}`;
+}
+
+function buildDataicoInvoicePayload({
+  settings,
+  transactionId,
+  transactionData,
+  receiptData,
+  chargeData,
+  recipientUserData,
+  plantelData,
+}) {
+  const profile = recipientUserData?.profile || {};
+  const recipientDocument = String(
+    receiptData.recipientDocument ||
+    chargeData.recipientDocument ||
+    receiptData.studentDocument ||
+    chargeData.studentDocument ||
+    profile.numeroDocumento ||
+    recipientUserData?.nitRut ||
+    ''
+  ).trim();
+  const recipientName = String(
+    receiptData.recipientName ||
+    chargeData.recipientName ||
+    receiptData.studentName ||
+    chargeData.studentName ||
+    recipientUserData?.name ||
+    'Cliente'
+  ).trim();
+  const recipientEmail = String(recipientUserData?.email || profile.correo || '').trim();
+  const recipientPhone = String(profile.celular || profile.telefono || recipientUserData?.phoneNumber || '').trim();
+  const documentType = String(profile.tipoDocumento || profile.tipoDoc || (recipientDocument.length > 9 ? 'NIT' : 'CC')).trim();
+  const invoiceNumber = buildDataicoInvoiceNumber(settings.invoicePrefix, receiptData, transactionId);
+  const totalAmount = Number(transactionData.amount || receiptData.amount || chargeData.totalAmount || 0) || 0;
+  const issueDate = new Date().toISOString().slice(0, 10);
+  const legalName = String(plantelData?.razonSocial || plantelData?.nombreComercial || '').trim();
+
+  return {
+    number: invoiceNumber,
+    date: issueDate,
+    type: 'FV',
+    currency_code: 'COP',
+    customer: {
+      person_type: resolveDataicoCustomerType(documentType),
+      id_type: resolveDataicoDocumentType(documentType),
+      identification: recipientDocument || '222222222222',
+      name: recipientName || 'Consumidor final',
+      email: recipientEmail,
+      phone: recipientPhone,
+      address: String(profile.direccion || plantelData?.direccion || 'No registrada').trim(),
+      country_code: 'CO',
+    },
+    items: [
+      {
+        code: String(chargeData.conceptId || chargeData.itemCobroId || chargeData.id || 'ITEM-1').trim(),
+        description: [
+          String(receiptData.conceptName || chargeData.conceptName || 'Servicio educativo').trim(),
+          String(receiptData.periodLabel || chargeData.periodLabel || '').trim(),
+        ].filter(Boolean).join(' - '),
+        quantity: 1,
+        unit_price: totalAmount,
+        gross_value: totalAmount,
+      },
+    ],
+    payment: {
+      payment_form: '1',
+      payment_method_code: '10',
+      due_date: String(chargeData.dueDate || issueDate).trim() || issueDate,
+    },
+    notes: [
+      String(receiptData.reference || transactionData.reference || '').trim(),
+      legalName ? `Emisor: ${legalName}` : '',
+      transactionId ? `Transaccion: ${transactionId}` : '',
+    ].filter(Boolean).join(' | '),
+    send_email: Boolean(recipientEmail),
+    metadata: {
+      nitRut: String(receiptData.nitRut || chargeData.nitRut || '').trim(),
+      chargeId: String(chargeData.id || receiptData.chargeId || '').trim(),
+      transactionId: String(transactionId || '').trim(),
+      receiptNumber: String(receiptData.officialNumber || '').trim(),
+    },
+  };
+}
+
+function normalizeElectronicInvoiceStatus(responseData = {}, fallbackOk = false) {
+  const statusText = normalizeIdentifier(
+    responseData?.dian_status ||
+    responseData?.status ||
+    responseData?.invoice_status ||
+    ''
+  );
+  if (statusText.includes('acept')) return 'accepted';
+  if (statusText.includes('rechaz')) return 'rejected';
+  if (statusText.includes('error') || statusText.includes('fall')) return 'error';
+  if (statusText.includes('pend')) return 'submitted';
+  if (fallbackOk) return 'submitted';
+  return 'error';
+}
+
+async function createElectronicInvoiceInternal({ transactionId, nitRut, actorUid, actorName }) {
+  const safeTransactionId = String(transactionId || '').trim();
+  if (!safeTransactionId) {
+    throw new functions.https.HttpsError('invalid-argument', 'transactionId es obligatorio.');
+  }
+
+  const receiptRef = db.collection('payments_receipts').doc(safeTransactionId);
+  const transactionRef = db.collection('payments_transactions').doc(safeTransactionId);
+  const invoiceRef = db.collection('electronic_invoices').doc(safeTransactionId);
+
+  const [transactionSnap, receiptSnap] = await Promise.all([
+    transactionRef.get(),
+    receiptRef.get(),
+  ]);
+
+  if (!transactionSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'La transaccion de pago no existe.');
+  }
+
+  const transactionData = transactionSnap.data() || {};
+  const transactionNit = normalizeTenantNit(transactionData.nitRut || '');
+  if (transactionNit && transactionNit !== nitRut) {
+    throw new functions.https.HttpsError('permission-denied', 'La transaccion no pertenece a tu plantel.');
+  }
+
+  if (!receiptSnap.exists) {
+    await issueOfficialPaymentReceiptInternal({
+      transactionId: safeTransactionId,
+      nitRut,
+      actorUid,
+      actorName,
+    });
+  }
+
+  const ensuredReceiptSnap = await receiptRef.get();
+  if (!ensuredReceiptSnap.exists) {
+    throw new functions.https.HttpsError('failed-precondition', 'No fue posible emitir el recibo oficial previo a la factura electronica.');
+  }
+
+  const receiptData = ensuredReceiptSnap.data() || {};
+  const receiptNit = normalizeTenantNit(receiptData.nitRut || '');
+  if (receiptNit && receiptNit !== nitRut) {
+    throw new functions.https.HttpsError('permission-denied', 'El recibo no pertenece a tu plantel.');
+  }
+
+  if (String(receiptData.status || 'activo').trim().toLowerCase() === 'anulado') {
+    throw new functions.https.HttpsError('failed-precondition', 'No se puede facturar electronicamente un recibo anulado.');
+  }
+
+  const existingInvoiceSnap = await invoiceRef.get();
+  const existingInvoice = existingInvoiceSnap.exists ? existingInvoiceSnap.data() || {} : null;
+  if (existingInvoice && ['accepted', 'submitted'].includes(String(existingInvoice.status || '').trim().toLowerCase())) {
+    return {
+      id: invoiceRef.id,
+      status: existingInvoice.status || 'submitted',
+      number: existingInvoice.providerNumber || existingInvoice.number || '',
+      cufe: existingInvoice.cufe || '',
+      alreadyIssued: true,
+    };
+  }
+
+  const chargeId = String(transactionData.chargeId || receiptData.chargeId || '').trim();
+  const recipientUid = String(receiptData.recipientUid || transactionData.recipientUid || receiptData.studentUid || transactionData.studentUid || '').trim();
+  const tenantPlantelRef = db.collection('configuracion').doc(`datosPlantel_${nitRut}`);
+  const fallbackPlantelRef = db.collection('configuracion').doc('datosPlantel');
+
+  const [chargeSnap, recipientSnap, tenantPlantelSnap, fallbackPlantelSnap, settings] = await Promise.all([
+    chargeId ? db.collection(STUDENT_BILLING_COLLECTION).doc(chargeId).get() : Promise.resolve(null),
+    recipientUid ? db.collection('users').doc(recipientUid).get() : Promise.resolve(null),
+    tenantPlantelRef.get(),
+    fallbackPlantelRef.get(),
+    getDataicoSettingsByNit(nitRut),
+  ]);
+
+  const chargeData = chargeSnap?.exists ? { id: chargeSnap.id, ...chargeSnap.data() } : {};
+  const plantelData = tenantPlantelSnap.exists
+    ? tenantPlantelSnap.data() || {}
+    : (fallbackPlantelSnap.exists ? fallbackPlantelSnap.data() || {} : {});
+  const recipientUserData = recipientSnap?.exists ? recipientSnap.data() || {} : {};
+  const payload = buildDataicoInvoicePayload({
+    settings,
+    transactionId: safeTransactionId,
+    transactionData,
+    receiptData,
+    chargeData,
+    recipientUserData,
+    plantelData,
+  });
+
+  await invoiceRef.set({
+    nitRut,
+    provider: 'dataico',
+    transactionId: safeTransactionId,
+    receiptId: safeTransactionId,
+    chargeId,
+    status: 'queued',
+    number: String(payload.number || '').trim(),
+    payload,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: existingInvoiceSnap.exists ? existingInvoice?.createdAt || admin.firestore.FieldValue.serverTimestamp() : admin.firestore.FieldValue.serverTimestamp(),
+    createdByUid: String(actorUid || '').trim() || 'system',
+    createdByName: String(actorName || '').trim() || 'Sistema',
+  }, { merge: true });
+
+  let responseData = {};
+  let responseStatusCode = 0;
+
+  try {
+    const response = await fetch('https://api.dataico.com/direct/dataico_api/v2/invoices', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Auth-Token': settings.authToken,
+        'Dataico_account_id': settings.accountId,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    responseStatusCode = response.status;
+    responseData = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        String(
+          responseData?.message ||
+          responseData?.error ||
+          responseData?.errors?.[0]?.message ||
+          `Dataico respondio con estado ${response.status}.`
+        ).trim()
+      );
+    }
+  } catch (error) {
+    const errorMessage = String(error?.message || 'No fue posible emitir la factura electronica en Dataico.').trim();
+    await invoiceRef.set({
+      status: 'error',
+      errorMessage,
+      responseStatusCode,
+      responseData,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await Promise.all([
+      transactionRef.set({
+        electronicInvoiceId: invoiceRef.id,
+        electronicInvoiceStatus: 'error',
+        electronicInvoiceError: errorMessage,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true }),
+      receiptRef.set({
+        electronicInvoiceId: invoiceRef.id,
+        electronicInvoiceStatus: 'error',
+        electronicInvoiceError: errorMessage,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true }),
+    ]);
+    throw new functions.https.HttpsError('internal', errorMessage);
+  }
+
+  const normalizedStatus = normalizeElectronicInvoiceStatus(responseData, true);
+  const providerNumber = String(
+    responseData?.number ||
+    responseData?.invoice_number ||
+    responseData?.invoice?.number ||
+    payload.number ||
+    ''
+  ).trim();
+  const cufe = String(
+    responseData?.cufe ||
+    responseData?.uuid ||
+    responseData?.invoice?.cufe ||
+    ''
+  ).trim();
+  const pdfUrl = String(
+    responseData?.pdf ||
+    responseData?.pdf_url ||
+    responseData?.invoice?.pdf ||
+    ''
+  ).trim();
+  const xmlUrl = String(
+    responseData?.xml ||
+    responseData?.xml_url ||
+    responseData?.invoice?.xml ||
+    ''
+  ).trim();
+
+  await invoiceRef.set({
+    status: normalizedStatus,
+    providerNumber,
+    cufe,
+    pdfUrl,
+    xmlUrl,
+    responseStatusCode,
+    responseData,
+    errorMessage: '',
+    issuedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  await Promise.all([
+    transactionRef.set({
+      electronicInvoiceId: invoiceRef.id,
+      electronicInvoiceStatus: normalizedStatus,
+      electronicInvoiceNumber: providerNumber,
+      electronicInvoiceCufe: cufe,
+      electronicInvoicePdfUrl: pdfUrl,
+      electronicInvoiceXmlUrl: xmlUrl,
+      electronicInvoiceError: '',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true }),
+    receiptRef.set({
+      electronicInvoiceId: invoiceRef.id,
+      electronicInvoiceStatus: normalizedStatus,
+      electronicInvoiceNumber: providerNumber,
+      electronicInvoiceCufe: cufe,
+      electronicInvoicePdfUrl: pdfUrl,
+      electronicInvoiceXmlUrl: xmlUrl,
+      electronicInvoiceError: '',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true }),
+  ]);
+
+  return {
+    id: invoiceRef.id,
+    status: normalizedStatus,
+    number: providerNumber,
+    cufe,
+    pdfUrl,
+    xmlUrl,
+    alreadyIssued: false,
+  };
+}
+
+function normalizeEpaycoAmount(value) {
+  const numeric = Number(value) || 0;
+  return numeric.toFixed(2);
+}
+
+function computeEpaycoSignature({ customerId, pKey, refPayco, transactionId, amount, currency }) {
+  const signatureBase = [
+    String(customerId || '').trim(),
+    String(pKey || '').trim(),
+    String(refPayco || '').trim(),
+    String(transactionId || '').trim(),
+    normalizeEpaycoAmount(amount),
+    String(currency || 'COP').trim().toUpperCase(),
+  ].join('^');
+
+  return crypto.createHash('sha256').update(signatureBase).digest('hex');
+}
+
+function computeWompiIntegritySignature({ reference, amountInCents, currency, integritySecret }) {
+  const signatureBase = [
+    String(reference || '').trim(),
+    String(amountInCents || '').trim(),
+    String(currency || 'COP').trim().toUpperCase(),
+    String(integritySecret || '').trim(),
+  ].join('');
+
+  return crypto.createHash('sha256').update(signatureBase).digest('hex');
+}
+
+function getValueByPath(source, path) {
+  return String(path || '')
+    .split('.')
+    .filter(Boolean)
+    .reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : undefined), source);
+}
+
+function verifyWompiEventSignature(payload, eventSecret) {
+  const signature = payload?.signature || {};
+  const properties = Array.isArray(signature.properties) ? signature.properties : [];
+  const concatenated = properties
+    .map((propertyPath) => {
+      const value = getValueByPath(payload?.data || {}, propertyPath);
+      return value === undefined || value === null ? '' : String(value);
+    })
+    .join('');
+  const timestamp = String(payload?.timestamp || '').trim();
+  const expected = crypto.createHash('sha256')
+    .update(`${concatenated}${timestamp}${String(eventSecret || '').trim()}`)
+    .digest('hex');
+  const checksum = String(
+    payload?.signature?.checksum ||
+    payload?.signature?.properties_checksum ||
+    payload?.headers?.['x-event-checksum'] ||
+    '',
+  ).trim().toLowerCase();
+
+  return checksum && expected.toLowerCase() === checksum;
+}
+
+function normalizeWompiStatus(status) {
+  const normalized = String(status || '').trim().toUpperCase();
+  if (normalized === 'APPROVED') return 'approved';
+  if (normalized === 'DECLINED') return 'declined';
+  if (normalized === 'VOIDED') return 'voided';
+  if (normalized === 'ERROR') return 'error';
+  if (normalized === 'PENDING') return 'pending';
+  return 'unknown';
+}
+
+function normalizeBoldLinkStatus(status) {
+  const normalized = String(status || '').trim().toUpperCase();
+  if (normalized === 'PAID') return 'paid';
+  if (normalized === 'PROCESSING') return 'processing';
+  if (normalized === 'EXPIRED') return 'expired';
+  if (normalized === 'ACTIVE') return 'active';
+  return 'unknown';
+}
+
+async function syncBoldAttemptPayment({ attemptRef, attemptData, amount, transactionId, statusPayload = {} }) {
+  const paymentTransactionId = `bold_${sanitizeExternalIdentifier(transactionId, String(attemptData.attemptId || '').trim() || 'bold')}`;
+
+  await db.runTransaction(async (transaction) => {
+    const chargeRef = db.collection(STUDENT_BILLING_COLLECTION).doc(String(attemptData.chargeId || '').trim());
+    const transactionRef = db.collection('payments_transactions').doc(paymentTransactionId);
+    const [chargeSnap, existingTransactionSnap] = await Promise.all([
+      transaction.get(chargeRef),
+      transaction.get(transactionRef),
+    ]);
+
+    if (existingTransactionSnap.exists) return;
+    if (!chargeSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'El cargo asociado al intento ya no existe.');
+    }
+
+    const chargeData = chargeSnap.data() || {};
+    const currentStatus = resolveChargeStatus(chargeData);
+    if (currentStatus === 'anulado') {
+      throw new functions.https.HttpsError('failed-precondition', 'El cargo esta anulado.');
+    }
+
+    const currentBalance = Number(chargeData.balance) || 0;
+    if (currentBalance <= 0) {
+      throw new functions.https.HttpsError('failed-precondition', 'El cargo ya no tiene saldo pendiente.');
+    }
+    if (amount - currentBalance > 0.01) {
+      throw new functions.https.HttpsError('failed-precondition', 'El monto confirmado supera el saldo actual del cargo.');
+    }
+
+    const nextValues = applyPaymentToChargeRecord(chargeData, amount, {
+      method: 'bold',
+      reference: transactionId,
+      notes: 'Pago en linea confirmado por Bold.',
+      paidAtIso: new Date().toISOString(),
+      paidByUid: BOLD_WEBHOOK_ACTOR_UID,
+      provider: 'bold',
+      providerTransactionId: transactionId,
+      providerReference: String(attemptData.paymentLink || '').trim(),
+    });
+
+    transaction.set(chargeRef, {
+      ...nextValues,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastPaymentAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    transaction.set(transactionRef, {
+      nitRut: String(attemptData.nitRut || chargeData.nitRut || '').trim(),
+      chargeId: String(attemptData.chargeId || '').trim(),
+      recipientUid: String(chargeData.recipientUid || chargeData.studentUid || '').trim(),
+      recipientName: String(chargeData.recipientName || chargeData.studentName || '').trim(),
+      recipientDocument: String(chargeData.recipientDocument || chargeData.studentDocument || '').trim(),
+      recipientRole: String(chargeData.recipientRole || 'estudiante').trim().toLowerCase(),
+      studentUid: String(chargeData.studentUid || '').trim(),
+      studentName: String(chargeData.studentName || '').trim(),
+      studentDocument: String(chargeData.studentDocument || '').trim(),
+      amount,
+      method: 'bold',
+      reference: transactionId,
+      notes: 'Pago en linea confirmado por Bold.',
+      provider: 'bold',
+      providerTransactionId: transactionId,
+      providerReference: String(attemptData.paymentLink || '').trim(),
+      invoiceId: String(attemptData.paymentLink || attemptData.attemptId || '').trim(),
+      boldStatus: String(statusPayload?.status || '').trim(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdByUid: BOLD_WEBHOOK_ACTOR_UID,
+    }, { merge: true });
+  });
+
+  const receipt = await issueOfficialPaymentReceiptInternal({
+    transactionId: paymentTransactionId,
+    nitRut: String(attemptData.nitRut || '').trim(),
+    actorUid: BOLD_WEBHOOK_ACTOR_UID,
+    actorName: BOLD_WEBHOOK_ACTOR_NAME,
+  });
+
+  await attemptRef.set({
+    status: 'procesado',
+    processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    transactionDocId: paymentTransactionId,
+    receiptNumber: String(receipt?.officialNumber || '').trim(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return {
+    paymentTransactionId,
+    receipt,
+  };
+}
+
+function normalizeEpaycoResponseStatus(code, responseText) {
+  const normalizedCode = String(code || '').trim();
+  if (normalizedCode === '1') return 'aceptada';
+  if (normalizedCode === '2') return 'rechazada';
+  if (normalizedCode === '3') return 'pendiente';
+  if (normalizedCode === '4') return 'fallida';
+
+  const normalizedText = normalizeIdentifier(responseText);
+  if (normalizedText.includes('acept')) return 'aceptada';
+  if (normalizedText.includes('rechaz')) return 'rechazada';
+  if (normalizedText.includes('pend')) return 'pendiente';
+  if (normalizedText.includes('fall')) return 'fallida';
+  return 'desconocida';
+}
+
+function sanitizeExternalIdentifier(value, fallback = 'epayco') {
+  const normalized = String(value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  return normalized || fallback;
+}
+
+function resolveEpaycoResponseUrlPath(role) {
+  return String(role || '').trim().toLowerCase() === 'acudiente'
+    ? '/dashboard/acudiente/pagos'
+    : '/dashboard/pagos';
+}
+
+function resolveEpaycoDocType(value) {
+  const normalized = normalizeIdentifier(value);
+  if (normalized === 'cc' || normalized === 'cedula' || normalized === 'ceduladeciudadania') return 'CC';
+  if (normalized === 'ce' || normalized === 'ceduladeextranjeria') return 'CE';
+  if (normalized === 'nit') return 'NIT';
+  if (normalized === 'ti' || normalized === 'tarjetadeidentidad') return 'TI';
+  if (normalized === 'pp' || normalized === 'passport' || normalized === 'pasaporte') return 'PP';
+  return 'CC';
+}
+
+function resolveEpaycoBillingProfile(userData, chargeData, displayName, fallbackEmail = '') {
+  const profile = userData?.profile || {};
+  const firstName = String(profile.primerNombre || profile.nombres || '').trim();
+  const lastName = String(
+    profile.primerApellido ||
+    profile.apellidos ||
+    '',
+  ).trim();
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+
+  return {
+    name: fullName || String(displayName || chargeData?.recipientName || chargeData?.studentName || 'Pagador').trim(),
+    address: String(profile.direccion || '').trim() || 'No registrada',
+    typeDoc: resolveEpaycoDocType(profile.tipoDocumento || profile.tipoDoc || 'CC'),
+    numberDoc: String(profile.numeroDocumento || chargeData?.recipientDocument || chargeData?.studentDocument || '').trim(),
+    mobilePhone: String(profile.celular || profile.telefono || userData?.phoneNumber || '').trim(),
+    email: String(userData?.email || fallbackEmail || '').trim(),
+  };
+}
+
+async function assertUserCanCreateOnlinePayment({ uid, nitRut, userData, chargeData }) {
+  const role = String(userData?.role || '').trim().toLowerCase();
+  if (role !== 'acudiente') return;
+
+  const studentUid = String(chargeData?.studentUid || '').trim();
+  if (!studentUid) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'El cargo no tiene un estudiante asociado para validar el acudiente.',
+    );
+  }
+
+  const guardianLinkSnap = await db.collection('student_guardians')
+    .where('nitRut', '==', nitRut)
+    .where('guardianUid', '==', uid)
+    .where('studentUid', '==', studentUid)
+    .where('status', '==', 'activo')
+    .limit(1)
+    .get();
+
+  if (guardianLinkSnap.empty) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'No tienes permiso para pagar este cargo.',
+    );
+  }
+}
+
+function buildEpaycoCheckoutPayload({
+  settings,
+  invoiceId,
+  chargeData,
+  billingProfile,
+  responsePath,
+}) {
+  const totalAmount = Number(chargeData?.balance) || 0;
+  const taxAmount = Number(chargeData?.taxAmount) || 0;
+  const taxBase = Math.max(0, totalAmount - taxAmount);
+
+  return {
+    key: settings.publicKey,
+    test: settings.test,
+    data: {
+      external: 'true',
+      invoice: invoiceId,
+      name: String(chargeData?.conceptName || 'Pago en linea').trim() || 'Pago en linea',
+      description: [
+        String(chargeData?.conceptName || 'Pago en linea').trim(),
+        String(chargeData?.periodLabel || '').trim(),
+      ].filter(Boolean).join(' - '),
+      currency: 'cop',
+      country: 'co',
+      lang: 'es',
+      amount: normalizeEpaycoAmount(totalAmount),
+      tax_base: normalizeEpaycoAmount(taxBase),
+      tax: normalizeEpaycoAmount(taxAmount),
+      tax_ico: '0.00',
+      confirmation: settings.confirmationUrl,
+      response: `${settings.appBaseUrl}${responsePath}`,
+      extra1: String(chargeData?.id || '').trim(),
+      extra2: String(chargeData?.nitRut || '').trim(),
+      extra3: String(chargeData?.studentUid || chargeData?.recipientUid || '').trim(),
+      name_billing: billingProfile.name,
+      address_billing: billingProfile.address,
+      type_doc_billing: billingProfile.typeDoc,
+      mobilephone_billing: billingProfile.mobilePhone,
+      number_doc_billing: billingProfile.numberDoc,
+      email_billing: billingProfile.email,
+      unique_transaction_per_bill: 'true',
+    },
+  };
+}
+
+async function createBoldPaymentLink({ settings, amount, description, callbackUrl, payerEmail }) {
+  const response = await fetch('https://integrations.api.bold.co/online/link/v1', {
+    method: 'POST',
+    headers: {
+      Authorization: `x-api-key ${settings.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      amount_type: 'CLOSE',
+      amount: {
+        currency: 'COP',
+        total_amount: Math.round(Number(amount) || 0),
+        tip_amount: 0,
+      },
+      description: String(description || 'Pago en linea').trim().slice(0, 100),
+      callback_url: String(callbackUrl || '').trim(),
+      payer_email: String(payerEmail || '').trim() || undefined,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = Array.isArray(data?.errors)
+      ? data.errors.map((item) => String(item?.message || item || '').trim()).filter(Boolean).join(', ')
+      : String(data?.message || '').trim();
+    throw new functions.https.HttpsError('internal', detail || 'No fue posible crear el link de pago con Bold.');
+  }
+
+  const payload = data?.payload || {};
+  const paymentLink = String(payload.payment_link || payload.paymentLink || '').trim();
+  const url = String(payload.url || '').trim();
+  if (!paymentLink || !url) {
+    throw new functions.https.HttpsError('internal', 'Bold no devolvio un link de pago valido.');
+  }
+
+  return {
+    paymentLink,
+    url,
+    raw: data,
+  };
+}
+
+async function getBoldPaymentLinkStatus({ settings, paymentLink }) {
+  const response = await fetch(`https://integrations.api.bold.co/online/link/v1/${encodeURIComponent(paymentLink)}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `x-api-key ${settings.apiKey}`,
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = Array.isArray(data?.errors)
+      ? data.errors.map((item) => String(item?.message || item || '').trim()).filter(Boolean).join(', ')
+      : String(data?.message || '').trim();
+    throw new functions.https.HttpsError('internal', detail || 'No fue posible consultar el estado del link de Bold.');
+  }
+
+  return data?.payload && typeof data.payload === 'object' ? data.payload : data;
+}
+
+function parseEpaycoPayload(req) {
+  const body = req?.body && typeof req.body === 'object' ? req.body : {};
+  const query = req?.query && typeof req.query === 'object' ? req.query : {};
+  return {
+    ...query,
+    ...body,
+  };
+}
+
+function parseEpaycoDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return admin.firestore.FieldValue.serverTimestamp();
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return admin.firestore.FieldValue.serverTimestamp();
+  return admin.firestore.Timestamp.fromDate(parsed);
+}
+
 function classifyReminderType(charge, baseDate = new Date(), reminderLeadDays = 3) {
   const status = resolveChargeStatus(charge);
   if (status === 'pagado' || status === 'anulado') return '';
@@ -446,6 +1498,10 @@ function serializeSmsSettings(data = {}) {
     priority: Boolean(data.priority),
     certificate: Boolean(data.certificate),
     flash: Boolean(data.flash),
+    automaticReminders: {
+      upcomingPayments: data?.automaticReminders?.upcomingPayments !== false,
+      overduePayments: data?.automaticReminders?.overduePayments !== false,
+    },
     hasApiKey: Boolean(String(data.apiKey || '').trim()),
     provider: 'hablame_sms',
   };
@@ -499,6 +1555,19 @@ function renderSmsTemplateBody(body, variables = {}) {
     const value = safeVariables[normalizedKey];
     return value === undefined || value === null ? `{{${normalizedKey}}}` : String(value);
   });
+}
+
+function buildPaymentReceiptSmsText(templateBody, variables = {}, recipientRole = '') {
+  const baseText = renderSmsTemplateBody(templateBody, variables);
+  const normalizedRole = String(recipientRole || '').trim().toLowerCase();
+  const studentName = String(variables?.estudiante || '').trim();
+  const templateIncludesStudent = String(templateBody || '').includes('{{estudiante}}');
+
+  if (normalizedRole !== 'acudiente' || !studentName || templateIncludesStudent) {
+    return baseText;
+  }
+
+  return `${baseText} Estudiante: ${studentName}.`.replace(/\s+/g, ' ').trim();
 }
 
 async function getSmsTemplateBySlug(nitRut, slug, cache = new Map()) {
@@ -559,6 +1628,7 @@ async function sendSmsBatchViaHablame({
   createdByName = 'Sistema automatico',
   sourceModule = 'general',
   templateSlug = '',
+  dedupeByPhone = false,
 }) {
   const settings = await getSmsConfigByNit(nitRut, { requireEnabled: true, requireApiKey: true });
   const normalizedMessages = (Array.isArray(messages) ? messages : [])
@@ -572,7 +1642,17 @@ async function sendSmsBatchViaHablame({
     }))
     .filter((item) => item.to && item.text);
 
-  const testModeResult = applySmsTestMode(normalizedMessages, settings);
+  const seenPhones = new Set();
+  const dedupedMessages = dedupeByPhone
+    ? normalizedMessages.filter((item) => {
+      const phone = String(item.to || '').trim();
+      if (!phone || seenPhones.has(phone)) return false;
+      seenPhones.add(phone);
+      return true;
+    })
+    : normalizedMessages;
+
+  const testModeResult = applySmsTestMode(dedupedMessages, settings);
   const deliveryMessages = testModeResult.messages;
 
   if (deliveryMessages.length === 0) {
@@ -1098,36 +2178,47 @@ exports.sendSmsOnNewPaymentReceipt = functions.firestore.document('payments_rece
       return null;
     }
 
-    const smsMessages = recipients
-      .map((recipient) => {
-        const recipientUser = usersById.get(recipient.uid) || {};
-        const recipientPhone = resolveUserSmsPhone(recipientUser);
-        if (!recipientPhone) return null;
+    const smsMessagesByPhone = new Map();
+    recipients.forEach((recipient) => {
+      const recipientUser = usersById.get(recipient.uid) || {};
+      const recipientPhone = resolveUserSmsPhone(recipientUser);
+      if (!recipientPhone) return;
 
-        const smsVariables = {
-          nombre: recipient.name,
-          acudiente: recipient.name,
-          estudiante: String(receipt.studentName || charge.studentName || '').trim() || 'estudiante',
-          concepto: String(receipt.conceptName || charge.conceptName || '').trim() || 'sin concepto',
-          periodo: String(receipt.periodLabel || charge.periodLabel || '').trim(),
-          saldo: formatCurrency(charge.balance),
-          valor: formatCurrency(receipt.amount || charge.lastPaymentAmount || 0),
-          fecha_vencimiento: formatHumanDate(charge.dueDate || receipt.dueDate || ''),
-          numero_recibo: String(receipt.officialNumber || snapshot.id || '').trim(),
-          plantel: String(receipt.plantelNombreComercial || receipt.plantelRazonSocial || '').trim(),
-          link_pago: '',
-        };
+      const smsVariables = {
+        nombre: recipient.name,
+        acudiente: recipient.name,
+        estudiante: String(receipt.studentName || charge.studentName || '').trim() || 'estudiante',
+        concepto: String(receipt.conceptName || charge.conceptName || '').trim() || 'sin concepto',
+        periodo: String(receipt.periodLabel || charge.periodLabel || '').trim(),
+        saldo: formatCurrency(charge.balance),
+        valor: formatCurrency(receipt.amount || charge.lastPaymentAmount || 0),
+        fecha_vencimiento: formatHumanDate(charge.dueDate || receipt.dueDate || ''),
+        numero_recibo: String(receipt.officialNumber || snapshot.id || '').trim(),
+        plantel: String(receipt.plantelNombreComercial || receipt.plantelRazonSocial || '').trim(),
+        link_pago: '',
+      };
 
-        return {
+        const nextMessage = {
           to: recipientPhone,
           recipientUid: recipient.uid,
           recipientName: recipient.name,
           recipientRole: recipient.role,
-          text: renderSmsTemplateBody(smsTemplate.body, smsVariables),
+          text: buildPaymentReceiptSmsText(smsTemplate.body, smsVariables, recipient.role),
           variables: smsVariables,
         };
-      })
-      .filter(Boolean);
+
+      const currentMessage = smsMessagesByPhone.get(recipientPhone);
+      const shouldReplace =
+        !currentMessage ||
+        (String(recipient.role || '').trim().toLowerCase() === 'acudiente' &&
+          String(currentMessage.recipientRole || '').trim().toLowerCase() !== 'acudiente');
+
+      if (shouldReplace) {
+        smsMessagesByPhone.set(recipientPhone, nextMessage);
+      }
+    });
+
+    const smsMessages = Array.from(smsMessagesByPhone.values());
 
     if (smsMessages.length === 0) {
       return null;
@@ -1141,12 +2232,45 @@ exports.sendSmsOnNewPaymentReceipt = functions.firestore.document('payments_rece
       createdByName: String(receipt.issuedByName || 'Sistema automatico').trim() || 'Sistema automatico',
       sourceModule: 'pagos',
       templateSlug: 'pago_realizado',
+      dedupeByPhone: true,
     });
   } catch (error) {
     console.error('sendSmsOnNewPaymentReceipt failed', {
       receiptId: snapshot.id,
       nitRut,
       chargeId,
+      error: String(error?.message || error),
+    });
+  }
+
+  return null;
+});
+
+exports.issueDataicoInvoiceOnNewPaymentReceipt = functions.firestore.document('payments_receipts/{receiptId}').onCreate(async (snapshot) => {
+  const receipt = snapshot.data() || {};
+  const transactionId = String(snapshot.id || receipt.transactionId || '').trim();
+  const nitRut = normalizeTenantNit(receipt.nitRut || '');
+
+  if (!transactionId || !nitRut) {
+    return null;
+  }
+
+  try {
+    const settings = await getDataicoSettingsByNit(nitRut).catch(() => null);
+    if (!settings?.enabled || !settings.autoIssueOnPayment) {
+      return null;
+    }
+
+    await createElectronicInvoiceInternal({
+      transactionId,
+      nitRut,
+      actorUid: String(receipt.issuedByUid || 'system').trim() || 'system',
+      actorName: String(receipt.issuedByName || 'Sistema').trim() || 'Sistema',
+    });
+  } catch (error) {
+    console.error('issueDataicoInvoiceOnNewPaymentReceipt failed', {
+      receiptId: snapshot.id,
+      nitRut,
       error: String(error?.message || error),
     });
   }
@@ -1313,10 +2437,822 @@ exports.sendDocumentEmail = functions.https.onCall(async (data, context) => {
   return { success: true };
 });
 
-exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, context) => {
-  const { uid, nitRut, displayName } = await getAuthenticatedUserProfile(context);
-  const transactionId = String(data?.transactionId || '').trim();
+exports.createEpaycoCheckout = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName, userData } = await getAuthenticatedUserProfile(context);
+  const chargeId = String(data?.chargeId || '').trim();
 
+  if (!chargeId) {
+    throw new functions.https.HttpsError('invalid-argument', 'chargeId es obligatorio.');
+  }
+
+  const settings = await getEpaycoSettingsByNit(nitRut);
+  const chargeSnap = await db.collection(STUDENT_BILLING_COLLECTION).doc(chargeId).get();
+  if (!chargeSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'El cargo no existe.');
+  }
+
+  const chargeData = { id: chargeSnap.id, ...(chargeSnap.data() || {}) };
+  if (normalizeTenantNit(chargeData.nitRut || '') !== nitRut) {
+    throw new functions.https.HttpsError('permission-denied', 'El cargo no pertenece a tu plantel.');
+  }
+
+  await assertUserCanCreateOnlinePayment({ uid, nitRut, userData, chargeData });
+
+  const chargeStatus = resolveChargeStatus(chargeData);
+  if (chargeStatus === 'anulado') {
+    throw new functions.https.HttpsError('failed-precondition', 'Este cargo esta anulado y no admite pagos.');
+  }
+
+  const balance = Number(chargeData.balance) || 0;
+  if (balance <= 0) {
+    throw new functions.https.HttpsError('failed-precondition', 'Este cargo no tiene saldo pendiente.');
+  }
+
+  const billingProfile = resolveEpaycoBillingProfile(
+    userData,
+    chargeData,
+    displayName,
+    context.auth?.token?.email || '',
+  );
+  const attemptRef = db.collection(EPAYCO_ATTEMPTS_COLLECTION).doc();
+  const responsePath = String(userData?.role || '').trim().toLowerCase() === 'acudiente'
+    ? settings.responsePathGuardian
+    : settings.responsePathAdmin;
+  const checkout = buildEpaycoCheckoutPayload({
+    settings,
+    invoiceId: attemptRef.id,
+    chargeData,
+    billingProfile,
+    responsePath,
+  });
+
+  await attemptRef.set({
+    nitRut,
+    chargeId,
+    invoiceId: attemptRef.id,
+    amount: Number(checkout.data.amount),
+    currency: String(checkout.data.currency || 'cop').trim().toUpperCase(),
+    status: 'creado',
+    checkoutStatus: 'pendiente',
+    userUid: uid,
+    userRole: String(userData?.role || '').trim().toLowerCase(),
+    userName: displayName,
+    recipientUid: String(chargeData.recipientUid || chargeData.studentUid || '').trim(),
+    studentUid: String(chargeData.studentUid || '').trim(),
+    responsePath,
+    responseUrl: checkout.data.response,
+    confirmationUrl: checkout.data.confirmation,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return {
+    invoiceId: attemptRef.id,
+    chargeId,
+    amount: Number(checkout.data.amount),
+    checkout,
+  };
+});
+
+exports.createWompiCheckout = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName, userData } = await getAuthenticatedUserProfile(context);
+  const chargeId = String(data?.chargeId || '').trim();
+
+  if (!chargeId) {
+    throw new functions.https.HttpsError('invalid-argument', 'chargeId es obligatorio.');
+  }
+
+  const settings = await getWompiSettingsByNit(nitRut);
+  const chargeSnap = await db.collection(STUDENT_BILLING_COLLECTION).doc(chargeId).get();
+  if (!chargeSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'El cargo no existe.');
+  }
+
+  const chargeData = { id: chargeSnap.id, ...(chargeSnap.data() || {}) };
+  if (normalizeTenantNit(chargeData.nitRut || '') !== nitRut) {
+    throw new functions.https.HttpsError('permission-denied', 'El cargo no pertenece a tu plantel.');
+  }
+
+  await assertUserCanCreateOnlinePayment({ uid, nitRut, userData, chargeData });
+
+  const chargeStatus = resolveChargeStatus(chargeData);
+  if (chargeStatus === 'anulado') {
+    throw new functions.https.HttpsError('failed-precondition', 'Este cargo esta anulado y no admite pagos.');
+  }
+
+  const balance = Number(chargeData.balance) || 0;
+  if (balance <= 0) {
+    throw new functions.https.HttpsError('failed-precondition', 'Este cargo no tiene saldo pendiente.');
+  }
+
+  const amountInCents = Math.round(balance * 100);
+  const attemptRef = db.collection(WOMPI_ATTEMPTS_COLLECTION).doc();
+  const reference = attemptRef.id;
+  const responsePath = String(userData?.role || '').trim().toLowerCase() === 'acudiente'
+    ? settings.responsePathGuardian
+    : settings.responsePathAdmin;
+  const billingProfile = resolveEpaycoBillingProfile(
+    userData,
+    chargeData,
+    displayName,
+    context.auth?.token?.email || '',
+  );
+  const widget = {
+    publicKey: settings.publicKey,
+    currency: 'COP',
+    amountInCents,
+    reference,
+    signature: {
+      integrity: computeWompiIntegritySignature({
+        reference,
+        amountInCents,
+        currency: 'COP',
+        integritySecret: settings.integritySecret,
+      }),
+    },
+    redirectUrl: `${settings.appBaseUrl}${responsePath}`,
+    customerData: {
+      email: billingProfile.email,
+      fullName: billingProfile.name,
+      phoneNumber: billingProfile.mobilePhone,
+      phoneNumberPrefix: '+57',
+      legalId: billingProfile.numberDoc,
+      legalIdType: billingProfile.typeDoc,
+    },
+  };
+
+  await attemptRef.set({
+    nitRut,
+    chargeId,
+    reference,
+    amountInCents,
+    currency: 'COP',
+    status: 'creado',
+    checkoutStatus: 'pending',
+    userUid: uid,
+    userRole: String(userData?.role || '').trim().toLowerCase(),
+    userName: displayName,
+    recipientUid: String(chargeData.recipientUid || chargeData.studentUid || '').trim(),
+    studentUid: String(chargeData.studentUid || '').trim(),
+    responsePath,
+    responseUrl: widget.redirectUrl,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return {
+    reference,
+    chargeId,
+    amountInCents,
+    widget,
+  };
+});
+
+exports.createBoldCheckout = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName, userData } = await getAuthenticatedUserProfile(context);
+  const chargeId = String(data?.chargeId || '').trim();
+
+  if (!chargeId) {
+    throw new functions.https.HttpsError('invalid-argument', 'chargeId es obligatorio.');
+  }
+
+  const settings = await getBoldSettingsByNit(nitRut);
+  const chargeSnap = await db.collection(STUDENT_BILLING_COLLECTION).doc(chargeId).get();
+  if (!chargeSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'El cargo no existe.');
+  }
+
+  const chargeData = { id: chargeSnap.id, ...(chargeSnap.data() || {}) };
+  if (normalizeTenantNit(chargeData.nitRut || '') !== nitRut) {
+    throw new functions.https.HttpsError('permission-denied', 'El cargo no pertenece a tu plantel.');
+  }
+
+  await assertUserCanCreateOnlinePayment({ uid, nitRut, userData, chargeData });
+
+  const chargeStatus = resolveChargeStatus(chargeData);
+  if (chargeStatus === 'anulado') {
+    throw new functions.https.HttpsError('failed-precondition', 'Este cargo esta anulado y no admite pagos.');
+  }
+
+  const balance = Number(chargeData.balance) || 0;
+  if (balance <= 0) {
+    throw new functions.https.HttpsError('failed-precondition', 'Este cargo no tiene saldo pendiente.');
+  }
+
+  const attemptRef = db.collection(BOLD_ATTEMPTS_COLLECTION).doc();
+  const responsePath = String(userData?.role || '').trim().toLowerCase() === 'acudiente'
+    ? settings.responsePathGuardian
+    : settings.responsePathAdmin;
+  const billingProfile = resolveEpaycoBillingProfile(
+    userData,
+    chargeData,
+    displayName,
+    context.auth?.token?.email || '',
+  );
+  const callbackUrl = `${settings.appBaseUrl}${responsePath}?bold_return=1&attempt=${encodeURIComponent(attemptRef.id)}`;
+  const link = await createBoldPaymentLink({
+    settings,
+    amount: balance,
+    description: [
+      String(chargeData?.conceptName || 'Pago en linea').trim(),
+      String(chargeData?.periodLabel || '').trim(),
+    ].filter(Boolean).join(' - '),
+    callbackUrl,
+    payerEmail: billingProfile.email,
+  });
+
+  await attemptRef.set({
+    nitRut,
+    chargeId,
+    attemptId: attemptRef.id,
+    paymentLink: link.paymentLink,
+    checkoutUrl: link.url,
+    amount: Math.round(balance),
+    currency: 'COP',
+    status: 'creado',
+    checkoutStatus: 'active',
+    userUid: uid,
+    userRole: String(userData?.role || '').trim().toLowerCase(),
+    userName: displayName,
+    recipientUid: String(chargeData.recipientUid || chargeData.studentUid || '').trim(),
+    studentUid: String(chargeData.studentUid || '').trim(),
+    responsePath,
+    responseUrl: callbackUrl,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return {
+    attemptId: attemptRef.id,
+    chargeId,
+    checkout: {
+      paymentLink: link.paymentLink,
+      url: link.url,
+    },
+  };
+});
+
+exports.finalizeBoldCheckout = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, userData } = await getAuthenticatedUserProfile(context);
+  const attemptId = String(data?.attemptId || '').trim();
+
+  if (!attemptId) {
+    throw new functions.https.HttpsError('invalid-argument', 'attemptId es obligatorio.');
+  }
+
+  const attemptRef = db.collection(BOLD_ATTEMPTS_COLLECTION).doc(attemptId);
+  const attemptSnap = await attemptRef.get();
+  if (!attemptSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Intento de pago Bold no encontrado.');
+  }
+
+  const attemptData = attemptSnap.data() || {};
+  if (normalizeTenantNit(attemptData.nitRut || '') !== nitRut) {
+    throw new functions.https.HttpsError('permission-denied', 'El intento de pago no pertenece a tu plantel.');
+  }
+
+  const chargeRef = db.collection(STUDENT_BILLING_COLLECTION).doc(String(attemptData.chargeId || '').trim());
+  const chargeSnap = await chargeRef.get();
+  if (!chargeSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'El cargo asociado al intento ya no existe.');
+  }
+
+  const chargeData = { id: chargeSnap.id, ...(chargeSnap.data() || {}) };
+  await assertUserCanCreateOnlinePayment({ uid, nitRut, userData, chargeData });
+
+  const settings = await getBoldSettingsByNit(nitRut);
+  const linkStatus = await getBoldPaymentLinkStatus({
+    settings,
+    paymentLink: String(attemptData.paymentLink || '').trim(),
+  });
+
+  const normalizedStatus = normalizeBoldLinkStatus(linkStatus?.status);
+  const transactionId = String(linkStatus?.transaction_id || linkStatus?.transactionId || '').trim();
+  const amount = Number(linkStatus?.total || attemptData.amount || 0) || 0;
+  const amountMatches = Math.abs((Number(attemptData.amount) || 0) - amount) <= 1;
+
+  await attemptRef.set({
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    checkoutStatus: normalizedStatus,
+    boldLinkStatus: String(linkStatus?.status || '').trim(),
+    boldTransactionId: transactionId,
+    boldPayload: linkStatus,
+  }, { merge: true });
+
+  if (normalizedStatus === 'active' || normalizedStatus === 'processing') {
+    return {
+      status: normalizedStatus,
+      message: 'La transaccion de Bold sigue en proceso. Estamos esperando la confirmacion final.',
+      processed: false,
+    };
+  }
+
+  if (normalizedStatus !== 'paid') {
+    await attemptRef.set({
+      status: normalizedStatus,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return {
+      status: normalizedStatus,
+      message: normalizedStatus === 'expired'
+        ? 'El link de pago de Bold ya vencio.'
+        : 'La transaccion con Bold no fue aprobada.',
+      processed: false,
+    };
+  }
+
+  if (!transactionId) {
+    throw new functions.https.HttpsError('failed-precondition', 'Bold reporto el pago como realizado pero no devolvio el identificador de la transaccion.');
+  }
+
+  if (!amountMatches) {
+    await attemptRef.set({
+      status: 'monto_invalido',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    throw new functions.https.HttpsError('failed-precondition', 'El monto confirmado por Bold no coincide con el cargo.');
+  }
+
+  const syncResult = await syncBoldAttemptPayment({
+    attemptRef,
+    attemptData: { ...attemptData, attemptId },
+    amount,
+    transactionId,
+    statusPayload: linkStatus,
+  });
+
+  return {
+    status: 'paid',
+    processed: true,
+    transactionId: syncResult.paymentTransactionId,
+    message: 'Pago confirmado con Bold. Estamos actualizando el recibo.',
+  };
+});
+
+exports.boldWebhook = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ success: false, message: 'Metodo no permitido.' });
+    return;
+  }
+
+  const payload = req.body && typeof req.body === 'object' ? req.body : {};
+  const eventType = String(payload?.type || '').trim().toUpperCase();
+  const reference = String(payload?.data?.metadata?.reference || '').trim();
+  const paymentId = String(payload?.data?.payment_id || payload?.subject || '').trim();
+
+  let attemptRef = null;
+  let attemptSnap = null;
+
+  if (reference) {
+    attemptRef = db.collection(BOLD_ATTEMPTS_COLLECTION).doc(reference);
+    attemptSnap = await attemptRef.get();
+  }
+
+  if ((!attemptSnap || !attemptSnap.exists) && paymentId) {
+    const attemptQuery = await db.collection(BOLD_ATTEMPTS_COLLECTION)
+      .where('boldTransactionId', '==', paymentId)
+      .limit(1)
+      .get();
+    if (!attemptQuery.empty) {
+      attemptSnap = attemptQuery.docs[0];
+      attemptRef = attemptSnap.ref;
+    }
+  }
+
+  if (!attemptSnap || !attemptSnap.exists || !attemptRef) {
+    res.status(200).json({ success: true, ignored: true });
+    return;
+  }
+
+  const attemptData = attemptSnap.data() || {};
+  const settings = await getBoldSettingsByNit(String(attemptData.nitRut || '').trim());
+  const receivedSignature = String(req.headers['x-bold-signature'] || '').trim().toLowerCase();
+
+  if (settings.webhookSecret && req.rawBody && receivedSignature) {
+    const calculatedSignature = crypto
+      .createHmac('sha256', settings.webhookSecret)
+      .update(req.rawBody)
+      .digest('hex')
+      .toLowerCase();
+
+    if (calculatedSignature !== receivedSignature) {
+      await attemptRef.set({
+        status: 'firma_invalida',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      res.status(400).json({ success: false, message: 'Firma invalida.' });
+      return;
+    }
+  }
+
+  await attemptRef.set({
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    boldWebhookType: eventType,
+    boldWebhookPayload: payload,
+    boldTransactionId: paymentId || String(attemptData.boldTransactionId || '').trim(),
+  }, { merge: true });
+
+  if (eventType !== 'SALE_APPROVED') {
+    res.status(200).json({ success: true, ignored: true, status: eventType || 'UNKNOWN' });
+    return;
+  }
+
+  try {
+    const linkStatus = await getBoldPaymentLinkStatus({
+      settings,
+      paymentLink: String(attemptData.paymentLink || '').trim(),
+    });
+    const normalizedStatus = normalizeBoldLinkStatus(linkStatus?.status);
+    const amount = Number(linkStatus?.total || attemptData.amount || 0) || 0;
+    const amountMatches = Math.abs((Number(attemptData.amount) || 0) - amount) <= 1;
+    const resolvedTransactionId = String(linkStatus?.transaction_id || linkStatus?.transactionId || paymentId).trim();
+
+    await attemptRef.set({
+      checkoutStatus: normalizedStatus,
+      boldLinkStatus: String(linkStatus?.status || '').trim(),
+      boldTransactionId: resolvedTransactionId,
+      boldPayload: linkStatus,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    if (normalizedStatus !== 'paid' || !resolvedTransactionId || !amountMatches) {
+      res.status(200).json({ success: true, ignored: true, status: normalizedStatus });
+      return;
+    }
+
+    const syncResult = await syncBoldAttemptPayment({
+      attemptRef,
+      attemptData,
+      amount,
+      transactionId: resolvedTransactionId,
+      statusPayload: linkStatus,
+    });
+
+    res.status(200).json({ success: true, transactionId: syncResult.paymentTransactionId });
+  } catch (error) {
+    console.error('boldWebhook failed', error);
+    await attemptRef.set({
+      status: 'error_procesando',
+      errorMessage: String(error?.message || 'No fue posible procesar el webhook de Bold.').trim(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    res.status(500).json({ success: false, message: 'No fue posible procesar el webhook de Bold.' });
+  }
+});
+
+exports.epaycoConfirmationWebhook = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    res.status(405).json({ success: false, message: 'Metodo no permitido.' });
+    return;
+  }
+
+  const payload = parseEpaycoPayload(req);
+  const invoiceId = String(payload.x_id_invoice || payload.x_invoice || payload.invoice || '').trim();
+  const refPayco = String(payload.x_ref_payco || '').trim();
+  const transactionId = String(payload.x_transaction_id || '').trim();
+  const amount = Number(payload.x_amount || payload.x_amount_ok || 0) || 0;
+  const currency = String(payload.x_currency_code || 'COP').trim().toUpperCase();
+  const signature = String(payload.x_signature || '').trim().toLowerCase();
+
+  if (!invoiceId) {
+    res.status(400).json({ success: false, message: 'Invoice no recibido.' });
+    return;
+  }
+
+  const attemptRef = db.collection(EPAYCO_ATTEMPTS_COLLECTION).doc(invoiceId);
+  const attemptSnap = await attemptRef.get();
+  if (!attemptSnap.exists) {
+    res.status(404).json({ success: false, message: 'Intento de pago no encontrado.' });
+    return;
+  }
+
+  const attemptData = attemptSnap.data() || {};
+  const settings = await getEpaycoSettingsByNit(String(attemptData.nitRut || '').trim());
+  const computedSignature = computeEpaycoSignature({
+    customerId: settings.customerId,
+    pKey: settings.pKey,
+    refPayco,
+    transactionId,
+    amount,
+    currency,
+  }).toLowerCase();
+  const normalizedStatus = normalizeEpaycoResponseStatus(payload.x_cod_response, payload.x_response);
+  const amountMatches = Math.abs((Number(attemptData.amount) || 0) - amount) < 0.01;
+
+  await attemptRef.set({
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    checkoutStatus: normalizedStatus,
+    epaycoRefPayco: refPayco,
+    epaycoTransactionId: transactionId,
+    epaycoResponseCode: String(payload.x_cod_response || '').trim(),
+    epaycoResponseText: String(payload.x_response || '').trim(),
+    epaycoReason: String(payload.x_response_reason_text || '').trim(),
+    epaycoSignature: signature,
+    epaycoPayload: payload,
+  }, { merge: true });
+
+  if (!signature || signature !== computedSignature) {
+    await attemptRef.set({
+      status: 'firma_invalida',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    res.status(400).json({ success: false, message: 'Firma invalida.' });
+    return;
+  }
+
+  if (!amountMatches) {
+    await attemptRef.set({
+      status: 'monto_invalido',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    res.status(400).json({ success: false, message: 'El monto confirmado no coincide con el cargo.' });
+    return;
+  }
+
+  if (normalizedStatus !== 'aceptada') {
+    await attemptRef.set({
+      status: normalizedStatus,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    res.status(200).json({ success: true, status: normalizedStatus });
+    return;
+  }
+
+  const paymentTransactionId = `epayco_${sanitizeExternalIdentifier(refPayco || transactionId || invoiceId, invoiceId)}`;
+
+  try {
+    const paymentResult = await db.runTransaction(async (transaction) => {
+      const chargeRef = db.collection(STUDENT_BILLING_COLLECTION).doc(String(attemptData.chargeId || '').trim());
+      const transactionRef = db.collection('payments_transactions').doc(paymentTransactionId);
+      const [chargeSnap, existingTransactionSnap] = await Promise.all([
+        transaction.get(chargeRef),
+        transaction.get(transactionRef),
+      ]);
+
+      if (existingTransactionSnap.exists) {
+        return { alreadyProcessed: true };
+      }
+
+      if (!chargeSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'El cargo asociado al intento ya no existe.');
+      }
+
+      const chargeData = chargeSnap.data() || {};
+      const currentStatus = resolveChargeStatus(chargeData);
+      if (currentStatus === 'anulado') {
+        throw new functions.https.HttpsError('failed-precondition', 'El cargo esta anulado.');
+      }
+
+      const currentBalance = Number(chargeData.balance) || 0;
+      if (currentBalance <= 0) {
+        throw new functions.https.HttpsError('failed-precondition', 'El cargo ya no tiene saldo pendiente.');
+      }
+      if (amount - currentBalance > 0.01) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'El monto confirmado supera el saldo actual del cargo. Requiere conciliacion manual.',
+        );
+      }
+
+      const nextValues = applyPaymentToChargeRecord(chargeData, amount, {
+        method: 'epayco',
+        reference: refPayco || transactionId,
+        notes: `Pago en linea confirmado por ePayco. Estado: ${String(payload.x_response || '').trim() || 'Aceptada'}`,
+        paidAtIso: new Date().toISOString(),
+        paidByUid: EPAYCO_WEBHOOK_ACTOR_UID,
+        provider: 'epayco',
+        providerTransactionId: transactionId,
+        providerReference: refPayco,
+      });
+
+      transaction.set(chargeRef, {
+        ...nextValues,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastPaymentAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      transaction.set(transactionRef, {
+        nitRut: String(attemptData.nitRut || chargeData.nitRut || '').trim(),
+        chargeId: String(attemptData.chargeId || '').trim(),
+        recipientUid: String(chargeData.recipientUid || chargeData.studentUid || '').trim(),
+        recipientName: String(chargeData.recipientName || chargeData.studentName || '').trim(),
+        recipientDocument: String(chargeData.recipientDocument || chargeData.studentDocument || '').trim(),
+        recipientRole: String(chargeData.recipientRole || 'estudiante').trim().toLowerCase(),
+        studentUid: String(chargeData.studentUid || '').trim(),
+        studentName: String(chargeData.studentName || '').trim(),
+        studentDocument: String(chargeData.studentDocument || '').trim(),
+        amount,
+        method: 'epayco',
+        reference: refPayco || transactionId,
+        notes: `Pago en linea confirmado por ePayco (${String(payload.x_response || '').trim() || 'Aceptada'}).`,
+        provider: 'epayco',
+        providerTransactionId: transactionId,
+        providerReference: refPayco,
+        epaycoResponseCode: String(payload.x_cod_response || '').trim(),
+        epaycoResponseText: String(payload.x_response || '').trim(),
+        epaycoReason: String(payload.x_response_reason_text || '').trim(),
+        invoiceId,
+        createdAt: parseEpaycoDate(payload.x_transaction_date),
+        createdByUid: EPAYCO_WEBHOOK_ACTOR_UID,
+      }, { merge: true });
+
+      return { alreadyProcessed: false };
+    });
+
+    const receipt = await issueOfficialPaymentReceiptInternal({
+      transactionId: paymentTransactionId,
+      nitRut: String(attemptData.nitRut || '').trim(),
+      actorUid: EPAYCO_WEBHOOK_ACTOR_UID,
+      actorName: EPAYCO_WEBHOOK_ACTOR_NAME,
+    });
+
+    await attemptRef.set({
+      status: 'procesado',
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+      transactionDocId: paymentTransactionId,
+      receiptNumber: String(receipt?.officialNumber || '').trim(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    res.status(200).json({ success: true, transactionId: paymentTransactionId });
+  } catch (error) {
+    console.error('epaycoConfirmationWebhook failed', error);
+    await attemptRef.set({
+      status: 'error_procesando',
+      errorMessage: String(error?.message || 'No fue posible procesar la confirmacion.').trim(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    res.status(500).json({ success: false, message: 'No fue posible procesar la confirmacion.' });
+  }
+});
+
+exports.wompiEventWebhook = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ success: false, message: 'Metodo no permitido.' });
+    return;
+  }
+
+  const payload = req.body && typeof req.body === 'object' ? req.body : {};
+  const eventName = String(payload?.event || '').trim();
+  if (eventName !== 'transaction.updated') {
+    res.status(200).json({ success: true, ignored: true });
+    return;
+  }
+
+  const wompiTransaction = payload?.data?.transaction || {};
+  const reference = String(wompiTransaction.reference || '').trim();
+  if (!reference) {
+    res.status(400).json({ success: false, message: 'Referencia no recibida.' });
+    return;
+  }
+
+  const attemptRef = db.collection(WOMPI_ATTEMPTS_COLLECTION).doc(reference);
+  const attemptSnap = await attemptRef.get();
+  if (!attemptSnap.exists) {
+    res.status(404).json({ success: false, message: 'Intento de pago no encontrado.' });
+    return;
+  }
+
+  const attemptData = attemptSnap.data() || {};
+  const settings = await getWompiSettingsByNit(String(attemptData.nitRut || '').trim());
+  const signatureOk = verifyWompiEventSignature(payload, settings.eventSecret);
+  const normalizedStatus = normalizeWompiStatus(wompiTransaction.status);
+  const amountInCents = Number(wompiTransaction.amount_in_cents || wompiTransaction.amountInCents || 0) || 0;
+  const amountMatches = Number(attemptData.amountInCents || 0) === amountInCents;
+
+  await attemptRef.set({
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    checkoutStatus: normalizedStatus,
+    wompiTransactionId: String(wompiTransaction.id || '').trim(),
+    wompiStatus: String(wompiTransaction.status || '').trim(),
+    wompiPayload: payload,
+  }, { merge: true });
+
+  if (!signatureOk) {
+    await attemptRef.set({
+      status: 'firma_invalida',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    res.status(400).json({ success: false, message: 'Firma invalida.' });
+    return;
+  }
+
+  if (!amountMatches) {
+    await attemptRef.set({
+      status: 'monto_invalido',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    res.status(400).json({ success: false, message: 'El monto confirmado no coincide con el cargo.' });
+    return;
+  }
+
+  if (normalizedStatus !== 'approved') {
+    await attemptRef.set({
+      status: normalizedStatus,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    res.status(200).json({ success: true, status: normalizedStatus });
+    return;
+  }
+
+  const paymentTransactionId = `wompi_${sanitizeExternalIdentifier(wompiTransaction.id || reference, reference)}`;
+  try {
+    await db.runTransaction(async (transaction) => {
+      const chargeRef = db.collection(STUDENT_BILLING_COLLECTION).doc(String(attemptData.chargeId || '').trim());
+      const transactionRef = db.collection('payments_transactions').doc(paymentTransactionId);
+      const [chargeSnap, existingTransactionSnap] = await Promise.all([
+        transaction.get(chargeRef),
+        transaction.get(transactionRef),
+      ]);
+
+      if (existingTransactionSnap.exists) return;
+      if (!chargeSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'El cargo asociado al intento ya no existe.');
+      }
+
+      const chargeData = chargeSnap.data() || {};
+      const currentStatus = resolveChargeStatus(chargeData);
+      if (currentStatus === 'anulado') {
+        throw new functions.https.HttpsError('failed-precondition', 'El cargo esta anulado.');
+      }
+
+      const currentBalance = Number(chargeData.balance) || 0;
+      const amount = amountInCents / 100;
+      if (currentBalance <= 0) {
+        throw new functions.https.HttpsError('failed-precondition', 'El cargo ya no tiene saldo pendiente.');
+      }
+      if (amount - currentBalance > 0.01) {
+        throw new functions.https.HttpsError('failed-precondition', 'El monto confirmado supera el saldo actual del cargo.');
+      }
+
+      const nextValues = applyPaymentToChargeRecord(chargeData, amount, {
+        method: 'wompi',
+        reference: String(wompiTransaction.id || reference).trim(),
+        notes: `Pago en linea confirmado por Wompi. Estado: ${String(wompiTransaction.status || '').trim() || 'APPROVED'}`,
+        paidAtIso: new Date().toISOString(),
+        paidByUid: WOMPI_WEBHOOK_ACTOR_UID,
+        provider: 'wompi',
+        providerTransactionId: String(wompiTransaction.id || '').trim(),
+        providerReference: reference,
+      });
+
+      transaction.set(chargeRef, {
+        ...nextValues,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastPaymentAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      transaction.set(transactionRef, {
+        nitRut: String(attemptData.nitRut || chargeData.nitRut || '').trim(),
+        chargeId: String(attemptData.chargeId || '').trim(),
+        recipientUid: String(chargeData.recipientUid || chargeData.studentUid || '').trim(),
+        recipientName: String(chargeData.recipientName || chargeData.studentName || '').trim(),
+        recipientDocument: String(chargeData.recipientDocument || chargeData.studentDocument || '').trim(),
+        recipientRole: String(chargeData.recipientRole || 'estudiante').trim().toLowerCase(),
+        studentUid: String(chargeData.studentUid || '').trim(),
+        studentName: String(chargeData.studentName || '').trim(),
+        studentDocument: String(chargeData.studentDocument || '').trim(),
+        amount,
+        method: 'wompi',
+        reference,
+        notes: `Pago en linea confirmado por Wompi (${String(wompiTransaction.status || '').trim() || 'APPROVED'}).`,
+        provider: 'wompi',
+        providerTransactionId: String(wompiTransaction.id || '').trim(),
+        providerReference: reference,
+        invoiceId: reference,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdByUid: WOMPI_WEBHOOK_ACTOR_UID,
+      }, { merge: true });
+    });
+
+    const receipt = await issueOfficialPaymentReceiptInternal({
+      transactionId: paymentTransactionId,
+      nitRut: String(attemptData.nitRut || '').trim(),
+      actorUid: WOMPI_WEBHOOK_ACTOR_UID,
+      actorName: WOMPI_WEBHOOK_ACTOR_NAME,
+    });
+
+    await attemptRef.set({
+      status: 'procesado',
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+      transactionDocId: paymentTransactionId,
+      receiptNumber: String(receipt?.officialNumber || '').trim(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    res.status(200).json({ success: true, transactionId: paymentTransactionId });
+  } catch (error) {
+    console.error('wompiEventWebhook failed', error);
+    await attemptRef.set({
+      status: 'error_procesando',
+      errorMessage: String(error?.message || 'No fue posible procesar el evento.').trim(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    res.status(500).json({ success: false, message: 'No fue posible procesar el evento.' });
+  }
+});
+
+async function issueOfficialPaymentReceiptInternal({ transactionId, nitRut, actorUid, actorName }) {
   if (!transactionId) {
     throw new functions.https.HttpsError('invalid-argument', 'transactionId es obligatorio.');
   }
@@ -1474,8 +3410,8 @@ exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, contex
         annulledAt: null,
         annulledByUid: '',
         annulledByName: '',
-        issuedByUid: uid,
-        issuedByName: displayName,
+        issuedByUid: String(actorUid || '').trim(),
+        issuedByName: String(actorName || '').trim() || 'Sistema',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -1502,6 +3438,18 @@ exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, contex
   });
 
   return result;
+}
+
+exports.issueOfficialPaymentReceipt = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName } = await getAuthenticatedUserProfile(context);
+  const transactionId = String(data?.transactionId || '').trim();
+
+  return issueOfficialPaymentReceiptInternal({
+    transactionId,
+    nitRut,
+    actorUid: uid,
+    actorName: displayName,
+  });
 });
 
 exports.annulPaymentReceipt = functions.https.onCall(async (data, context) => {
@@ -1585,6 +3533,92 @@ exports.annulPaymentReceipt = functions.https.onCall(async (data, context) => {
   return result;
 });
 
+exports.getPaymentPlatformSettings = functions.https.onCall(async (_data, context) => {
+  const { nitRut } = await getAuthenticatedUserProfile(context);
+  const config = await getPaymentPlatformsConfigByNit(nitRut);
+  return {
+    epayco: serializeEpaycoSettings(resolveProviderConfig(config, 'epayco')),
+    wompi: serializeWompiSettings(resolveProviderConfig(config, 'wompi')),
+    bold: serializeBoldSettings(resolveProviderConfig(config, 'bold')),
+    dataico: serializeDataicoSettings(resolveProviderConfig(config, 'dataico')),
+    appBaseUrl: getAppBaseUrl(),
+  };
+});
+
+exports.savePaymentPlatformSettings = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName } = await getAuthenticatedUserProfile(context);
+  const epayco = data?.epayco && typeof data.epayco === 'object' ? data.epayco : {};
+  const wompi = data?.wompi && typeof data.wompi === 'object' ? data.wompi : {};
+  const bold = data?.bold && typeof data.bold === 'object' ? data.bold : {};
+  const current = await getPaymentPlatformsConfigByNit(nitRut);
+  const currentEpayco = resolveProviderConfig(current, 'epayco');
+  const currentWompi = resolveProviderConfig(current, 'wompi');
+  const currentBold = resolveProviderConfig(current, 'bold');
+
+  const payload = {
+    nitRut,
+    epayco: {
+      enabled: Boolean(epayco.enabled),
+      publicKey: String(epayco.publicKey || '').trim(),
+      customerId: String(epayco.customerId || '').trim(),
+      pKey: String(epayco.pKey || '').trim() || String(currentEpayco.pKey || '').trim(),
+      test: epayco.test !== false,
+      responsePathAdmin: '/dashboard/pagos',
+      responsePathGuardian: '/dashboard/acudiente/pagos',
+    },
+    wompi: {
+      enabled: Boolean(wompi.enabled),
+      publicKey: String(wompi.publicKey || '').trim(),
+      integritySecret: String(wompi.integritySecret || '').trim() || String(currentWompi.integritySecret || '').trim(),
+      eventSecret: String(wompi.eventSecret || '').trim() || String(currentWompi.eventSecret || '').trim(),
+      sandbox: wompi.sandbox !== false,
+      responsePathAdmin: '/dashboard/pagos',
+      responsePathGuardian: '/dashboard/acudiente/pagos',
+    },
+    bold: {
+      enabled: Boolean(bold.enabled),
+      publicKey: String(bold.publicKey || '').trim(),
+      secretKey: String(bold.secretKey || '').trim() || String(currentBold.secretKey || '').trim(),
+      webhookSecret: String(bold.webhookSecret || '').trim() || String(currentBold.webhookSecret || '').trim(),
+      sandbox: bold.sandbox !== false,
+      responsePathAdmin: '/dashboard/pagos',
+      responsePathGuardian: '/dashboard/acudiente/pagos',
+    },
+    dataico: {
+      enabled: Boolean(data?.dataico?.enabled),
+      accountId: String(data?.dataico?.accountId || '').trim(),
+      authToken: String(data?.dataico?.authToken || '').trim() || String(resolveProviderConfig(current, 'dataico').authToken || '').trim(),
+      environment: String(data?.dataico?.environment || 'sandbox').trim().toLowerCase() === 'production' ? 'production' : 'sandbox',
+      invoicePrefix: String(data?.dataico?.invoicePrefix || '').trim().toUpperCase(),
+      autoIssueOnPayment: Boolean(data?.dataico?.autoIssueOnPayment),
+    },
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: uid,
+    updatedByName: displayName,
+  };
+
+  await getPaymentPlatformsConfigRefByNit(nitRut).set(payload, { merge: true });
+  const saved = await getPaymentPlatformsConfigRefByNit(nitRut).get();
+  return {
+    epayco: serializeEpaycoSettings(resolveProviderConfig(saved.data() || {}, 'epayco')),
+    wompi: serializeWompiSettings(resolveProviderConfig(saved.data() || {}, 'wompi')),
+    bold: serializeBoldSettings(resolveProviderConfig(saved.data() || {}, 'bold')),
+    dataico: serializeDataicoSettings(resolveProviderConfig(saved.data() || {}, 'dataico')),
+    appBaseUrl: getAppBaseUrl(),
+  };
+});
+
+exports.createElectronicInvoice = functions.https.onCall(async (data, context) => {
+  const { uid, nitRut, displayName } = await getAuthenticatedUserProfile(context);
+  const transactionId = String(data?.transactionId || '').trim();
+  return createElectronicInvoiceInternal({
+    transactionId,
+    nitRut,
+    actorUid: uid,
+    actorName: displayName,
+  });
+});
+
 exports.getSmsSettings = functions.https.onCall(async (_data, context) => {
   const { nitRut } = await getAuthenticatedUserProfile(context);
   const settings = await getSmsConfigByNit(nitRut);
@@ -1603,6 +3637,10 @@ exports.saveSmsSettings = functions.https.onCall(async (data, context) => {
     priority: Boolean(data?.priority),
     certificate: Boolean(data?.certificate),
     flash: Boolean(data?.flash),
+    automaticReminders: {
+      upcomingPayments: data?.automaticReminders?.upcomingPayments !== false,
+      overduePayments: data?.automaticReminders?.overduePayments !== false,
+    },
     provider: 'hablame_sms',
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedByUid: uid,
@@ -1798,6 +3836,7 @@ exports.sendWhatsAppMessage = functions.https.onCall(async (data, context) => {
   const phone = normalizePhoneNumber(data?.phone, settings.defaultCountryCode);
   const message = String(data?.message || '').trim();
   const templateName = String(data?.templateName || '').trim();
+  const templateLanguage = String(data?.templateLanguage || '').trim();
   const sourceModule = String(data?.sourceModule || 'general').trim() || 'general';
   const recipientName = String(data?.recipientName || '').trim() || 'Destinatario';
   const recipientType = String(data?.recipientType || '').trim() || 'contacto';
@@ -1863,6 +3902,7 @@ exports.sendWhatsAppMessage = functions.https.onCall(async (data, context) => {
       recipientType,
       sourceModule,
       templateName,
+      templateLanguage,
       messageBody: message,
       variables,
       status,
@@ -1889,6 +3929,7 @@ exports.sendWhatsAppMessage = functions.https.onCall(async (data, context) => {
     recipientType,
     sourceModule,
     templateName,
+    templateLanguage,
     messageBody: message,
     variables,
     status,
@@ -2197,8 +4238,7 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
     const userData = userMatch.data || {};
     const profile = userData.profile || {};
     const role = String(userData.role || '').trim().toLowerCase();
-    const now = new Date();
-    const fallbackIsoDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const fallbackIsoDate = getAttendanceIsoDateForNow(new Date());
     const attendanceDateIso = eventDateParts?.isoDate || fallbackIsoDate;
     const attendanceDocId = buildAttendanceDocId(nitRut, attendanceDateIso, userMatch.id);
     const attendanceRef = db.collection('asistencias').doc(attendanceDocId);
@@ -2224,6 +4264,39 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
       res.status(200).json({
         ok: true,
         status: 'duplicado',
+        uid: userMatch.id,
+        personId,
+        attendanceDateIso,
+      });
+      return;
+    }
+
+    const existingAttendanceData = existingAttendance.exists ? (existingAttendance.data() || {}) : {};
+    const existingAttendanceStatus = String(existingAttendanceData.asistencia || '').trim().toLowerCase();
+    const existingMarkType = String(existingAttendanceData.tipoMarcacion || '').trim().toLowerCase();
+    const blockedByReportedAbsence =
+      Boolean(existingAttendanceData.bloqueoAsistencia) ||
+      Boolean(String(existingAttendanceData.inasistenciaId || '').trim()) ||
+      existingMarkType === 'inasistencia';
+    const alreadyMarkedToday = existingAttendanceStatus === 'si';
+
+    if (blockedByReportedAbsence || alreadyMarkedToday) {
+      await logRef.set({
+        fingerprint: eventFingerprint,
+        nitRut,
+        status: blockedByReportedAbsence ? 'bloqueado_inasistencia' : 'ya_marcado',
+        requestMethod: req.method,
+        path: sourcePath,
+        personId,
+        uid: userMatch.id,
+        attendanceDateIso,
+        matchType,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      res.status(200).json({
+        ok: true,
+        status: blockedByReportedAbsence ? 'bloqueado_inasistencia' : 'ya_marcado',
         uid: userMatch.id,
         personId,
         attendanceDateIso,
@@ -2364,6 +4437,13 @@ exports.sendScheduledPaymentReminders = functions.pubsub
       const reminderType = classifyReminderType(charge, today, reminderLeadDays);
       if (!reminderType) continue;
 
+      const smsSettings = await getSmsConfigByNit(chargeNit).catch(() => null);
+      const automaticReminders = smsSettings?.automaticReminders || {};
+      const automaticUpcomingEnabled = automaticReminders.upcomingPayments !== false;
+      const automaticOverdueEnabled = automaticReminders.overduePayments !== false;
+      if (reminderType === 'proximo' && !automaticUpcomingEnabled) continue;
+      if (reminderType === 'vencido' && !automaticOverdueEnabled) continue;
+
       const title = reminderType === 'vencido' ? 'Cobro vencido' : 'Cobro proximo a vencer';
       const body =
         reminderType === 'vencido'
@@ -2421,7 +4501,7 @@ exports.sendScheduledPaymentReminders = functions.pubsub
 
       if (recipients.length === 0) continue;
 
-      const smsTemplateSlug = reminderType === 'vencido' ? 'pago_vencido' : 'recordatorio_pago_proximo';
+      const smsTemplateSlug = reminderType === 'vencido' ? 'recordatorio_pago_vencido' : 'recordatorio_pago_proximo';
       const smsTemplate = await getSmsTemplateBySlug(chargeNit, smsTemplateSlug, smsTemplateCache);
       const smsMessages = [];
 
@@ -2516,6 +4596,7 @@ exports.sendScheduledPaymentReminders = functions.pubsub
             createdByName: 'Sistema automatico',
             sourceModule: 'pagos',
             templateSlug: smsTemplateSlug,
+            dedupeByPhone: true,
           });
         } catch (error) {
           console.error('sendScheduledPaymentReminders sms failed', {

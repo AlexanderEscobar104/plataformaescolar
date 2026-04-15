@@ -8,6 +8,7 @@ import OperationStatusModal from '../../components/OperationStatusModal'
 import EmailDeliveryConfirmModal from '../../components/EmailDeliveryConfirmModal'
 import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 import { sendPdfByEmail } from '../../utils/nativeLinks'
+import { summarizeStudentAudience } from '../../utils/studentAudience'
 import {
   buildBoletinPdfDocument,
   BOLETIN_PERIODS,
@@ -16,6 +17,7 @@ import {
   isBoletinReady,
   toBoletinFixed1,
 } from '../../utils/boletinesPdf'
+import { findDocumentSignature, loadTenantDocumentSignatures } from '../../services/documentSignatures'
 
 const OPERACION_OPTIONS = [
   { value: '', label: 'Todas las operaciones' },
@@ -32,6 +34,13 @@ function formatTimestamp(ts) {
   return Number.isNaN(d.getTime()) ? '-' : d.toLocaleString('es-CO')
 }
 
+function formatDateOnly(value) {
+  if (!value) return '-'
+  if (value?.toDate) return value.toDate().toLocaleDateString('es-CO')
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? String(value || '-') : parsed.toLocaleDateString('es-CO')
+}
+
 function normalizeReportTypeKey(tipo) {
   const clave = String(tipo?.clave || '').trim().toLowerCase()
   if (clave) return clave
@@ -43,6 +52,7 @@ function normalizeReportTypeKey(tipo) {
 function resolveReportKind(tipo) {
   const key = normalizeReportTypeKey(tipo)
   if (key === 'boletines' || key === 'reporte_boletines') return 'boletines'
+  if (key === 'circulares' || key === 'reporte_circulares') return 'circulares'
   if (key === 'asistencia' || key === 'asistencias') return 'asistencias'
   if (key === 'inasistencias' || key === 'reporte_inasistencias') return 'inasistencias'
   if (key === 'permisos_solicitados' || key === 'permisos_solicitado' || key === 'permisos') return 'permisos'
@@ -51,6 +61,9 @@ function resolveReportKind(tipo) {
   if (key === 'pagos' || key === 'reporte_pagos' || key === 'facturacion_y_recibos') return 'pagos'
   if (key === 'historial_modificaciones' || key === 'historial_de_modificaciones' || key === 'historial') {
     return 'historial_modificaciones'
+  }
+  if (key === 'auditoria_accesos' || key === 'auditoria_de_accesos' || key === 'auditoria-accesos') {
+    return 'auditoria_accesos'
   }
   return ''
 }
@@ -389,6 +402,31 @@ function DetailSection({ title, color, data, changedPaths }) {
   )
 }
 
+function SignatureSummaryCards({ total, signed, pending }) {
+  const percentage = total > 0 ? Math.round((signed / total) * 100) : 0
+
+  return (
+    <div className="signature-summary-grid" style={{ marginBottom: '16px' }}>
+      <div className="signature-summary-card">
+        <strong>{total}</strong>
+        <span>Total registros</span>
+      </div>
+      <div className="signature-summary-card">
+        <strong>{signed}</strong>
+        <span>Firmadas</span>
+      </div>
+      <div className="signature-summary-card">
+        <strong>{pending}</strong>
+        <span>Pendientes</span>
+      </div>
+      <div className="signature-summary-card">
+        <strong>{percentage}%</strong>
+        <span>Tasa de firma</span>
+      </div>
+    </div>
+  )
+}
+
 /** Modal that shows the full document detail for a history record. */
 function DetailModal({ record, onClose }) {
   if (!record) return null
@@ -446,6 +484,7 @@ function ReportesPage() {
   const [tipoReportesOptions, setTipoReportesOptions] = useState([])
   const [selectedTipo, setSelectedTipo] = useState(null) // full tipo_reportes doc
   const [records, setRecords] = useState([])
+  const [accessAuditRecords, setAccessAuditRecords] = useState([])
   const [loading, setLoading] = useState(false)
 
   const [asistencias, setAsistencias] = useState([])
@@ -458,12 +497,23 @@ function ReportesPage() {
   const [inasistenciasFeedback, setInasistenciasFeedback] = useState('')
   const [inasistenciasSearch, setInasistenciasSearch] = useState('')
   const [inasistenciasTipoFilter, setInasistenciasTipoFilter] = useState('')
+  const [inasistenciasFirmaFilter, setInasistenciasFirmaFilter] = useState('')
+  const [inasistenciasSignatures, setInasistenciasSignatures] = useState([])
+
+  const [circularesReport, setCircularesReport] = useState([])
+  const [loadingCirculares, setLoadingCirculares] = useState(false)
+  const [circularesFeedback, setCircularesFeedback] = useState('')
+  const [circularesSearch, setCircularesSearch] = useState('')
+  const [circularesFirmaFilter, setCircularesFirmaFilter] = useState('')
+  const [circularesSignatures, setCircularesSignatures] = useState([])
 
   const [permisos, setPermisos] = useState([])
   const [loadingPermisos, setLoadingPermisos] = useState(false)
   const [permisosFeedback, setPermisosFeedback] = useState('')
   const [permisosSearch, setPermisosSearch] = useState('')
   const [permisosTipoFilter, setPermisosTipoFilter] = useState('')
+  const [permisosFirmaFilter, setPermisosFirmaFilter] = useState('')
+  const [permisosSignatures, setPermisosSignatures] = useState([])
 
   const [evaluacionesReport, setEvaluacionesReport] = useState([])
   const [loadingEvaluaciones, setLoadingEvaluaciones] = useState(false)
@@ -770,6 +820,53 @@ function ReportesPage() {
     }
   }, [reportKind, loadHistorial])
 
+  const loadAuditoriaAccesos = useCallback(async () => {
+    if (!userNitRut) return
+    setLoading(true)
+    try {
+      const from = filterFechaDesde ? new Date(`${filterFechaDesde}T00:00:00`) : null
+      const to = filterFechaHasta ? new Date(`${filterFechaHasta}T23:59:59`) : null
+
+      let snap = null
+      try {
+        const constraints = [where('nitRut', '==', userNitRut)]
+        if (from) constraints.push(where('fechaHora', '>=', from))
+        if (to) constraints.push(where('fechaHora', '<=', to))
+        constraints.push(orderBy('fechaHora', 'desc'))
+        snap = await getDocs(query(collection(db, 'auditoria_accesos'), ...constraints))
+      } catch {
+        snap = null
+      }
+
+      if (!snap || snap.empty) {
+        const constraints = []
+        if (from) constraints.push(where('fechaHora', '>=', from))
+        if (to) constraints.push(where('fechaHora', '<=', to))
+        constraints.push(orderBy('fechaHora', 'desc'))
+        snap = await getDocs(query(collection(db, 'auditoria_accesos'), ...constraints))
+      }
+
+      const mapped = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((r) => !r.nitRut || String(r.nitRut) === String(userNitRut))
+
+      setAccessAuditRecords(mapped)
+    } catch (err) {
+      console.error('Error loading auditoria_accesos:', err)
+      setAccessAuditRecords([])
+    } finally {
+      setLoading(false)
+    }
+  }, [filterFechaDesde, filterFechaHasta, userNitRut])
+
+  useEffect(() => {
+    if (reportKind === 'auditoria_accesos') {
+      loadAuditoriaAccesos()
+    } else {
+      setAccessAuditRecords([])
+    }
+  }, [reportKind, loadAuditoriaAccesos])
+
   // â”€â”€ Handle combobox change â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadAsistencias = useCallback(async () => {
     if (!userNitRut) return
@@ -897,7 +994,10 @@ function ReportesPage() {
       if (to) constraints.push(where('creadoEn', '<=', to))
       constraints.push(orderBy('creadoEn', 'desc'))
 
-      const snap = await getDocs(query(collection(db, 'inasistencias'), ...constraints))
+      const [snap, signatureRows] = await Promise.all([
+        getDocs(query(collection(db, 'inasistencias'), ...constraints)),
+        loadTenantDocumentSignatures({ nitRut: userNitRut, tipoModulo: 'inasistencia' }).catch(() => []),
+      ])
       const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
       const studentIds = raw.map((r) => String(r.estudianteId || '')).filter(Boolean)
@@ -930,6 +1030,7 @@ function ReportesPage() {
           return {
             id: r.id,
             belongsToTenant,
+            estudianteId: String(r.estudianteId || ''),
             creadoEn: r.creadoEn || null,
             fecha: r.creadoEn?.toDate?.() ? r.creadoEn.toDate().toISOString().split('T')[0] : '',
             numeroDocumento,
@@ -947,9 +1048,11 @@ function ReportesPage() {
         .filter((r) => r.belongsToTenant)
 
       setInasistencias(mapped)
+      setInasistenciasSignatures(signatureRows)
     } catch (err) {
       console.error('Error loading inasistencias:', err)
       setInasistencias([])
+      setInasistenciasSignatures([])
       setInasistenciasFeedback('No fue posible cargar las inasistencias registradas.')
     } finally {
       setLoadingInasistencias(false)
@@ -961,8 +1064,69 @@ function ReportesPage() {
       loadInasistencias()
     } else {
       setInasistencias([])
+      setInasistenciasSignatures([])
     }
   }, [loadInasistencias, reportKind])
+
+  const loadCirculares = useCallback(async () => {
+    if (!userNitRut) return
+    setLoadingCirculares(true)
+    setCircularesFeedback('')
+    try {
+      const [snapshot, signatureRows] = await Promise.all([
+        getDocs(query(collection(db, 'circulares'), where('nitRut', '==', userNitRut))),
+        loadTenantDocumentSignatures({ nitRut: userNitRut, tipoModulo: 'circular' }).catch(() => []),
+      ])
+
+      const mapped = snapshot.docs
+        .map((docSnapshot) => {
+          const data = docSnapshot.data() || {}
+          const createdAt = data.createdAt || null
+          const createdAtIso = createdAt?.toDate?.()
+            ? createdAt.toDate().toISOString().split('T')[0]
+            : ''
+          const fechaRef = String(data.fechaVencimiento || createdAtIso || '').trim()
+
+          return {
+            id: docSnapshot.id,
+            subject: data.subject || '-',
+            createdAt,
+            fecha: formatDateOnly(createdAt),
+            fechaVencimiento: data.fechaVencimiento || '-',
+            audience: summarizeStudentAudience(data),
+            pdfUrl: data.pdf?.url || '',
+            fechaRef,
+          }
+        })
+        .filter((row) => {
+          if (!filterFechaDesde && !filterFechaHasta) return true
+          if (!row.fechaRef) return false
+          if (filterFechaDesde && row.fechaRef < filterFechaDesde) return false
+          if (filterFechaHasta && row.fechaRef > filterFechaHasta) return false
+          return true
+        })
+        .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+
+      setCircularesReport(mapped)
+      setCircularesSignatures(signatureRows)
+    } catch (err) {
+      console.error('Error loading circulares:', err)
+      setCircularesReport([])
+      setCircularesSignatures([])
+      setCircularesFeedback('No fue posible cargar el reporte de circulares.')
+    } finally {
+      setLoadingCirculares(false)
+    }
+  }, [filterFechaDesde, filterFechaHasta, userNitRut])
+
+  useEffect(() => {
+    if (reportKind === 'circulares') {
+      loadCirculares()
+    } else {
+      setCircularesReport([])
+      setCircularesSignatures([])
+    }
+  }, [loadCirculares, reportKind])
 
   const loadPermisos = useCallback(async () => {
     if (!userNitRut) return
@@ -977,7 +1141,10 @@ function ReportesPage() {
       if (to) constraints.push(where('creadoEn', '<=', to))
       constraints.push(orderBy('creadoEn', 'desc'))
 
-      const snap = await getDocs(query(collection(db, 'permisos'), ...constraints))
+      const [snap, signatureRows] = await Promise.all([
+        getDocs(query(collection(db, 'permisos'), ...constraints)),
+        loadTenantDocumentSignatures({ nitRut: userNitRut, tipoModulo: 'permiso' }).catch(() => []),
+      ])
       const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
       const targetIds = raw.map((r) => String(r.estudianteId || '')).filter(Boolean)
@@ -1009,6 +1176,7 @@ function ReportesPage() {
           return {
             id: r.id,
             belongsToTenant,
+            estudianteId: String(r.estudianteId || ''),
             creadoEn: r.creadoEn || null,
             fecha: r.creadoEn?.toDate?.() ? r.creadoEn.toDate().toISOString().split('T')[0] : '',
             numeroDocumento,
@@ -1026,9 +1194,11 @@ function ReportesPage() {
         .filter((r) => r.belongsToTenant)
 
       setPermisos(mapped)
+      setPermisosSignatures(signatureRows)
     } catch (err) {
       console.error('Error loading permisos:', err)
       setPermisos([])
+      setPermisosSignatures([])
       setPermisosFeedback('No fue posible cargar los permisos solicitados.')
     } finally {
       setLoadingPermisos(false)
@@ -1040,6 +1210,7 @@ function ReportesPage() {
       loadPermisos()
     } else {
       setPermisos([])
+      setPermisosSignatures([])
     }
   }, [loadPermisos, reportKind])
 
@@ -1197,6 +1368,7 @@ function ReportesPage() {
             referencia: data.reference || '-',
             valor: Number(data.amount) || 0,
             recibo: receiptData.officialNumber || '',
+            estadoPago: String(chargeData.status || '').trim().toLowerCase() || '-',
             estadoRecibo: String(receiptData.status || 'activo').trim().toLowerCase() || 'activo',
             estadoCargo: String(chargeData.status || '').trim().toLowerCase() || '-',
             saldoPosterior: Number(chargeData.balance),
@@ -1499,6 +1671,43 @@ function ReportesPage() {
     [filteredRecords]
   )
 
+  const filteredAccessAuditRecords = useMemo(() => {
+    return accessAuditRecords.filter((r) => {
+      if (filterOperacion && String(r.evento || '').trim() !== filterOperacion) return false
+      if (filterFechaDesde) {
+        const ts = r.fechaHora?.toDate?.() || new Date(r.fechaHora || r.fechaHoraISO || 0)
+        if (ts < new Date(`${filterFechaDesde}T00:00:00`)) return false
+      }
+      if (filterFechaHasta) {
+        const ts = r.fechaHora?.toDate?.() || new Date(r.fechaHora || r.fechaHoraISO || 0)
+        if (ts > new Date(`${filterFechaHasta}T23:59:59`)) return false
+      }
+      if (searchText.trim()) {
+        const hay = `${r.evento || ''} ${r.nombre || ''} ${r.email || ''} ${r.uid || ''} ${r.fechaHoraISO || ''}`.toLowerCase()
+        if (!hay.includes(searchText.trim().toLowerCase())) return false
+      }
+      return true
+    })
+  }, [accessAuditRecords, filterFechaDesde, filterFechaHasta, filterOperacion, searchText])
+
+  const displayedAccessAuditRecords = useMemo(() => {
+    if (exportingAll) return filteredAccessAuditRecords
+    return filteredAccessAuditRecords.slice((currentPage - 1) * 10, currentPage * 10)
+  }, [filteredAccessAuditRecords, currentPage, exportingAll])
+
+  const exportAccessAuditData = useMemo(() =>
+    filteredAccessAuditRecords.map((r) => ({
+      Fecha: formatTimestamp(r.fechaHora || r.fechaHoraISO),
+      Evento: r.evento || '-',
+      Usuario: r.nombre || '-',
+      Email: r.email || '-',
+      Uid: r.uid || '-',
+      NitRut: r.nitRut || '-',
+      FechaHoraISO: r.fechaHoraISO || '-',
+    })),
+    [filteredAccessAuditRecords]
+  )
+
   const filteredBoletines = useMemo(() => {
     return boletinesReport.filter((row) => {
       if (boletinesGradeFilter && String(row.grado || '').trim() !== boletinesGradeFilter) return false
@@ -1585,14 +1794,16 @@ function ReportesPage() {
   }, [boletinesReadyRows, buildPdfForBoletinRow, openStatusModal])
 
   const isHistorial = reportKind === 'historial_modificaciones'
+  const isAuditoriaAccesos = reportKind === 'auditoria_accesos'
   const isBoletines = reportKind === 'boletines'
+  const isCirculares = reportKind === 'circulares'
   const isAsistencias = reportKind === 'asistencias'
   const isInasistencias = reportKind === 'inasistencias'
   const isPermisos = reportKind === 'permisos'
   const isEvaluaciones = reportKind === 'evaluaciones'
   const isTareas = reportKind === 'tareas'
   const isPayments = reportKind === 'pagos'
-  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isBoletines && !isAsistencias && !isInasistencias && !isPermisos && !isEvaluaciones && !isTareas && !isPayments
+  const isPlaceholderType = Boolean(selectedTipo) && !isHistorial && !isAuditoriaAccesos && !isBoletines && !isCirculares && !isAsistencias && !isInasistencias && !isPermisos && !isEvaluaciones && !isTareas && !isPayments
 
   return (
     <section className="reports-page">
@@ -1903,6 +2114,250 @@ function ReportesPage() {
         </>
       )}
 
+      {isAuditoriaAccesos && (
+        <>
+          <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <input
+              type="text"
+              placeholder="Buscar por evento, usuario, email o uid..."
+              value={searchText}
+              onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1) }}
+              style={{ flex: '1 1 240px' }}
+            />
+            <select
+              className="role-select-box"
+              value={filterOperacion}
+              onChange={(e) => { setFilterOperacion(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todos los eventos</option>
+              <option value="ingreso">Ingreso</option>
+              <option value="ingreso_qr">Ingreso QR</option>
+              <option value="salida">Salida</option>
+              <option value="salida_automatica_inactividad">Salida automatica por inactividad</option>
+            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.88em' }}>
+                Desde
+                <input type="date" value={filterFechaDesde} onChange={(e) => { setFilterFechaDesde(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+              <label style={{ fontSize: '0.88em' }}>
+                Hasta
+                <input type="date" value={filterFechaHasta} onChange={(e) => { setFilterFechaHasta(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+            </div>
+          </div>
+
+          {loading ? (
+            <p>Cargando auditoria de accesos...</p>
+          ) : (
+            <>
+              <div className="students-table-wrap">
+                <table className="students-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Evento</th>
+                      <th>Usuario</th>
+                      <th>Email</th>
+                      <th>UID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAccessAuditRecords.length === 0 && (
+                      <tr>
+                        <td colSpan="5">No hay registros para los filtros seleccionados.</td>
+                      </tr>
+                    )}
+                    {displayedAccessAuditRecords.map((r) => (
+                      <tr key={r.id}>
+                        <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{formatTimestamp(r.fechaHora || r.fechaHoraISO)}</td>
+                        <td data-label="Evento">{r.evento || '-'}</td>
+                        <td data-label="Usuario">{r.nombre || '-'}</td>
+                        <td data-label="Email">{r.email || '-'}</td>
+                        <td data-label="UID">{r.uid || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <PaginationControls
+                currentPage={currentPage}
+                totalItems={filteredAccessAuditRecords.length}
+                itemsPerPage={10}
+                onPageChange={setCurrentPage}
+              />
+              {canExportExcel && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                  <ExportExcelButton
+                    data={exportAccessAuditData}
+                    filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'AuditoriaAccesos'}
+                    onExportStart={() => setExportingAll(true)}
+                    onExportEnd={() => setExportingAll(false)}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {isCirculares && (
+        <>
+          <div className="students-toolbar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <input
+              type="text"
+              placeholder="Buscar por asunto, fecha o audiencia..."
+              value={circularesSearch}
+              onChange={(e) => { setCircularesSearch(e.target.value); setCurrentPage(1) }}
+              style={{ flex: '1 1 240px' }}
+            />
+            <select
+              className="role-select-box"
+              value={circularesFirmaFilter}
+              onChange={(e) => { setCircularesFirmaFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todas las firmas</option>
+              <option value="firmada">Confirmadas</option>
+              <option value="pendiente">Pendientes</option>
+            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.88em' }}>
+                Desde
+                <input type="date" value={filterFechaDesde} onChange={(e) => { setFilterFechaDesde(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+              <label style={{ fontSize: '0.88em' }}>
+                Hasta
+                <input type="date" value={filterFechaHasta} onChange={(e) => { setFilterFechaHasta(e.target.value); setCurrentPage(1) }} style={{ marginLeft: '6px' }} />
+              </label>
+            </div>
+            <button type="button" className="button secondary small" onClick={loadCirculares} disabled={loadingCirculares}>
+              Refrescar
+            </button>
+          </div>
+
+          {circularesFeedback && <p className="feedback error">{circularesFeedback}</p>}
+
+          {loadingCirculares ? (
+            <p>Cargando circulares...</p>
+          ) : (
+            (() => {
+              const q = circularesSearch.trim().toLowerCase()
+              const filtered = circularesReport.filter((row) => {
+                const signatureRows = circularesSignatures.filter((signature) => String(signature.documentoId || '') === String(row.id))
+                const hasSignature = signatureRows.length > 0
+                if (circularesFirmaFilter === 'firmada' && !hasSignature) return false
+                if (circularesFirmaFilter === 'pendiente' && hasSignature) return false
+                if (!q) return true
+                const hay = `${row.subject} ${row.fecha} ${row.fechaVencimiento} ${row.audience}`.toLowerCase()
+                return hay.includes(q)
+              })
+              const signedCount = filtered.filter((row) => (
+                circularesSignatures.some((signature) => String(signature.documentoId || '') === String(row.id))
+              )).length
+              const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
+              const exportRows = filtered.map((row) => {
+                const signatureRows = circularesSignatures
+                  .filter((signature) => String(signature.documentoId || '') === String(row.id))
+                  .sort((a, b) => (b.firmadoEn?.toMillis?.() || 0) - (a.firmadoEn?.toMillis?.() || 0))
+                const latestSignature = signatureRows[0] || null
+
+                return {
+                  'Estado firma': signatureRows.length > 0 ? 'Confirmada' : 'Pendiente',
+                  Firmas: signatureRows.length,
+                  'Ultimo firmante': latestSignature?.firmanteNombre || '-',
+                  'Fecha ultima firma': latestSignature?.firmadoEn ? formatTimestamp(latestSignature.firmadoEn) : '-',
+                  Asunto: row.subject || '-',
+                  Fecha: row.fecha || '-',
+                  'Fecha vencimiento': row.fechaVencimiento || '-',
+                  'Aplica para': row.audience || '-',
+                  Archivo: row.pdfUrl || '-',
+                }
+              })
+
+              return (
+                <>
+                  <SignatureSummaryCards
+                    total={filtered.length}
+                    signed={signedCount}
+                    pending={Math.max(filtered.length - signedCount, 0)}
+                  />
+                  <div className="students-table-wrap">
+                    <table className="students-table">
+                      <thead>
+                        <tr>
+                          <th>Asunto</th>
+                          <th>Fecha</th>
+                          <th>Fecha vencimiento</th>
+                          <th>Aplica para</th>
+                          <th>Estado firma</th>
+                          <th>Firmas</th>
+                          <th>Ultimo firmante</th>
+                          <th>Fecha ultima firma</th>
+                          <th>Archivo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length === 0 && (
+                          <tr>
+                            <td colSpan="9">No hay circulares para los filtros seleccionados.</td>
+                          </tr>
+                        )}
+                        {displayed.map((row) => {
+                          const signatureRows = circularesSignatures
+                            .filter((signature) => String(signature.documentoId || '') === String(row.id))
+                            .sort((a, b) => (b.firmadoEn?.toMillis?.() || 0) - (a.firmadoEn?.toMillis?.() || 0))
+                          const latestSignature = signatureRows[0] || null
+
+                          return (
+                            <tr key={row.id}>
+                              <td data-label="Asunto">{row.subject || '-'}</td>
+                              <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{row.fecha || '-'}</td>
+                              <td data-label="Fecha vencimiento">{row.fechaVencimiento || '-'}</td>
+                              <td data-label="Aplica para">{row.audience || '-'}</td>
+                              <td data-label="Estado firma">{signatureRows.length > 0 ? 'Confirmada' : 'Pendiente'}</td>
+                              <td data-label="Firmas">{signatureRows.length}</td>
+                              <td data-label="Ultimo firmante">{latestSignature?.firmanteNombre || '-'}</td>
+                              <td data-label="Fecha ultima firma" style={{ whiteSpace: 'nowrap' }}>
+                                {latestSignature?.firmadoEn ? formatTimestamp(latestSignature.firmadoEn) : '-'}
+                              </td>
+                              <td data-label="Archivo">
+                                {row.pdfUrl ? (
+                                  <a href={row.pdfUrl} target="_blank" rel="noopener noreferrer">
+                                    Ver archivo
+                                  </a>
+                                ) : (
+                                  '-'
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtered.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                  {canExportExcel && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                      <ExportExcelButton
+                        data={exportRows}
+                        filename={selectedTipo?.nombre ? `Reporte-${selectedTipo.nombre}` : 'Circulares'}
+                        onExportStart={() => setExportingAll(true)}
+                        onExportEnd={() => setExportingAll(false)}
+                      />
+                    </div>
+                  )}
+                </>
+              )
+            })()
+          )}
+        </>
+      )}
+
       {/* â”€â”€ Custom report type â€” placeholder â”€â”€ */}
       {/* Asistencias */}
       {isAsistencias && (
@@ -2102,6 +2557,15 @@ function ReportesPage() {
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
+            <select
+              className="role-select-box"
+              value={inasistenciasFirmaFilter}
+              onChange={(e) => { setInasistenciasFirmaFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todas las firmas</option>
+              <option value="firmada">Firmadas</option>
+              <option value="pendiente">Pendientes</option>
+            </select>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <label style={{ fontSize: '0.88em' }}>
                 Desde
@@ -2125,28 +2589,58 @@ function ReportesPage() {
             (() => {
               const q = inasistenciasSearch.trim().toLowerCase()
               const filtered = inasistencias.filter((r) => {
+                const signature = findDocumentSignature(inasistenciasSignatures, {
+                  tipoModulo: 'inasistencia',
+                  documentoId: r.id,
+                  estudianteId: r.estudianteId,
+                })
                 if (inasistenciasTipoFilter && String(r.tipoNombre || '').trim() !== inasistenciasTipoFilter) return false
+                if (inasistenciasFirmaFilter === 'firmada' && !signature) return false
+                if (inasistenciasFirmaFilter === 'pendiente' && signature) return false
                 if (!q) return true
                 const hay = `${r.numeroDocumento} ${r.estudianteNombre} ${r.tipoNombre} ${r.descripcion}`.toLowerCase()
                 return hay.includes(q)
               })
+              const signedCount = filtered.filter((r) => (
+                Boolean(findDocumentSignature(inasistenciasSignatures, {
+                  tipoModulo: 'inasistencia',
+                  documentoId: r.id,
+                  estudianteId: r.estudianteId,
+                }))
+              )).length
               const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
-              const exportRows = filtered.map((r) => ({
-                Fecha: r.fecha || '-',
-                Documento: r.numeroDocumento || '-',
-                Estudiante: r.estudianteNombre || '-',
-                Tipo: r.tipoNombre || '-',
-                'Fecha desde': r.fechaDesde || '-',
-                'Fecha hasta': r.fechaHasta || '-',
-                'Hora desde': r.horaDesde || '-',
-                'Hora hasta': r.horaHasta || '-',
-                Motivo: r.descripcion || '-',
-                Adjuntos: r.soporteUrls && r.soporteUrls.length > 0 ? r.soporteUrls.join(' | ') : '-',
-                'Usuario registro': r.creadoPorNombre || '-',
-              }))
+              const exportRows = filtered.map((r) => {
+                const signature = findDocumentSignature(inasistenciasSignatures, {
+                  tipoModulo: 'inasistencia',
+                  documentoId: r.id,
+                  estudianteId: r.estudianteId,
+                })
+
+                return {
+                  'Estado firma': signature ? 'Firmada' : 'Pendiente',
+                  Firmante: signature?.firmanteNombre || '-',
+                  'Fecha firma': signature?.firmadoEn ? formatTimestamp(signature.firmadoEn) : '-',
+                  Fecha: r.fecha || '-',
+                  Documento: r.numeroDocumento || '-',
+                  Estudiante: r.estudianteNombre || '-',
+                  Tipo: r.tipoNombre || '-',
+                  'Fecha desde': r.fechaDesde || '-',
+                  'Fecha hasta': r.fechaHasta || '-',
+                  'Hora desde': r.horaDesde || '-',
+                  'Hora hasta': r.horaHasta || '-',
+                  Motivo: r.descripcion || '-',
+                  Adjuntos: r.soporteUrls && r.soporteUrls.length > 0 ? r.soporteUrls.join(' | ') : '-',
+                  'Usuario registro': r.creadoPorNombre || '-',
+                }
+              })
 
               return (
                 <>
+                  <SignatureSummaryCards
+                    total={filtered.length}
+                    signed={signedCount}
+                    pending={Math.max(filtered.length - signedCount, 0)}
+                  />
                   <div className="students-table-wrap">
                     <table className="students-table">
                       <thead>
@@ -2160,6 +2654,9 @@ function ReportesPage() {
                           <th>Hora desde</th>
                           <th>Hora hasta</th>
                           <th>Motivo</th>
+                          <th>Estado firma</th>
+                          <th>Firmante</th>
+                          <th>Fecha firma</th>
                           <th>Adjuntos</th>
                           <th>Usuario registro</th>
                         </tr>
@@ -2167,10 +2664,17 @@ function ReportesPage() {
                       <tbody>
                         {filtered.length === 0 && (
                           <tr>
-                            <td colSpan="11">No hay inasistencias para los filtros seleccionados.</td>
+                            <td colSpan="14">No hay inasistencias para los filtros seleccionados.</td>
                           </tr>
                         )}
-                        {displayed.map((r) => (
+                        {displayed.map((r) => {
+                          const signature = findDocumentSignature(inasistenciasSignatures, {
+                            tipoModulo: 'inasistencia',
+                            documentoId: r.id,
+                            estudianteId: r.estudianteId,
+                          })
+
+                          return (
                           <tr key={r.id}>
                             <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{r.fecha || '-'}</td>
                             <td data-label="Documento">{r.numeroDocumento || '-'}</td>
@@ -2181,6 +2685,9 @@ function ReportesPage() {
                             <td data-label="Hora desde">{r.horaDesde || '-'}</td>
                             <td data-label="Hora hasta">{r.horaHasta || '-'}</td>
                             <td data-label="Motivo" style={{ whiteSpace: 'pre-wrap', minWidth: '220px' }}>{r.descripcion || '-'}</td>
+                            <td data-label="Estado firma">{signature ? 'Firmada' : 'Pendiente'}</td>
+                            <td data-label="Firmante">{signature?.firmanteNombre || '-'}</td>
+                            <td data-label="Fecha firma" style={{ whiteSpace: 'nowrap' }}>{signature?.firmadoEn ? formatTimestamp(signature.firmadoEn) : '-'}</td>
                             <td data-label="Adjuntos">
                               {r.soporteUrls && r.soporteUrls.length > 0 ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -2196,7 +2703,7 @@ function ReportesPage() {
                             </td>
                             <td data-label="Usuario registro">{r.creadoPorNombre || '-'}</td>
                           </tr>
-                        ))}
+                        )})}
                       </tbody>
                     </table>
                   </div>
@@ -2244,6 +2751,15 @@ function ReportesPage() {
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
+            <select
+              className="role-select-box"
+              value={permisosFirmaFilter}
+              onChange={(e) => { setPermisosFirmaFilter(e.target.value); setCurrentPage(1) }}
+            >
+              <option value="">Todas las firmas</option>
+              <option value="firmada">Firmadas</option>
+              <option value="pendiente">Pendientes</option>
+            </select>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <label style={{ fontSize: '0.88em' }}>
                 Desde
@@ -2267,28 +2783,58 @@ function ReportesPage() {
             (() => {
               const q = permisosSearch.trim().toLowerCase()
               const filtered = permisos.filter((r) => {
+                const signature = findDocumentSignature(permisosSignatures, {
+                  tipoModulo: 'permiso',
+                  documentoId: r.id,
+                  estudianteId: r.estudianteId,
+                })
                 if (permisosTipoFilter && String(r.tipoNombre || '').trim() !== permisosTipoFilter) return false
+                if (permisosFirmaFilter === 'firmada' && !signature) return false
+                if (permisosFirmaFilter === 'pendiente' && signature) return false
                 if (!q) return true
                 const hay = `${r.numeroDocumento} ${r.solicitanteNombre} ${r.tipoNombre} ${r.descripcion}`.toLowerCase()
                 return hay.includes(q)
               })
+              const signedCount = filtered.filter((r) => (
+                Boolean(findDocumentSignature(permisosSignatures, {
+                  tipoModulo: 'permiso',
+                  documentoId: r.id,
+                  estudianteId: r.estudianteId,
+                }))
+              )).length
               const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
-              const exportRows = filtered.map((r) => ({
-                Fecha: r.fecha || '-',
-                Documento: r.numeroDocumento || '-',
-                Solicitante: r.solicitanteNombre || '-',
-                Tipo: r.tipoNombre || '-',
-                'Fecha desde': r.fechaDesde || '-',
-                'Fecha hasta': r.fechaHasta || '-',
-                'Hora desde': r.horaDesde || '-',
-                'Hora hasta': r.horaHasta || '-',
-                Motivo: r.descripcion || '-',
-                Adjuntos: r.soporteUrls && r.soporteUrls.length > 0 ? r.soporteUrls.join(' | ') : '-',
-                'Usuario registro': r.creadoPorNombre || '-',
-              }))
+              const exportRows = filtered.map((r) => {
+                const signature = findDocumentSignature(permisosSignatures, {
+                  tipoModulo: 'permiso',
+                  documentoId: r.id,
+                  estudianteId: r.estudianteId,
+                })
+
+                return {
+                  'Estado firma': signature ? 'Firmada' : 'Pendiente',
+                  Firmante: signature?.firmanteNombre || '-',
+                  'Fecha firma': signature?.firmadoEn ? formatTimestamp(signature.firmadoEn) : '-',
+                  Fecha: r.fecha || '-',
+                  Documento: r.numeroDocumento || '-',
+                  Solicitante: r.solicitanteNombre || '-',
+                  Tipo: r.tipoNombre || '-',
+                  'Fecha desde': r.fechaDesde || '-',
+                  'Fecha hasta': r.fechaHasta || '-',
+                  'Hora desde': r.horaDesde || '-',
+                  'Hora hasta': r.horaHasta || '-',
+                  Motivo: r.descripcion || '-',
+                  Adjuntos: r.soporteUrls && r.soporteUrls.length > 0 ? r.soporteUrls.join(' | ') : '-',
+                  'Usuario registro': r.creadoPorNombre || '-',
+                }
+              })
 
               return (
                 <>
+                  <SignatureSummaryCards
+                    total={filtered.length}
+                    signed={signedCount}
+                    pending={Math.max(filtered.length - signedCount, 0)}
+                  />
                   <div className="students-table-wrap">
                     <table className="students-table">
                       <thead>
@@ -2302,6 +2848,9 @@ function ReportesPage() {
                           <th>Hora desde</th>
                           <th>Hora hasta</th>
                           <th>Motivo</th>
+                          <th>Estado firma</th>
+                          <th>Firmante</th>
+                          <th>Fecha firma</th>
                           <th>Adjuntos</th>
                           <th>Usuario registro</th>
                         </tr>
@@ -2309,10 +2858,17 @@ function ReportesPage() {
                       <tbody>
                         {filtered.length === 0 && (
                           <tr>
-                            <td colSpan="11">No hay permisos para los filtros seleccionados.</td>
+                            <td colSpan="14">No hay permisos para los filtros seleccionados.</td>
                           </tr>
                         )}
-                        {displayed.map((r) => (
+                        {displayed.map((r) => {
+                          const signature = findDocumentSignature(permisosSignatures, {
+                            tipoModulo: 'permiso',
+                            documentoId: r.id,
+                            estudianteId: r.estudianteId,
+                          })
+
+                          return (
                           <tr key={r.id}>
                             <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{r.fecha || '-'}</td>
                             <td data-label="Documento">{r.numeroDocumento || '-'}</td>
@@ -2323,6 +2879,9 @@ function ReportesPage() {
                             <td data-label="Hora desde">{r.horaDesde || '-'}</td>
                             <td data-label="Hora hasta">{r.horaHasta || '-'}</td>
                             <td data-label="Motivo" style={{ whiteSpace: 'pre-wrap', minWidth: '220px' }}>{r.descripcion || '-'}</td>
+                            <td data-label="Estado firma">{signature ? 'Firmada' : 'Pendiente'}</td>
+                            <td data-label="Firmante">{signature?.firmanteNombre || '-'}</td>
+                            <td data-label="Fecha firma" style={{ whiteSpace: 'nowrap' }}>{signature?.firmadoEn ? formatTimestamp(signature.firmadoEn) : '-'}</td>
                             <td data-label="Adjuntos">
                               {r.soporteUrls && r.soporteUrls.length > 0 ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -2338,7 +2897,7 @@ function ReportesPage() {
                             </td>
                             <td data-label="Usuario registro">{r.creadoPorNombre || '-'}</td>
                           </tr>
-                        ))}
+                        )})}
                       </tbody>
                     </table>
                   </div>
@@ -2721,6 +3280,7 @@ function ReportesPage() {
                 Referencia: row.referencia || '-',
                 Valor: row.valor || 0,
                 Recibo: row.recibo || '-',
+                'Estado del pago': row.estadoPago || '-',
                 'Estado recibo': row.estadoRecibo || '-',
                 'Estado cargo': row.estadoCargo || '-',
                 'Saldo posterior': Number.isFinite(row.saldoPosterior) ? row.saldoPosterior : '-',
@@ -2741,13 +3301,14 @@ function ReportesPage() {
                           <th>Referencia</th>
                           <th>Valor</th>
                           <th>Recibo</th>
+                          <th>Estado del pago</th>
                           <th>Estado recibo</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filtered.length === 0 && (
                           <tr>
-                            <td colSpan="10">No hay pagos para los filtros seleccionados.</td>
+                            <td colSpan="11">No hay pagos para los filtros seleccionados.</td>
                           </tr>
                         )}
                         {displayed.map((row) => (
@@ -2761,6 +3322,7 @@ function ReportesPage() {
                             <td data-label="Referencia">{row.referencia || '-'}</td>
                             <td data-label="Valor">{Number(row.valor || 0).toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}</td>
                             <td data-label="Recibo">{row.recibo || 'Pendiente'}</td>
+                            <td data-label="Estado del pago">{row.estadoPago || '-'}</td>
                             <td data-label="Estado recibo">{row.estadoRecibo || '-'}</td>
                           </tr>
                         ))}

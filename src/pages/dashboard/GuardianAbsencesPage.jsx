@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { collection, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore'
 import { getDownloadURL, ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
@@ -7,8 +7,14 @@ import useGuardianPortal from '../../hooks/useGuardianPortal'
 import GuardianStudentSwitcher from '../../components/GuardianStudentSwitcher'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import { PERMISSION_KEYS } from '../../utils/permissions'
-import { addDocTracked } from '../../services/firestoreProxy'
+import { addDocTracked, setDocTracked } from '../../services/firestoreProxy'
 import { uploadBytesTracked } from '../../services/storageService'
+import { buildAttendanceDocId, buildIsoDateRangeInclusive } from '../../utils/attendance'
+import {
+  findDocumentSignature,
+  loadUserDocumentSignatures,
+  registerDocumentSignature,
+} from '../../services/documentSignatures'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
@@ -26,6 +32,10 @@ function formatDateTime(value) {
   }
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleString('es-CO')
+}
+
+function normalizeAttendanceStatus(value) {
+  return String(value || '').trim().toLowerCase() === 'no' ? 'No' : 'Si'
 }
 
 function GuardianAbsencesPage() {
@@ -53,9 +63,11 @@ function GuardianAbsencesPage() {
   const [feedback, setFeedback] = useState('')
   const [absences, setAbsences] = useState([])
   const [absenceTypes, setAbsenceTypes] = useState([])
+  const [signatures, setSignatures] = useState([])
   const [search, setSearch] = useState('')
   const [supportFile, setSupportFile] = useState(null)
   const [supportInputKey, setSupportInputKey] = useState(0)
+  const [signatureAccepted, setSignatureAccepted] = useState(false)
   const [form, setForm] = useState({
     fechaDesde: '',
     fechaHasta: '',
@@ -70,6 +82,7 @@ function GuardianAbsencesPage() {
     if (!canViewAttendance || !activeStudentId) {
       setAbsences([])
       setAbsenceTypes([])
+      setSignatures([])
       setLoading(false)
       return
     }
@@ -78,9 +91,10 @@ function GuardianAbsencesPage() {
     setError('')
 
     try {
-      const [absencesSnap, absenceTypesSnap] = await Promise.all([
+      const [absencesSnap, absenceTypesSnap, signatureRows] = await Promise.all([
         getDocs(query(collection(db, 'inasistencias'), orderBy('creadoEn', 'desc'))).catch(() => getDocs(collection(db, 'inasistencias'))),
         getDocs(collection(db, 'tipo_inasistencias')).catch(() => ({ docs: [] })),
+        loadUserDocumentSignatures({ nitRut: userNitRut, firmanteUid: user?.uid }),
       ])
 
       const mappedAbsences = absencesSnap.docs
@@ -99,18 +113,86 @@ function GuardianAbsencesPage() {
 
       setAbsences(mappedAbsences)
       setAbsenceTypes(mappedAbsenceTypes)
+      setSignatures(signatureRows)
     } catch {
       setError('No fue posible cargar las inasistencias del estudiante seleccionado.')
       setAbsences([])
       setAbsenceTypes([])
+      setSignatures([])
     } finally {
       setLoading(false)
     }
-  }, [activeStudentId, canViewAttendance])
+  }, [activeStudentId, canViewAttendance, user?.uid, userNitRut])
 
   useEffect(() => {
     loadAbsences()
   }, [loadAbsences])
+
+  const validateAbsenceAttendanceConflicts = useCallback(async (studentId, attendanceDates) => {
+    if (!userNitRut || !studentId || !Array.isArray(attendanceDates) || attendanceDates.length === 0) return
+
+    const conflictingDates = []
+
+    for (const dateIso of attendanceDates) {
+      const attendanceRef = doc(db, 'asistencias', buildAttendanceDocId(userNitRut, dateIso, studentId))
+      const attendanceSnap = await getDoc(attendanceRef)
+      if (!attendanceSnap.exists()) continue
+
+      const data = attendanceSnap.data() || {}
+      if (normalizeAttendanceStatus(data.asistencia) === 'Si') {
+        conflictingDates.push(dateIso)
+      }
+    }
+
+    if (conflictingDates.length > 0) {
+      throw new Error(`Ya existe asistencia marcada en: ${conflictingDates.join(', ')}.`)
+    }
+  }, [userNitRut])
+
+  const createAbsenceAttendanceRecords = useCallback(async ({
+    absenceId,
+    studentId,
+    studentName,
+    attendanceDates,
+    tipoId,
+    tipoNombre,
+    descripcion,
+    fechaDesde,
+    fechaHasta,
+  }) => {
+    if (!userNitRut || !studentId || !Array.isArray(attendanceDates) || attendanceDates.length === 0) return
+
+    await Promise.all(
+      attendanceDates.map((dateIso) =>
+        setDocTracked(
+          doc(db, 'asistencias', buildAttendanceDocId(userNitRut, dateIso, studentId)),
+          {
+            nitRut: userNitRut,
+            uid: studentId,
+            fecha: dateIso,
+            role: 'estudiante',
+            grado: String(activeStudent?.studentGrade || '').trim(),
+            grupo: String(activeStudent?.studentGroup || '').trim(),
+            asistencia: 'No',
+            tipoMarcacion: 'inasistencia',
+            marcadoPorUid: user?.uid || '',
+            marcadoPorNombre: user?.displayName || user?.email || 'Acudiente',
+            marcadoPorNumeroDocumento: '',
+            marcadoEn: serverTimestamp(),
+            bloqueoAsistencia: true,
+            inasistenciaId: absenceId,
+            inasistenciaTipoId: tipoId,
+            inasistenciaTipoNombre: tipoNombre,
+            inasistenciaDescripcion: descripcion,
+            inasistenciaFechaDesde: fechaDesde,
+            inasistenciaFechaHasta: fechaHasta,
+            userName: studentName || '',
+          },
+          { merge: true },
+        ),
+      ),
+    )
+  }, [activeStudent?.studentGrade, activeStudent?.studentGroup, user, userNitRut])
 
   const filteredAbsences = useMemo(() => {
     const queryText = search.trim().toLowerCase()
@@ -170,6 +252,11 @@ function GuardianAbsencesPage() {
       return
     }
 
+    if (!signatureAccepted) {
+      setFeedback('Debes aceptar la firma digital de la justificacion antes de enviarla.')
+      return
+    }
+
     try {
       setSaving(true)
       let soporteUrl = ''
@@ -180,7 +267,15 @@ function GuardianAbsencesPage() {
         soporteUrl = await getDownloadURL(storageRef)
       }
 
-      await addDocTracked(collection(db, 'inasistencias'), {
+      const attendanceDates = buildIsoDateRangeInclusive(form.fechaDesde, form.fechaHasta)
+      if (attendanceDates.length === 0) {
+        setFeedback('El rango de fechas de la inasistencia no es valido.')
+        return
+      }
+
+      await validateAbsenceAttendanceConflicts(activeStudentId, attendanceDates)
+
+      const absenceRef = await addDocTracked(collection(db, 'inasistencias'), {
         estudianteId: activeStudentId,
         estudianteNombre: activeStudent?.studentName || '',
         fechaDesde: form.fechaDesde,
@@ -196,6 +291,41 @@ function GuardianAbsencesPage() {
         creadoPorNombre: user?.displayName || user?.email || 'Acudiente',
         solicitudOrigen: 'portal_acudiente',
         nitRut: userNitRut,
+        attendanceDates,
+      })
+
+      await createAbsenceAttendanceRecords({
+        absenceId: absenceRef.id,
+        studentId: activeStudentId,
+        studentName: activeStudent?.studentName || '',
+        attendanceDates,
+        tipoId: form.tipoId,
+        tipoNombre: form.tipoNombre,
+        descripcion: form.descripcion.trim(),
+        fechaDesde: form.fechaDesde,
+        fechaHasta: form.fechaHasta,
+      })
+
+      await registerDocumentSignature({
+        tipoModulo: 'inasistencia',
+        documentoId: absenceRef.id,
+        user,
+        nitRut: userNitRut,
+        student: {
+          id: activeStudentId,
+          name: activeStudent?.studentName || '',
+        },
+        signatureLabel: 'Justificacion de inasistencia firmada por acudiente',
+        documentData: {
+          estudianteNombre: activeStudent?.studentName || '',
+          tipoNombre: form.tipoNombre,
+          fechaDesde: form.fechaDesde,
+          fechaHasta: form.fechaHasta,
+          horaDesde: form.horaDesde,
+          horaHasta: form.horaHasta,
+          descripcion: form.descripcion.trim(),
+          soporteUrl: soporteUrl || '',
+        },
       })
 
       setForm({
@@ -209,10 +339,11 @@ function GuardianAbsencesPage() {
       })
       setSupportFile(null)
       setSupportInputKey((value) => value + 1)
-      setFeedback('Inasistencia reportada correctamente.')
+      setSignatureAccepted(false)
+      setFeedback('Inasistencia reportada y firmada correctamente.')
       await loadAbsences()
-    } catch {
-      setFeedback('No fue posible reportar la inasistencia.')
+    } catch (error) {
+      setFeedback(error?.message || 'No fue posible reportar la inasistencia.')
     } finally {
       setSaving(false)
     }
@@ -299,6 +430,15 @@ function GuardianAbsencesPage() {
             prompt="Arrastra el soporte aqui o haz clic para seleccionarlo."
             helperText={supportFile ? `Archivo seleccionado: ${supportFile.name}` : 'Maximo 25MB por archivo.'}
           />
+          <label className="guardian-signature-check">
+            <input
+              type="checkbox"
+              checked={signatureAccepted}
+              onChange={(event) => setSignatureAccepted(event.target.checked)}
+              disabled={saving}
+            />
+            <span>Acepto y firmo digitalmente esta justificacion como acudiente autenticado.</span>
+          </label>
           <button type="submit" className="button" disabled={saving || !activeStudentId || !canCreateAbsences}>
             {saving ? 'Enviando...' : 'Reportar inasistencia'}
           </button>
@@ -321,23 +461,36 @@ function GuardianAbsencesPage() {
             <p>No hay inasistencias registradas para este estudiante.</p>
           ) : (
             <div className="guardian-message-list">
-              {filteredAbsences.map((item) => (
-                <article key={item.id} className="guardian-message-card">
-                  <header>
-                    <strong>{item.tipoNombre || 'Inasistencia'}</strong>
-                    <span>{formatDateTime(item.creadoEn)}</span>
-                  </header>
-                  <p>{item.descripcion || 'Sin descripcion'}</p>
-                  <small>
-                    {formatDateLabel(item.fechaDesde)} a {formatDateLabel(item.fechaHasta)} · {item.horaDesde || '-'} / {item.horaHasta || '-'}
-                  </small>
-                  {item.soporteUrl ? (
+              {filteredAbsences.map((item) => {
+                const signature = findDocumentSignature(signatures, {
+                  tipoModulo: 'inasistencia',
+                  documentoId: item.id,
+                  estudianteId: item.estudianteId,
+                })
+
+                return (
+                  <article key={item.id} className="guardian-message-card">
+                    <header>
+                      <strong>{item.tipoNombre || 'Inasistencia'}</strong>
+                      <span>{formatDateTime(item.creadoEn)}</span>
+                    </header>
+                    <p>{item.descripcion || 'Sin descripcion'}</p>
                     <small>
-                      <a href={item.soporteUrl} target="_blank" rel="noreferrer">Ver soporte</a>
+                      {formatDateLabel(item.fechaDesde)} a {formatDateLabel(item.fechaHasta)} | {item.horaDesde || '-'} / {item.horaHasta || '-'}
                     </small>
-                  ) : null}
-                </article>
-              ))}
+                    <small>
+                      {signature
+                        ? `Firmado digitalmente el ${formatDateTime(signature.firmadoEn)}`
+                        : 'Pendiente de firma digital'}
+                    </small>
+                    {item.soporteUrl ? (
+                      <small>
+                        <a href={item.soporteUrl} target="_blank" rel="noreferrer">Ver soporte</a>
+                      </small>
+                    ) : null}
+                  </article>
+                )
+              })}
             </div>
           )}
         </div>

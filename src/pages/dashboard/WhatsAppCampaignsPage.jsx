@@ -9,9 +9,18 @@ const EMPTY_CAMPAIGN = {
   name: '',
   module: 'admisiones',
   audienceType: 'leads',
-  templateName: '',
+  templateId: '',
   filters: '',
   status: 'borrador',
+}
+
+const LANGUAGE_LABELS = {
+  es: 'Español',
+  en: 'English',
+}
+
+function formatLanguageLabel(value) {
+  return LANGUAGE_LABELS[String(value || '').trim().toLowerCase()] || String(value || '').trim().toUpperCase() || 'Idioma'
 }
 
 function WhatsAppCampaignsPage() {
@@ -65,10 +74,15 @@ function WhatsAppCampaignsPage() {
   const filteredCampaigns = useMemo(() => {
     const term = String(search || '').trim().toLowerCase()
     return campaigns.filter((item) => {
-      const haystack = [item.name, item.module, item.audienceType, item.templateName, item.status].join(' ').toLowerCase()
+      const haystack = [item.name, item.module, item.audienceType, item.templateName, item.templateLanguage, item.status].join(' ').toLowerCase()
       return !term || haystack.includes(term)
     })
   }, [campaigns, search])
+
+  const selectedTemplate = useMemo(
+    () => templates.find((item) => item.id === form.templateId) || null,
+    [form.templateId, templates],
+  )
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -78,7 +92,7 @@ function WhatsAppCampaignsPage() {
     }
 
     const name = String(form.name || '').trim()
-    if (!name || !String(form.templateName || '').trim()) {
+    if (!name || !selectedTemplate) {
       setFeedback('Debes completar el nombre y la plantilla de la campana.')
       return
     }
@@ -91,7 +105,9 @@ function WhatsAppCampaignsPage() {
         name,
         module: String(form.module || 'admisiones').trim(),
         audienceType: String(form.audienceType || 'leads').trim(),
-        templateName: String(form.templateName || '').trim(),
+        templateId: selectedTemplate.id,
+        templateName: String(selectedTemplate.name || '').trim(),
+        templateLanguage: String(selectedTemplate.language || 'es').trim(),
         filters: String(form.filters || '').trim(),
         status: String(form.status || 'borrador').trim(),
         sentCount: 0,
@@ -162,10 +178,10 @@ function WhatsAppCampaignsPage() {
               </label>
               <label>
                 Plantilla
-                <select value={form.templateName} onChange={(event) => setForm((prev) => ({ ...prev, templateName: event.target.value }))}>
+                <select value={form.templateId} onChange={(event) => setForm((prev) => ({ ...prev, templateId: event.target.value }))}>
                   <option value="">Selecciona plantilla</option>
                   {templates.map((item) => (
-                    <option key={item.id} value={item.name}>{item.name}</option>
+                    <option key={item.id} value={item.id}>{`${item.name} (${formatLanguageLabel(item.language)})`}</option>
                   ))}
                 </select>
               </label>
@@ -216,6 +232,7 @@ function WhatsAppCampaignsPage() {
                   <small>Modulo: {item.module || '-'}</small>
                   <small>Audiencia: {item.audienceType || '-'}</small>
                   <small>Plantilla: {item.templateName || '-'}</small>
+                  <small>Idioma plantilla: {formatLanguageLabel(item.templateLanguage || 'es')}</small>
                 </article>
               ))
             )}

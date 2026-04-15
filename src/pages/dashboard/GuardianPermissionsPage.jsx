@@ -9,6 +9,11 @@ import GuardianStudentSwitcher from '../../components/GuardianStudentSwitcher'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import { addDocTracked } from '../../services/firestoreProxy'
+import {
+  findDocumentSignature,
+  loadUserDocumentSignatures,
+  registerDocumentSignature,
+} from '../../services/documentSignatures'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
@@ -47,6 +52,8 @@ function GuardianPermissionsPage() {
   const [feedback, setFeedback] = useState('')
   const [permissionTypes, setPermissionTypes] = useState([])
   const [permissions, setPermissions] = useState([])
+  const [signatures, setSignatures] = useState([])
+  const [signatureAccepted, setSignatureAccepted] = useState(false)
   const [form, setForm] = useState({
     fechaDesde: '',
     fechaHasta: '',
@@ -62,9 +69,10 @@ function GuardianPermissionsPage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [typesSnap, permissionsSnap] = await Promise.all([
+      const [typesSnap, permissionsSnap, signatureRows] = await Promise.all([
         getDocs(collection(db, 'tipo_permisos')),
         getDocs(query(collection(db, 'permisos'), orderBy('creadoEn', 'desc'))),
+        loadUserDocumentSignatures({ nitRut: userNitRut, firmanteUid: user?.uid }),
       ])
 
       setPermissionTypes(
@@ -84,14 +92,17 @@ function GuardianPermissionsPage() {
             return right - left
           }),
       )
+
+      setSignatures(signatureRows)
     } catch {
       setFeedback('No fue posible cargar permisos y tipos disponibles.')
       setPermissionTypes([])
       setPermissions([])
+      setSignatures([])
     } finally {
       setLoading(false)
     }
-  }, [activeStudentId])
+  }, [activeStudentId, user?.uid, userNitRut])
 
   useEffect(() => {
     loadData()
@@ -145,6 +156,11 @@ function GuardianPermissionsPage() {
       return
     }
 
+    if (!signatureAccepted) {
+      setFeedback('Debes aceptar la firma digital de la solicitud antes de enviarla.')
+      return
+    }
+
     try {
       setSaving(true)
       let soporteUrl = ''
@@ -155,7 +171,7 @@ function GuardianPermissionsPage() {
         soporteUrl = await getDownloadURL(storageRef)
       }
 
-      await addDocTracked(collection(db, 'permisos'), {
+      const permissionRef = await addDocTracked(collection(db, 'permisos'), {
         estudianteId: activeStudentId,
         estudianteNombre: activeStudent?.studentName || '',
         fechaDesde: form.fechaDesde,
@@ -173,6 +189,28 @@ function GuardianPermissionsPage() {
         nitRut: userNitRut,
       })
 
+      await registerDocumentSignature({
+        tipoModulo: 'permiso',
+        documentoId: permissionRef.id,
+        user,
+        nitRut: userNitRut,
+        student: {
+          id: activeStudentId,
+          name: activeStudent?.studentName || '',
+        },
+        signatureLabel: 'Solicitud de permiso firmada por acudiente',
+        documentData: {
+          estudianteNombre: activeStudent?.studentName || '',
+          tipoNombre: form.tipoNombre,
+          fechaDesde: form.fechaDesde,
+          fechaHasta: form.fechaHasta,
+          horaDesde: form.horaDesde,
+          horaHasta: form.horaHasta,
+          descripcion: form.descripcion.trim(),
+          soporteUrl: soporteUrl || '',
+        },
+      })
+
       setForm({
         fechaDesde: '',
         fechaHasta: '',
@@ -184,7 +222,8 @@ function GuardianPermissionsPage() {
       })
       setSupportFile(null)
       setSupportInputKey((value) => value + 1)
-      setFeedback('Permiso enviado correctamente.')
+      setSignatureAccepted(false)
+      setFeedback('Permiso enviado y firmado correctamente.')
       await loadData()
     } catch {
       setFeedback('No fue posible enviar la solicitud de permiso.')
@@ -268,6 +307,15 @@ function GuardianPermissionsPage() {
             prompt="Arrastra el soporte aqui o haz clic para seleccionarlo."
             helperText={supportFile ? `Archivo seleccionado: ${supportFile.name}` : 'Maximo 25MB por archivo.'}
           />
+          <label className="guardian-signature-check">
+            <input
+              type="checkbox"
+              checked={signatureAccepted}
+              onChange={(event) => setSignatureAccepted(event.target.checked)}
+              disabled={saving}
+            />
+            <span>Acepto y firmo digitalmente esta solicitud como acudiente autenticado.</span>
+          </label>
           <button type="submit" className="button" disabled={saving || !activeStudentId || !canCreatePermissions}>
             {saving ? 'Enviando...' : 'Solicitar permiso'}
           </button>
@@ -281,18 +329,36 @@ function GuardianPermissionsPage() {
             <p>No hay permisos registrados para este estudiante.</p>
           ) : (
             <div className="guardian-message-list">
-              {permissions.map((item) => (
-                <article key={item.id} className="guardian-message-card">
-                  <header>
-                    <strong>{item.tipoNombre || 'Permiso'}</strong>
-                    <span>{formatDateTime(item.creadoEn)}</span>
-                  </header>
-                  <p>{item.descripcion || 'Sin descripcion'}</p>
-                  <small>
-                    {formatDateLabel(item.fechaDesde)} a {formatDateLabel(item.fechaHasta)} · {item.horaDesde || '-'} / {item.horaHasta || '-'}
-                  </small>
-                </article>
-              ))}
+              {permissions.map((item) => {
+                const signature = findDocumentSignature(signatures, {
+                  tipoModulo: 'permiso',
+                  documentoId: item.id,
+                  estudianteId: item.estudianteId,
+                })
+
+                return (
+                  <article key={item.id} className="guardian-message-card">
+                    <header>
+                      <strong>{item.tipoNombre || 'Permiso'}</strong>
+                      <span>{formatDateTime(item.creadoEn)}</span>
+                    </header>
+                    <p>{item.descripcion || 'Sin descripcion'}</p>
+                    <small>
+                      {formatDateLabel(item.fechaDesde)} a {formatDateLabel(item.fechaHasta)} | {item.horaDesde || '-'} / {item.horaHasta || '-'}
+                    </small>
+                    <small>
+                      {signature
+                        ? `Firmado digitalmente el ${formatDateTime(signature.firmadoEn)}`
+                        : 'Pendiente de firma digital'}
+                    </small>
+                    {item.soporteUrl ? (
+                      <small>
+                        <a href={item.soporteUrl} target="_blank" rel="noreferrer">Ver soporte</a>
+                      </small>
+                    ) : null}
+                  </article>
+                )
+              })}
             </div>
           )}
         </div>
