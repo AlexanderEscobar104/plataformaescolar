@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { collection, getDocs, query, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { GRADE_OPTIONS, GROUP_OPTIONS } from '../../constants/academicOptions'
 import { useAuth } from '../../hooks/useAuth'
 import { provisionUserWithRole } from '../../services/userProvisioning'
@@ -178,7 +178,7 @@ function AspiranteRegistrationPage() {
         name: fotoAspirante.name,
         size: fotoAspirante.size,
         type: fotoAspirante.type || 'application/octet-stream',
-        url: await getDownloadURL(photoRef),
+        url: await getTrackedDownloadURL(photoRef),
         path: photoPath,
       }
     }
@@ -190,7 +190,7 @@ function AspiranteRegistrationPage() {
         name: file.name,
         size: file.size,
         type: file.type || 'application/octet-stream',
-        url: await getDownloadURL(fileRef),
+        url: await getTrackedDownloadURL(fileRef),
         path: filePath,
       })
     }

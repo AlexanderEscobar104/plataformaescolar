@@ -7,6 +7,7 @@ import logoFallback from '../assets/logo-plataforma.svg'
 function ForgotPasswordPage() {
   const { resetPassword } = useAuth()
 
+  const [channel, setChannel] = useState('sms')
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -25,17 +26,19 @@ function ForgotPasswordPage() {
 
     try {
       setLoading(true)
-      const result = await resetPassword(email.trim())
-      const copiedTo = Array.isArray(result?.copiedTo) ? result.copiedTo : []
-      if (copiedTo.length > 0) {
-        setSuccess(
-          `Se ha enviado un correo con instrucciones para restablecer tu contrasena. Tambien se envio copia a: ${copiedTo.join(', ')}.`,
-        )
+      const result = await resetPassword(email.trim(), channel)
+      if (channel === 'email') {
+        setSuccess('Se envio un correo con instrucciones para restablecer tu contrasena.')
       } else {
-        setSuccess('Se ha enviado un correo con instrucciones para restablecer tu contrasena.')
+        const sentTo = String(result?.sentTo || '').trim()
+        setSuccess(
+          sentTo
+            ? `Se envio un SMS de recuperacion al numero registrado ${sentTo}.`
+            : 'Se envio un SMS de recuperacion al numero registrado en tu usuario.',
+        )
       }
     } catch (firebaseError) {
-      setError(getAuthErrorMessage(firebaseError.code))
+      setError(getAuthErrorMessage(firebaseError))
     } finally {
       setLoading(false)
     }
@@ -53,7 +56,7 @@ function ForgotPasswordPage() {
           />
         </div>
         <h1>Recuperar contrasena</h1>
-        <p className="subtitle">Ingresa tu correo para recibir un enlace de recuperacion</p>
+        <p className="subtitle">Ingresa tu correo y elige si quieres recuperar el acceso por correo o por SMS</p>
 
         {success ? (
           <div>
@@ -64,6 +67,23 @@ function ForgotPasswordPage() {
           </div>
         ) : (
           <form className="form" onSubmit={handleSubmit}>
+            <div className="auth-method-switch" role="tablist" aria-label="Canal de recuperacion">
+              <button
+                type="button"
+                className={`auth-method-button${channel === 'sms' ? ' active' : ''}`}
+                onClick={() => setChannel('sms')}
+              >
+                SMS
+              </button>
+              <button
+                type="button"
+                className={`auth-method-button${channel === 'email' ? ' active' : ''}`}
+                onClick={() => setChannel('email')}
+              >
+                Correo
+              </button>
+            </div>
+
             <label htmlFor="reset-email">
               Correo electronico
               <input
@@ -79,7 +99,7 @@ function ForgotPasswordPage() {
             {error && <p className="feedback error">{error}</p>}
 
             <button className="button" type="submit" disabled={loading}>
-              {loading ? 'Enviando...' : 'Enviar correo de recuperacion'}
+              {loading ? 'Enviando...' : channel === 'sms' ? 'Enviar SMS de recuperacion' : 'Enviar correo de recuperacion'}
             </button>
           </form>
         )}

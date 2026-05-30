@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import {
   collection,
   doc,
@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore'
 import { db, storage } from '../../firebase'
 import { setDocTracked, deleteDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { hydrateStoredFilePayload, hydrateStoredFilePayloads, uploadBytesTracked } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 import {
@@ -42,6 +42,28 @@ const ANNOUNCEMENT_INTERNAL_LINK_OPTIONS = [
   { value: '/dashboard/usuarios', label: 'Usuarios' },
 ]
 
+async function hydrateAnnouncementMedia(data) {
+  try {
+    const images = await hydrateStoredFilePayloads(Array.isArray(data.images) ? data.images : [])
+    const video = data.video && typeof data.video === 'object'
+      ? await hydrateStoredFilePayload(data.video)
+      : data.video || null
+
+    return {
+      ...data,
+      images,
+      video,
+    }
+  } catch (error) {
+    console.error('Error hydrating announcement media:', error)
+    return {
+      ...data,
+      images: Array.isArray(data.images) ? data.images : [],
+      video: data.video || null,
+    }
+  }
+}
+
 function formatAnnouncementDate(dateValue) {
   if (!dateValue) return 'Sin fecha de vencimiento'
   return new Date(`${dateValue}T12:00:00Z`).toLocaleDateString()
@@ -51,16 +73,6 @@ function resolveTodayDateInput() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   return today.toISOString().slice(0, 10)
-}
-
-function createAttachmentPayload(file, path, url) {
-  return {
-    name: file.name,
-    size: file.size,
-    type: file.type || 'application/octet-stream',
-    path,
-    url,
-  }
 }
 
 function AnnouncementsPage() {
@@ -155,11 +167,10 @@ function AnnouncementsPage() {
 
     const unsubscribe = onSnapshot(
       q,
-      (snapshot) => {
-        const list = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
+      async (snapshot) => {
+        const list = await Promise.all(snapshot.docs.map(async (d) => (
+          hydrateAnnouncementMedia({ id: d.id, ...(d.data() || {}) })
+        )))
 
         list.sort((a, b) => {
           const timeA = a.createdAt?.toMillis?.() || 0
@@ -426,16 +437,16 @@ function AnnouncementsPage() {
     for (const file of newImages) {
       const filePath = `announcements/${tenantNitRut}/${announcementId}/images/${Date.now()}_${file.name}`
       const fileRef = ref(storage, filePath)
-      await uploadBytesTracked(fileRef, file)
-      uploadedImages.push(createAttachmentPayload(file, filePath, await getDownloadURL(fileRef)))
+      const snapshot = await uploadBytesTracked(fileRef, file)
+      uploadedImages.push(snapshot.payload)
     }
 
     let uploadedVideo = null
     if (newVideo) {
       const filePath = `announcements/${tenantNitRut}/${announcementId}/video/${Date.now()}_${newVideo.name}`
       const fileRef = ref(storage, filePath)
-      await uploadBytesTracked(fileRef, newVideo)
-      uploadedVideo = createAttachmentPayload(newVideo, filePath, await getDownloadURL(fileRef))
+      const snapshot = await uploadBytesTracked(fileRef, newVideo)
+      uploadedVideo = snapshot.payload
     }
 
     return { uploadedImages, uploadedVideo }
@@ -536,6 +547,15 @@ function AnnouncementsPage() {
       }
 
       await setDocTracked(doc(db, 'anuncios', announcementId), payload, { merge: true })
+      const hydratedPayload = await hydrateAnnouncementMedia({ id: announcementId, ...payload })
+      setAnnouncements((previous) => {
+        const withoutCurrent = previous.filter((item) => item.id !== announcementId)
+        return [hydratedPayload, ...withoutCurrent].sort((a, b) => {
+          const timeA = a.createdAt?.toMillis?.() || a.updatedAt?.toMillis?.() || Date.now()
+          const timeB = b.createdAt?.toMillis?.() || b.updatedAt?.toMillis?.() || Date.now()
+          return timeB - timeA
+        })
+      })
       resetForm()
     } catch {
       setFeedback('Ocurrio un error al guardar el anuncio.')
@@ -553,7 +573,17 @@ function AnnouncementsPage() {
   }
 
   return (
-    <section className="announcements-page">
+    <>
+      {submitting && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card modal-card-loading" role="dialog" aria-modal="true" aria-label="Cargando">
+            <div className="loading-spinner" aria-hidden="true" />
+            <span className="sr-only">Cargando</span>
+          </div>
+        </div>
+      )}
+
+      <section className="announcements-page">
       <div className="students-header">
         <div>
           <h2>Gestion de anuncios</h2>
@@ -1147,7 +1177,8 @@ function AnnouncementsPage() {
           </div>
         </aside>
       </div>
-    </section>
+      </section>
+    </>
   )
 }
 

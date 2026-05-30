@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { useAuth } from '../../hooks/useAuth'
 import useGuardianPortal from '../../hooks/useGuardianPortal'
@@ -8,7 +8,7 @@ import GuardianStudentSwitcher from '../../components/GuardianStudentSwitcher'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import { addDocTracked, setDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { buildAttendanceDocId, buildIsoDateRangeInclusive } from '../../utils/attendance'
 import {
   findDocumentSignature,
@@ -264,7 +264,7 @@ function GuardianAbsencesPage() {
       if (supportFile) {
         const storageRef = ref(storage, `soportes_inasistencia/${Date.now()}-${supportFile.name}`)
         await uploadBytesTracked(storageRef, supportFile)
-        soporteUrl = await getDownloadURL(storageRef)
+        soporteUrl = await getTrackedDownloadURL(storageRef)
       }
 
       const attendanceDates = buildIsoDateRangeInclusive(form.fechaDesde, form.fechaHasta)

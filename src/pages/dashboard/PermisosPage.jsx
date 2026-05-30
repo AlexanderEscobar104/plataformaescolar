@@ -7,9 +7,9 @@ import {
   orderBy,
   serverTimestamp,
 } from 'firebase/firestore'
-import { ref, getDownloadURL } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import PaginationControls from '../../components/PaginationControls'
@@ -147,7 +147,7 @@ function PermisosPage() {
         const storageRef = ref(storage, `soportes_permisos/${fileName}`)
         
         await uploadBytesTracked(storageRef, soporteFile)
-        soporteUrl = await getDownloadURL(storageRef)
+        soporteUrl = await getTrackedDownloadURL(storageRef)
       } else if (existingSoporteUrl) {
         soporteUrl = existingSoporteUrl
       }
@@ -292,7 +292,7 @@ function PermisosPage() {
       const storageRef = ref(storage, `soportes_permisos/${fileName}`)
       
       await uploadBytesTracked(storageRef, newSoporteFile)
-      const url = await getDownloadURL(storageRef)
+      const url = await getTrackedDownloadURL(storageRef)
 
       const { doc, updateDoc } = await import('firebase/firestore')
       

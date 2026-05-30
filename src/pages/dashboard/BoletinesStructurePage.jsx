@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db } from '../../firebase'
 import { storage } from '../../firebase'
 import { setDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import OperationStatusModal from '../../components/OperationStatusModal'
 import DragDropFileInput from '../../components/DragDropFileInput'
@@ -199,7 +199,7 @@ function BoletinesStructurePage() {
       name: picked.name,
       size: picked.size,
       type: picked.type || 'application/octet-stream',
-      url: await getDownloadURL(fileRef),
+      url: await getTrackedDownloadURL(fileRef),
       path: filePath,
       dataUrl: tooLarge ? '' : dataUrl,
     }

@@ -131,6 +131,34 @@ function writeJson(res, statusCode, payload) {
   res.end(body);
 }
 
+function summarizeProxyResponseBody(responseBody) {
+  if (!responseBody || responseBody.length === 0) return '';
+
+  const rawText = Buffer.isBuffer(responseBody)
+    ? responseBody.toString('utf8')
+    : String(responseBody || '');
+  const trimmed = rawText.trim();
+  if (!trimmed) return '';
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    const parts = [];
+
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.reason) parts.push(`reason=${parsed.reason}`);
+      if (parsed.status) parts.push(`statusText=${parsed.status}`);
+      if (parsed.message) parts.push(`message=${parsed.message}`);
+      if (parsed.personId) parts.push(`personId=${parsed.personId}`);
+      if (parsed.uid) parts.push(`uid=${parsed.uid}`);
+      if (parsed.attendanceDateIso) parts.push(`date=${parsed.attendanceDateIso}`);
+    }
+
+    return parts.join(' ');
+  } catch {
+    return trimmed.slice(0, 220).replace(/\s+/g, ' ');
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.url === '/health') {
     writeJson(res, 200, {
@@ -171,9 +199,10 @@ const server = http.createServer(async (req, res) => {
       proxyResponse.on('data', (chunk) => chunks.push(chunk));
       proxyResponse.on('end', () => {
         const responseBody = Buffer.concat(chunks);
+        const responseSummary = summarizeProxyResponseBody(responseBody);
         logLine(
           `Forwarded ${req.method || 'GET'} ${req.url || '/'} -> ${targetUrl.toString()}`,
-          `status=${proxyResponse.statusCode || 0}`,
+          `status=${proxyResponse.statusCode || 0}${responseSummary ? ` ${responseSummary}` : ''}`,
         );
 
         res.writeHead(proxyResponse.statusCode || 502, {

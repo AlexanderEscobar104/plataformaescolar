@@ -11,8 +11,8 @@ import {
   signInWithCustomToken,
   signOut,
   updateProfile,
-  sendPasswordResetEmail,
 } from 'firebase/auth'
+import { httpsCallable } from 'firebase/functions'
 import {
   addDoc,
   collection,
@@ -29,7 +29,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { deleteApp, initializeApp } from 'firebase/app'
-import { auth, db, firebaseConfig } from '../firebase'
+import { auth, db, firebaseConfig, functions } from '../firebase'
 import { AuthContext } from './auth-context'
 import { isNativeApp } from '../utils/nativeLinks'
 import {
@@ -643,9 +643,9 @@ function AuthProvider({ children }) {
     return credentials
   }
 
-  const loginWithCustomToken = async (customToken) => {
+  const loginWithCustomToken = async (customToken, auditEvent = 'ingreso_token') => {
     const credentials = await signInWithCustomToken(auth, String(customToken || '').trim())
-    await registerAccessAudit(credentials.user, 'ingreso_qr')
+    await registerAccessAudit(credentials.user, String(auditEvent || 'ingreso_token').trim() || 'ingreso_token')
     return credentials
   }
 
@@ -669,43 +669,25 @@ function AuthProvider({ children }) {
     return signOut(auth)
   }
 
-  const resetPassword = async (email) => {
+  const resetPassword = async (email, channel = 'sms') => {
     const normalizedEmail = String(email || '').trim().toLowerCase()
-    await sendPasswordResetEmail(auth, normalizedEmail)
+    const normalizedChannel = String(channel || 'sms').trim().toLowerCase()
 
-    const copiedTo = []
-
-    try {
-      const snapshot = await getDocs(
-        query(collection(db, 'users'), where('email', '==', normalizedEmail)),
-      )
-      if (snapshot.empty) return { copiedTo }
-
-      const userData = snapshot.docs[0]?.data() || {}
-      const profile = userData.profile || {}
-      const infoComplementaria = profile.informacionComplementaria || {}
-
-      const copyCandidates = [
-        String(profile.email || '').trim().toLowerCase(),
-        String(infoComplementaria.email || '').trim().toLowerCase(),
-      ]
-        .filter(Boolean)
-        .filter((candidate, index, list) => list.indexOf(candidate) === index)
-        .filter((candidate) => candidate !== normalizedEmail)
-
-      for (const copyEmail of copyCandidates) {
-        try {
-          await sendPasswordResetEmail(auth, copyEmail)
-          copiedTo.push(copyEmail)
-        } catch {
-          // If secondary email is not an auth account, ignore and keep primary success.
-        }
+    if (normalizedChannel === 'email') {
+      const sendPasswordResetEmailCustom = httpsCallable(functions, 'sendPasswordResetEmailCustom')
+      const response = await sendPasswordResetEmailCustom({ email: normalizedEmail })
+      return {
+        channel: 'email',
+        ...(response?.data || {}),
       }
-    } catch {
-      // Keep primary reset flow successful even if copy lookup fails.
     }
 
-    return { copiedTo }
+    const sendPasswordResetSms = httpsCallable(functions, 'sendPasswordResetSms')
+    const response = await sendPasswordResetSms({ email: normalizedEmail })
+    return {
+      channel: 'sms',
+      ...(response?.data || {}),
+    }
   }
 
   const clearInactivityTimers = () => {

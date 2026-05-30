@@ -41,6 +41,27 @@ function formatDateOnly(value) {
   return Number.isNaN(parsed.getTime()) ? String(value || '-') : parsed.toLocaleDateString('es-CO')
 }
 
+function formatAttendanceTime(row = {}) {
+  const rawDeviceTime = String(row.deviceEventAtRaw || '').trim()
+  const rawTimeMatch = rawDeviceTime.match(/(?:T|\s)(\d{2}:\d{2})(?::\d{2})?/)
+  if (rawTimeMatch) return rawTimeMatch[1]
+
+  const timestamp =
+    row.deviceEventAt?.toDate?.() ||
+    row.marcadoEn?.toDate?.() ||
+    null
+  if (timestamp) {
+    return timestamp.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const parsed = new Date(rawDeviceTime)
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  return '-'
+}
+
 function normalizeReportTypeKey(tipo) {
   const clave = String(tipo?.clave || '').trim().toLowerCase()
   if (clave) return clave
@@ -947,6 +968,7 @@ function ReportesPage() {
           id: r.id,
           uid,
           fecha: r.fecha || '-',
+          hora: formatAttendanceTime(r),
           role: r.role || '-',
           grado: r.grado || '',
           grupo: r.grupo || '',
@@ -2461,6 +2483,7 @@ function ReportesPage() {
               const displayed = exportingAll ? filtered : filtered.slice((currentPage - 1) * 10, currentPage * 10)
               const exportRows = filtered.map((a) => ({
                 Fecha: a.fecha || '-',
+                Hora: a.hora || '-',
                 Documento: a.numeroDocumento || '-',
                 Nombres: a.nombres || '-',
                 Apellidos: a.apellidos || '-',
@@ -2479,6 +2502,7 @@ function ReportesPage() {
                       <thead>
                         <tr>
                           <th>Fecha</th>
+                          <th>Hora</th>
                           <th>Documento</th>
                           <th>Nombres</th>
                           <th>Apellidos</th>
@@ -2499,6 +2523,7 @@ function ReportesPage() {
                         {displayed.map((a) => (
                           <tr key={a.id}>
                             <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{a.fecha || '-'}</td>
+                            <td data-label="Hora" style={{ whiteSpace: 'nowrap' }}>{a.hora || '-'}</td>
                             <td data-label="Documento">{a.numeroDocumento || '-'}</td>
                             <td data-label="Nombres">{a.nombres || '-'}</td>
                             <td data-label="Apellidos">{a.apellidos || '-'}</td>

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDoc, onSnapshot, query, increment, where } from 'firebase/firestore'
-import { deleteObject, ref } from 'firebase/storage'
-import { db, storage } from '../../firebase'
-import { updateDocTracked, deleteDocTracked } from '../../services/firestoreProxy'
+import { db } from '../../firebase'
+import { updateDocTracked } from '../../services/firestoreProxy'
+import { deleteStoredFileRecord } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import OperationStatusModal from '../../components/OperationStatusModal'
@@ -131,24 +131,14 @@ function StoragePage() {
     )
   }, [files, searchTerm])
 
-  const handleDelete = async (fileId, filePath, fileSize) => {
+  const handleDelete = async (fileId, fileSize) => {
     if (!confirm('¿Seguro que deseas eliminar este archivo permanentemente para liberar espacio?')) {
       return
     }
 
     try {
       setDeletingId(fileId)
-      // Delete from Firebase Storage first
-      if (filePath) {
-        const fileRef = ref(storage, filePath)
-        await deleteObject(fileRef).catch((e) => {
-          // Ignores if file doesn't exist in storage bucket anymore
-          if (e.code !== 'storage/object-not-found') throw e
-        })
-      }
-
-      // Delete from Firestore tracking
-      await deleteDocTracked(doc(db, 'archivos_subidos', fileId))
+      await deleteStoredFileRecord(fileId)
 
       // Update utilized capacity
       if (fileSize) {
@@ -263,7 +253,7 @@ function StoragePage() {
                 (exportingAll ? filteredFiles : filteredFiles.slice((currentPage - 1) * 10, currentPage * 10)).map((f) => (
                   <tr key={f.id}>
                     <td data-label="Nombre del archivo" style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="storage-file-link">
+                      <a href={f.url || f.base64} target="_blank" rel="noopener noreferrer" className="storage-file-link">
                         {f.name || 'Archivo'}
                       </a>
                     </td>
@@ -275,7 +265,7 @@ function StoragePage() {
                     <td data-label="Acciones">
                       <button
                         className="button danger small"
-                        onClick={() => handleDelete(f.id, f.path, f.size)}
+                        onClick={() => handleDelete(f.id, f.size)}
                         disabled={deletingId === f.id}
                       >
                         {deletingId === f.id ? 'Eliminando...' : 'Eliminar'}

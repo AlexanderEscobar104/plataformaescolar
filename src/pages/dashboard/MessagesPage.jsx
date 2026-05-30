@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { useAuth } from '../../hooks/useAuth'
 import { db, storage } from '../../firebase'
 import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 
@@ -338,6 +338,11 @@ function MessagesPage() {
     return usersByRole.directivo.filter((item) => item.name.toLowerCase().includes(normalized))
   }, [directivoSearch, usersByRole.directivo])
 
+  const unreadInboxCount = useMemo(
+    () => inbox.filter((message) => message.read !== true).length,
+    [inbox],
+  )
+
   const activeMessages = selectedTab === 'inbox' ? inbox : sent
   const filteredActiveMessages = useMemo(() => {
     const normalized = messageSearch.trim().toLowerCase()
@@ -437,7 +442,7 @@ function MessagesPage() {
       const filePath = `messages/${user.uid}/${Date.now()}-${file.name}`
       const storageRef = ref(storage, filePath)
       await uploadBytesTracked(storageRef, file)
-      const url = await getDownloadURL(storageRef)
+      const url = await getTrackedDownloadURL(storageRef)
       uploadedAttachments.push({
         name: file.name,
         size: file.size,
@@ -634,8 +639,8 @@ function MessagesPage() {
           <p>Envia y recibe mensajes internos entre usuarios de la plataforma.</p>
         </div>
         <div className="dashboard-module-hero-note">
-          <strong>{inbox.length}</strong>
-          <span>Mensajes recibidos</span>
+          <strong>{unreadInboxCount}</strong>
+          <span>Mensajes sin leer</span>
           <small>{sent.length} enviados</small>
         </div>
       </div>

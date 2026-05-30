@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { updateDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { GRADE_OPTIONS, GROUP_OPTIONS } from '../../constants/academicOptions'
 import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
@@ -210,7 +210,7 @@ function StudentEditPage() {
         name: fotoEstudianteNueva.name,
         size: fotoEstudianteNueva.size,
         type: fotoEstudianteNueva.type || 'application/octet-stream',
-        url: await getDownloadURL(photoRef),
+        url: await getTrackedDownloadURL(photoRef),
         path: photoPath,
       }
     }
@@ -223,7 +223,7 @@ function StudentEditPage() {
         name: file.name,
         size: file.size,
         type: file.type || 'application/octet-stream',
-        url: await getDownloadURL(fileRef),
+        url: await getTrackedDownloadURL(fileRef),
         path: filePath,
       })
     }

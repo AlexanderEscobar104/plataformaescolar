@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { collection, doc, getDocs, serverTimestamp, query, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { GRADE_OPTIONS, GROUP_OPTIONS } from '../../constants/academicOptions'
 import { useAuth } from '../../hooks/useAuth'
 import OperationStatusModal from '../../components/OperationStatusModal'
@@ -222,7 +222,7 @@ function TasksPage() {
         name: file.name,
         size: file.size,
         type: file.type || 'application/octet-stream',
-        url: await getDownloadURL(fileRef),
+        url: await getTrackedDownloadURL(fileRef),
         path: filePath,
       })
     }

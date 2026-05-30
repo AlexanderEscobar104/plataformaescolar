@@ -298,6 +298,7 @@ function PlanCreationPage() {
     razonSocial: '',
     nombreComercial: '',
     nitEmpresa: '',
+    adminCelular: '',
     valorPlan: '',
     cantidadUsuariosPermitidos: '',
     capacidadAlmacenamiento: '',
@@ -371,6 +372,7 @@ function PlanCreationPage() {
       razonSocial: '',
       nombreComercial: '',
       nitEmpresa: '',
+      adminCelular: '',
       valorPlan: '',
       cantidadUsuariosPermitidos: '',
       capacidadAlmacenamiento: '',
@@ -507,6 +509,7 @@ function PlanCreationPage() {
     const razonSocial = form.razonSocial.trim()
     const nombreComercial = form.nombreComercial.trim()
     const nitEmpresa = form.nitEmpresa.trim()
+    const adminCelular = String(form.adminCelular || '').trim()
     const valorPlan = Number(form.valorPlan)
     const cantidadUsuariosPermitidos = Number(form.cantidadUsuariosPermitidos)
     const capacidadAlmacenamiento = Number(form.capacidadAlmacenamiento)
@@ -568,6 +571,7 @@ function PlanCreationPage() {
           razonSocial,
           nombreComercial,
           nitEmpresa,
+          adminCelular,
           valorPlan,
           cantidadUsuariosPermitidos,
           capacidadAlmacenamiento,
@@ -585,6 +589,29 @@ function PlanCreationPage() {
           updatedAt: serverTimestamp(),
           updatedByUid: user?.uid || '',
         })
+        if (editingPlan.adminUid) {
+          await updateDoc(doc(db, 'users', editingPlan.adminUid), {
+            nitRut: nitEmpresa,
+            'profile.nitRut': nitEmpresa,
+            'profile.numeroDocumento': nitEmpresa,
+            'profile.celular': adminCelular,
+            'profile.telefono': adminCelular,
+            'profile.razonSocial': razonSocial,
+            'profile.nombreComercial': nombreComercial,
+            'profile.planNombre': nombrePlan,
+            'profile.planEstado': estado,
+            'profile.planValor': valorPlan,
+            'profile.planCantidadUsuariosPermitidos': cantidadUsuariosPermitidos,
+            'profile.planFechaAdquisicion': fechaAdquisicion,
+            'profile.planFechaInicioOperacion': fechaInicioOperacion,
+            'profile.planFechaVencimiento': fechaVencimiento,
+            'profile.planDiasPrueba': diasPrueba,
+            'profile.planDiasCortesia': diasCortesia,
+            'profile.planLimiteSmsMensual': limiteSmsMensual,
+            'profile.planLimiteWhatsAppMensual': limiteWhatsAppMensual,
+            'profile.planModulos': form.modulosPlan,
+          })
+        }
         await setDoc(
           doc(db, 'almacenamiento', nitEmpresa),
           {
@@ -604,18 +631,20 @@ function PlanCreationPage() {
 
       setSaving(true)
 
-      const createdUser = await provisionUserWithRole({
-        name: `Administrador ${nombrePlan}`,
-        email: generatedEmail,
+        const createdUser = await provisionUserWithRole({
+          name: `Administrador ${nombrePlan}`,
+          email: generatedEmail,
         password: generatedPassword,
         role: 'administrador',
         nitRut: nitEmpresa,
         profileData: {
-          nitRut: nitEmpresa,
-          numeroDocumento: nitEmpresa,
-          razonSocial,
-          nombreComercial,
-          planNombre: nombrePlan,
+            nitRut: nitEmpresa,
+            numeroDocumento: nitEmpresa,
+            celular: adminCelular,
+            telefono: adminCelular,
+            razonSocial,
+            nombreComercial,
+            planNombre: nombrePlan,
           planEstado: estado,
           planValor: valorPlan,
           planCantidadUsuariosPermitidos: cantidadUsuariosPermitidos,
@@ -630,14 +659,15 @@ function PlanCreationPage() {
         },
       })
 
-      await addDoc(collection(db, 'planes'), {
-        nombrePlan,
-        razonSocial,
-        nombreComercial,
-        nitEmpresa,
-        valorPlan,
-        cantidadUsuariosPermitidos,
-        capacidadAlmacenamiento,
+        await addDoc(collection(db, 'planes'), {
+          nombrePlan,
+          razonSocial,
+          nombreComercial,
+          nitEmpresa,
+          adminCelular,
+          valorPlan,
+          cantidadUsuariosPermitidos,
+          capacidadAlmacenamiento,
         fechaInicioOperacion,
         modulosPlan: form.modulosPlan,
         fechaAdquisicion,
@@ -712,6 +742,7 @@ function PlanCreationPage() {
       razonSocial: plan.razonSocial || '',
       nombreComercial: plan.nombreComercial || '',
       nitEmpresa: plan.nitEmpresa || '',
+      adminCelular: plan.adminCelular || '',
       valorPlan: String(plan.valorPlan ?? ''),
       cantidadUsuariosPermitidos: String(plan.cantidadUsuariosPermitidos ?? ''),
       capacidadAlmacenamiento: String(plan.capacidadAlmacenamiento ?? ''),
@@ -954,6 +985,17 @@ function PlanCreationPage() {
                 value={generatedPassword}
                 readOnly
                 placeholder="nitempresa"
+              />
+            </label>
+
+            <label htmlFor="plan-admin-celular">
+              Celular del administrador
+              <input
+                id="plan-admin-celular"
+                type="tel"
+                value={form.adminCelular}
+                onChange={(event) => setForm((prev) => ({ ...prev, adminCelular: event.target.value }))}
+                placeholder="Ej: 3001234567"
               />
             </label>
 
@@ -1215,6 +1257,7 @@ function PlanCreationPage() {
                   <th>Estado inteligente</th>
                   <th>Estado</th>
                   <th>Admin</th>
+                  <th>Celular admin</th>
                   <th>Creado</th>
                   <th>Acciones</th>
                 </tr>
@@ -1222,7 +1265,7 @@ function PlanCreationPage() {
               <tbody>
                 {plans.length === 0 && (
                   <tr>
-                    <td colSpan="18">No hay planes registrados.</td>
+                    <td colSpan="19">No hay planes registrados.</td>
                   </tr>
                 )}
                 {plans.map((plan) => {
@@ -1263,6 +1306,7 @@ function PlanCreationPage() {
                     </td>
                     <td data-label="Estado">{plan.estado || '-'}</td>
                     <td data-label="Admin">{plan.adminEmail || '-'}</td>
+                    <td data-label="Celular admin">{plan.adminCelular || '-'}</td>
                     <td data-label="Creado">{formatDate(plan.createdAt)}</td>
                     <td data-label="Acciones" className="student-actions">
                       <button

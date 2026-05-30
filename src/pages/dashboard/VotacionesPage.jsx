@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
@@ -169,7 +169,7 @@ function VotacionesPage() {
         const filePath = `participacion/votaciones/${Date.now()}-${option.id}-${option.newImageFile.name}`
         const fileRef = ref(storage, filePath)
         await uploadBytesTracked(fileRef, option.newImageFile)
-        imageUrl = await getDownloadURL(fileRef)
+        imageUrl = await getTrackedDownloadURL(fileRef)
         imagePath = filePath
       }
 

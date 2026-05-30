@@ -37,7 +37,7 @@ function GuardianEvaluationsPage() {
   const [evaluations, setEvaluations] = useState([])
 
   const loadEvaluations = useCallback(async () => {
-    if (!activeStudent?.studentGrade || !activeStudent?.studentGroup) {
+    if (!activeStudent?.studentGrade || !activeStudent?.studentGroup || !activeStudent?.studentUid) {
       setEvaluations([])
       setLoading(false)
       return
@@ -45,7 +45,30 @@ function GuardianEvaluationsPage() {
 
     setLoading(true)
     try {
-      const evaluationsSnapshot = await getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', userNitRut || '')))
+      const [evaluationsSnapshot, gradesSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', userNitRut || ''))),
+        getDocs(
+          query(
+            collection(db, 'evaluacion_calificaciones'),
+            where('studentUid', '==', activeStudent.studentUid),
+          ),
+        ),
+      ])
+
+      const gradesByEvaluationId = {}
+      gradesSnapshot.docs.forEach((docSnapshot) => {
+        const gradeData = docSnapshot.data() || {}
+        const evaluationId = String(gradeData.evaluationId || '').trim()
+        const score = typeof gradeData.score === 'number' ? gradeData.score : null
+        if (!evaluationId || score === null) return
+
+        if (
+          typeof gradesByEvaluationId[evaluationId] !== 'number' ||
+          score > gradesByEvaluationId[evaluationId]
+        ) {
+          gradesByEvaluationId[evaluationId] = score
+        }
+      })
 
       const mapped = evaluationsSnapshot.docs
         .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
@@ -54,6 +77,7 @@ function GuardianEvaluationsPage() {
         .map((item) => {
           return {
             ...item,
+            score: gradesByEvaluationId[item.id] ?? null,
             resolvedStatus: resolveEvaluationStatus(item),
           }
         })
@@ -117,6 +141,7 @@ function GuardianEvaluationsPage() {
                 <th>Asunto</th>
                 <th>Tipo</th>
                 <th>Vence</th>
+                <th>Nota</th>
                 <th>Estado general</th>
               </tr>
             </thead>
@@ -130,6 +155,7 @@ function GuardianEvaluationsPage() {
                     {evalObj.evaluationType === 'online' ? 'En linea' : 'En archivo'}
                   </td>
                   <td data-label="Vence">{formatDate(evalObj.dueDate)}</td>
+                  <td data-label="Nota">{typeof evalObj.score === 'number' ? evalObj.score.toFixed(2) : '-'}</td>
                   <td data-label="Estado">
                     <span className={`guardian-task-status guardian-task-status-${evalObj.resolvedStatus}`}>
                       {statusLabel(evalObj.resolvedStatus)}

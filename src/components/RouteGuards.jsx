@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import { collection, getDocs } from 'firebase/firestore'
 import { useAuth } from '../hooks/useAuth'
-import { db } from '../firebase'
+import { auth, db } from '../firebase'
 import PasswordField from './PasswordField'
 
 /**
@@ -102,7 +102,7 @@ function ProtectedRoute({ children }) {
 function PublicOnlyRoute({ children }) {
   const { user, loading } = useAuth()
 
-  if (loading) return <AuthLoader />
+  if (loading && (user || auth.currentUser)) return <AuthLoader />
   if (user) return <Navigate to="/dashboard" replace />
 
   return children

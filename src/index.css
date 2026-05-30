@@ -242,12 +242,12 @@ body {
 .auth-logo-wrap {
   display: grid;
   place-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
 
 .auth-logo {
-  width: min(100%, 300px);
-  max-height: 98px;
+  width: min(100%, 440px);
+  max-height: 150px;
   height: auto;
   object-fit: contain;
   object-position: center;
@@ -255,7 +255,7 @@ body {
 
 .auth-method-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 8px;
   margin: 0 0 18px;
 }
@@ -319,6 +319,78 @@ body {
 .qr-login-actions {
   display: flex;
   justify-content: center;
+}
+
+.passkey-login-panel {
+  gap: 16px;
+}
+
+.passkey-login-card {
+  gap: 12px;
+  text-align: center;
+}
+
+.passkey-login-card strong {
+  color: #103654;
+  font-size: 1rem;
+}
+
+.passkey-login-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #1787e0 0%, #0f6db8 100%);
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  box-shadow: 0 16px 32px rgba(23, 135, 224, 0.22);
+}
+
+.custom-auth-action-card {
+  max-width: 560px;
+  background:
+    radial-gradient(circle at top left, rgba(23, 135, 224, 0.14), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #f6fbff 100%);
+}
+
+.custom-auth-action-hero {
+  display: grid;
+  gap: 10px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.custom-auth-action-hero h1 {
+  margin: 0;
+  color: #103654;
+  font-size: clamp(1.8rem, 2.4vw, 2.4rem);
+}
+
+.custom-auth-action-summary {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid #dbe7f3;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f8ff 100%);
+  margin-bottom: 8px;
+}
+
+.custom-auth-action-summary strong {
+  color: #0f4268;
+}
+
+.custom-auth-action-summary span {
+  color: #4d6a86;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.custom-auth-action-status {
+  display: grid;
+  gap: 12px;
 }
 
 .qr-login-payload {
@@ -555,8 +627,8 @@ body {
 }
 
 .brand-logo {
-  width: min(100%, 260px);
-  max-height: 78px;
+  width: min(100%, 300px);
+  max-height: 108px;
   object-fit: contain;
 }
 
@@ -777,8 +849,8 @@ body {
   }
 
   .brand-logo {
-    width: min(100%, 220px);
-    max-height: 64px;
+    width: min(100%, 260px);
+    max-height: 92px;
   }
 
   .sidebar-link {
@@ -812,9 +884,10 @@ body {
 
   .sidebar-link span,
   .sidebar-group-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .messages-grid {
@@ -824,6 +897,11 @@ body {
   .messages-compose,
   .messages-inbox {
     min-width: 0;
+  }
+
+  .sidebar-link,
+  .sidebar-group-toggle {
+    align-items: flex-start;
   }
 }
 
@@ -927,6 +1005,19 @@ body {
   background: #e4f2ff;
   font-size: 13px;
   color: #1f517f;
+}
+
+.topbar-user-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.topbar-user-link:hover,
+.topbar-user-link.active {
+  background: #cfe6ff;
+  color: #103654;
 }
 
 .content-panel {
@@ -1204,6 +1295,41 @@ body {
   padding: 18px;
   box-shadow: 0 18px 34px rgba(16, 53, 86, 0.2);
   position: relative;
+}
+
+.modal-card-loading {
+  width: 112px;
+  min-height: 112px;
+  display: grid;
+  place-items: center;
+  padding: 26px;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 5px solid rgba(26, 95, 149, 0.16);
+  border-top-color: var(--primary-color, #1a5f95);
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .modal-card h3 {
@@ -2471,6 +2597,18 @@ body {
 @media (max-width: 920px) {
   .attendance-grid {
     grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .attendance-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .attendance-controls .button,
+  .attendance-controls-left,
+  .attendance-panel .students-toolbar input {
+    width: 100%;
   }
 
   .attendance-panel .students-table {
@@ -2494,13 +2632,19 @@ body {
     background: #f8fbff;
     border: 1px solid #e1ecf8;
     border-radius: 12px;
-    padding: 10px;
-    margin-bottom: 10px;
+    padding: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 100%;
   }
 
   .attendance-panel .students-table td {
     border: 0;
-    padding: 8px 6px;
+    padding: 6px 4px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .attendance-panel .students-table td::before {
@@ -2520,8 +2664,62 @@ body {
     width: 100%;
   }
 
+  .attendance-panel .student-actions {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 8px;
+    align-items: center;
+    margin-top: auto;
+    padding-top: 8px;
+  }
+
+  .attendance-panel .icon-action-button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0;
+  }
+
+  .attendance-panel .attendance-avatar,
+  .attendance-panel .attendance-avatar-fallback {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .attendance-panel .students-table td[data-label="Acciones"] {
+    margin-top: auto;
+    padding-top: 8px;
+    padding-bottom: 2px;
+  }
+
   .home-hero-banner {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .attendance-grade-group {
+    grid-template-columns: 1fr;
+  }
+
+  .attendance-panel {
+    overflow: visible;
+  }
+
+  .attendance-panel .students-table tbody tr {
+    padding: 8px;
+  }
+
+  .attendance-panel .student-actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .attendance-panel .students-table-wrap {
+    overflow-x: visible;
   }
 }
 
@@ -2666,21 +2864,27 @@ body {
   align-content: center;
   gap: 8px;
   padding: 18px;
+  min-width: 0;
   border-radius: 20px;
   background:
     radial-gradient(circle at top right, rgba(34, 197, 94, 0.14), transparent 38%),
     linear-gradient(180deg, #f8fcff 0%, #eef7ff 100%);
   border: 1px solid #d6e7f7;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .dashboard-module-hero-note strong {
   color: #0f4268;
-  font-size: 1.35rem;
+  font-size: clamp(1.1rem, 1.8vw, 1.75rem);
+  line-height: 1.2;
 }
 
 .dashboard-module-hero-note span,
 .dashboard-module-hero-note small {
   color: #4d6b86;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .member-module-shell .dashboard-module-hero {
@@ -2780,6 +2984,116 @@ body {
   border: 1px solid #dbe7f3;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   box-shadow: 0 16px 30px rgba(15, 23, 42, 0.05);
+}
+
+.passkey-settings-card,
+.profile-security-card {
+  border-radius: 22px;
+  padding: 22px;
+}
+
+.passkey-settings-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.passkey-settings-header h3 {
+  margin: 0 0 6px;
+  color: #103654;
+}
+
+.passkey-settings-header p {
+  margin: 0;
+  color: #4d6a86;
+  line-height: 1.55;
+  max-width: 64ch;
+}
+
+.passkey-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #eef3f8;
+  color: #49627c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.passkey-status-pill.active {
+  background: rgba(16, 185, 129, 0.14);
+  color: #0f7a58;
+}
+
+.passkey-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.passkey-feature-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid #dbe7f3;
+  background: linear-gradient(180deg, #fbfdff 0%, #f3f8ff 100%);
+}
+
+.passkey-feature-card strong {
+  color: #0f4268;
+}
+
+.passkey-feature-card span {
+  color: #4d6a86;
+  line-height: 1.5;
+}
+
+.passkey-actions {
+  justify-content: flex-start;
+  margin-top: 18px;
+}
+
+.passkey-device-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.passkey-device-item {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid #dbe7f3;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+}
+
+.passkey-device-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.passkey-device-copy strong {
+  color: #103654;
+}
+
+.passkey-device-copy small {
+  color: #5c7590;
+}
+
+.profile-security-header {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .settings-module-shell .permissions-search-wrap,
@@ -3098,8 +3412,8 @@ body {
 
 @media (max-width: 520px) {
   .auth-logo {
-    width: min(100%, 240px);
-    max-height: 86px;
+    width: min(100%, 340px);
+    max-height: 122px;
   }
 
   .guardian-portal-stat-card p {
@@ -4560,6 +4874,16 @@ body {
   padding: 14px 16px;
 }
 
+.users-page-shell .students-table {
+  min-width: 1100px;
+}
+
+.users-page-shell .students-table th:nth-child(4),
+.users-page-shell .students-table td:nth-child(4) {
+  min-width: 260px;
+  width: 260px;
+}
+
 .users-page-shell .students-toolbar input,
 .users-page-shell .students-toolbar select,
 .users-page-shell .role-select-box,
@@ -5305,6 +5629,8 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
+  width: 100%;
+  min-width: 0;
   padding: 16px 18px;
   border-radius: 14px;
   background: #ffffff;
@@ -5355,6 +5681,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .home-stat-label {
@@ -5362,6 +5690,7 @@ body {
   color: #64748b;
   font-weight: 500;
   line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .home-stat-value {
@@ -7348,6 +7677,19 @@ body {
     max-width: 100%;
   }
 
+  .passkey-settings-card,
+  .profile-security-card {
+    padding: 16px;
+  }
+
+  .passkey-device-item {
+    align-items: stretch;
+  }
+
+  .passkey-device-item .button {
+    width: 100%;
+  }
+
   .home-left-card,
   .home-right-card {
     padding: 12px;
@@ -7540,6 +7882,18 @@ body {
   padding: 20px;
   box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
   transition: transform 0.2s, box-shadow 0.2s;
+}
+.home-announcement-card-button {
+  width: 100%;
+  display: block;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.home-announcement-card-button:focus-visible {
+  outline: 3px solid rgba(26, 95, 149, 0.24);
+  outline-offset: 4px;
 }
 .home-announcement-card:hover {
   transform: translateY(-2px);

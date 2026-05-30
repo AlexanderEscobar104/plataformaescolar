@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { collection, doc, getDoc, getDocs, serverTimestamp, query, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { updateDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { GRADE_OPTIONS, GROUP_OPTIONS } from '../../constants/academicOptions'
 import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
@@ -181,13 +181,13 @@ function AspiranteEditPage() {
       const photoPath = `aspirantes/${safeId}/photo/${timestamp}-${fotoNueva.name}`
       const photoRef = ref(storage, photoPath)
       await uploadBytesTracked(photoRef, fotoNueva)
-      fotoPayload = { name: fotoNueva.name, size: fotoNueva.size, type: fotoNueva.type || 'application/octet-stream', url: await getDownloadURL(photoRef), path: photoPath }
+      fotoPayload = { name: fotoNueva.name, size: fotoNueva.size, type: fotoNueva.type || 'application/octet-stream', url: await getTrackedDownloadURL(photoRef), path: photoPath }
     }
     for (const file of documentosNuevos) {
       const filePath = `aspirantes/${safeId}/documents/${timestamp}-${file.name}`
       const fileRef = ref(storage, filePath)
       await uploadBytesTracked(fileRef, file)
-      documentosPayload.push({ name: file.name, size: file.size, type: file.type || 'application/octet-stream', url: await getDownloadURL(fileRef), path: filePath })
+      documentosPayload.push({ name: file.name, size: file.size, type: file.type || 'application/octet-stream', url: await getTrackedDownloadURL(fileRef), path: filePath })
     }
     return { fotoPayload, documentosPayload }
   }

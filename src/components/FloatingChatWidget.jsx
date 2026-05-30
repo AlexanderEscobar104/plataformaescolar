@@ -11,11 +11,11 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../firebase'
 import { addDocTracked, setDocTracked, updateDocTracked } from '../services/firestoreProxy'
 import { useAuth } from '../hooks/useAuth'
-import { uploadBytesTracked } from '../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../services/storageService'
 import DragDropFileInput from './DragDropFileInput'
 
 const CHAT_STATUS_OPTIONS = [
@@ -513,7 +513,7 @@ function FloatingChatWidget({ launcherPosition = 'bottom-right' }) {
         const filePath = `chat_messages/${user.uid}/${Date.now()}-${file.name}`
         const storageRef = ref(storage, filePath)
         await uploadBytesTracked(storageRef, file)
-        const url = await getDownloadURL(storageRef)
+        const url = await getTrackedDownloadURL(storageRef)
         uploadedAttachments.push({
           name: file.name,
           size: file.size,

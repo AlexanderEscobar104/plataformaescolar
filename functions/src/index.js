@@ -2,6 +2,12 @@ const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const {
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+} = require('@simplewebauthn/server');
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -10,6 +16,8 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const messaging = admin.messaging();
 const QR_LOGIN_SESSION_TTL_MS = 2 * 60 * 1000;
+const WEBAUTHN_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const WEBAUTHN_RP_NAME = 'EduPleace';
 const INVALID_TOKEN_ERRORS = new Set([
   'messaging/invalid-registration-token',
   'messaging/registration-token-not-registered',
@@ -25,8 +33,6 @@ const WOMPI_WEBHOOK_ACTOR_NAME = 'Wompi webhook';
 const BOLD_ATTEMPTS_COLLECTION = 'payments_bold_attempts';
 const BOLD_WEBHOOK_ACTOR_UID = 'bold_webhook';
 const BOLD_WEBHOOK_ACTOR_NAME = 'Bold webhook';
-const ATTENDANCE_TIME_ZONE = 'America/Bogota';
-const ATTENDANCE_UTC_OFFSET_HOURS = 5;
 const DEFAULT_SMS_TEMPLATES = [
   {
     slug: 'bienvenida',
@@ -101,30 +107,148 @@ function pickFirstValue(source, keys) {
   return '';
 }
 
+function parseObjectLikeTextPayload(rawValue) {
+  const text = String(rawValue || '').trim();
+  if (!text) return {};
+
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {
+    // Some readers send URL-encoded bodies or data=<json>; try those below.
+  }
+
+  if (!text.includes('=') && !text.includes('&')) return {};
+
+  try {
+    const params = new URLSearchParams(text);
+    const parsed = {};
+    params.forEach((value, key) => {
+      parsed[key] = value;
+    });
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function expandAttendanceNestedPayload(source) {
+  if (!source || typeof source !== 'object') return {};
+
+  const nested = {};
+  ['data', 'payload', 'event', 'record', 'params'].forEach((key) => {
+    const value = source[key];
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      Object.assign(nested, value);
+      return;
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      Object.assign(nested, parseObjectLikeTextPayload(value));
+    }
+  });
+
+  return nested;
+}
+
+function resolveAttendanceRequestPayload(req) {
+  const bodyPayload = req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)
+    ? req.body
+    : {};
+  const rawBodyText = Buffer.isBuffer(req.body)
+    ? req.body.toString('utf8')
+    : Buffer.isBuffer(req.rawBody)
+      ? req.rawBody.toString('utf8')
+      : typeof req.body === 'string'
+        ? req.body
+        : '';
+  const parsedRawBody = parseObjectLikeTextPayload(rawBodyText);
+  const queryPayload = req.query && typeof req.query === 'object' ? req.query : {};
+
+  const payload = {
+    ...bodyPayload,
+    ...expandAttendanceNestedPayload(bodyPayload),
+    ...parsedRawBody,
+    ...expandAttendanceNestedPayload(parsedRawBody),
+    ...queryPayload,
+    ...expandAttendanceNestedPayload(queryPayload),
+  };
+
+  return {
+    bodyPayload,
+    rawBodyText,
+    parsedRawBody,
+    payload,
+  };
+}
+
+function getAttendanceIsoDateForNow(baseDate = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(baseDate).reduce((accumulator, item) => {
+    if (item.type !== 'literal') {
+      accumulator[item.type] = item.value;
+    }
+    return accumulator;
+  }, {});
+
+  if (!parts.year || !parts.month || !parts.day) return '';
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 function parseAttendanceEventDate(rawValue) {
   const raw = String(rawValue || '').trim();
   if (!raw) return null;
 
   const normalized = raw.replace(/\//g, '-').replace('T', ' ');
   const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
-  if (match) {
-    const [, year, month, day, hour = '00', minute = '00', second = '00'] = match;
-    return {
-      isoDate: `${year}-${month}-${day}`,
-      isoDateTime: `${year}-${month}-${day}T${hour}:${minute}:${second}`,
-      year: Number(year),
-      month: Number(month),
-      day: Number(day),
-      hour: Number(hour),
-      minute: Number(minute),
-      second: Number(second),
-    };
-  }
+  if (!match) return null;
 
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return null;
+  const [, year, month, day, hour = '00', minute = '00', second = '00'] = match;
+  return {
+    isoDate: `${year}-${month}-${day}`,
+    isoDateTime: `${year}-${month}-${day}T${hour}:${minute}:${second}`,
+    year: Number(year),
+    month: Number(month),
+    day: Number(day),
+    hour: Number(hour),
+    minute: Number(minute),
+    second: Number(second),
+  };
+}
 
-  return getAttendanceTimeZoneParts(parsed);
+function resolveAttendanceEventDate(payload) {
+  const eventDateKeys = [
+    'noteTime',
+    'note_time',
+    'eventTime',
+    'event_time',
+    'passageTime',
+    'pass_time',
+    'recordTime',
+    'record_time',
+    'captureTime',
+    'capture_time',
+    'time',
+    'timestamp',
+  ];
+  const eventDateKey = eventDateKeys.find((key) => {
+    const value = payload?.[key];
+    return value !== undefined && value !== null && String(value).trim() !== '';
+  }) || '';
+  const eventDateSource = eventDateKey ? payload?.[eventDateKey] : '';
+
+  return {
+    key: eventDateKey,
+    raw: String(eventDateSource || '').trim(),
+    parts: parseAttendanceEventDate(eventDateSource),
+  };
 }
 
 function buildTimestampFromParts(parts) {
@@ -134,7 +258,7 @@ function buildTimestampFromParts(parts) {
     parts.year,
     Math.max(parts.month - 1, 0),
     parts.day,
-    parts.hour + ATTENDANCE_UTC_OFFSET_HOURS,
+    parts.hour,
     parts.minute,
     parts.second,
   ));
@@ -144,58 +268,6 @@ function buildTimestampFromParts(parts) {
   }
 
   return admin.firestore.Timestamp.fromDate(utcDate);
-}
-
-function getAttendanceTimeZoneParts(date) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
-
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: ATTENDANCE_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-    hourCycle: 'h23',
-  });
-
-  const partsMap = formatter.formatToParts(date).reduce((accumulator, item) => {
-    if (item.type !== 'literal') {
-      accumulator[item.type] = item.value;
-    }
-    return accumulator;
-  }, {});
-
-  const year = Number(partsMap.year);
-  const month = Number(partsMap.month);
-  const day = Number(partsMap.day);
-  const hour = Number(partsMap.hour);
-  const minute = Number(partsMap.minute);
-  const second = Number(partsMap.second);
-
-  if ([year, month, day, hour, minute, second].some((value) => Number.isNaN(value))) {
-    return null;
-  }
-
-  const isoDate = `${partsMap.year}-${partsMap.month}-${partsMap.day}`;
-  const isoDateTime = `${isoDate}T${partsMap.hour}:${partsMap.minute}:${partsMap.second}`;
-
-  return {
-    isoDate,
-    isoDateTime,
-    year,
-    month,
-    day,
-    hour,
-    minute,
-    second,
-  };
-}
-
-function getAttendanceIsoDateForNow(baseDate = new Date()) {
-  return getAttendanceTimeZoneParts(baseDate)?.isoDate || '';
 }
 
 function resolveAttendanceMarkType(payload) {
@@ -214,6 +286,87 @@ function resolveAttendanceMarkType(payload) {
   if (rawType.includes('finger') || rawType.includes('huella')) return 'huella';
   if (rawType.includes('rfid') || rawType.includes('card') || rawType.includes('tarjeta') || rawType.includes('ic')) return 'rfid';
   return 'lector';
+}
+
+function getAttendancePersonIdCandidates(payload, preferredField) {
+  const fieldGroups = {
+    employeeIc: [
+      'employeeIc',
+      'employeeIC',
+      'employee_ic',
+      'employeeIcNo',
+      'employee_ic_no',
+      'icCardNumber',
+      'ic_card_number',
+      'icNo',
+      'ic_no',
+      'cardNumber',
+      'card_number',
+      'cardNo',
+      'card_no',
+      'CardNo',
+      'card',
+      'Card',
+    ],
+    numeroDocumento: [
+      'employeeNumberId',
+      'employee_number_id',
+      'employeeNo',
+      'employee_no',
+      'EmployeeNo',
+      'documentNumber',
+      'document_number',
+      'numeroDocumento',
+      'numero_documento',
+      'pin',
+      'PIN',
+    ],
+    devicePersonId: [
+      'personId',
+      'PersonId',
+      'person_id',
+      'personid',
+      'employeeId',
+      'employee_id',
+      'personnelId',
+      'personnel_id',
+      'userCode',
+      'user_code',
+      'id',
+      'ID',
+      'userId',
+    ],
+  };
+  const normalizedPreferred = String(preferredField || '').trim();
+  const orderedGroups = [
+    ...(fieldGroups[normalizedPreferred] ? [normalizedPreferred] : []),
+    'numeroDocumento',
+    'employeeIc',
+    'devicePersonId',
+  ];
+  const seenGroups = new Set();
+  const seenValues = new Set();
+  const candidates = [];
+
+  orderedGroups.forEach((groupName) => {
+    if (seenGroups.has(groupName)) return;
+    seenGroups.add(groupName);
+
+    (fieldGroups[groupName] || []).forEach((key) => {
+      const value = payload?.[key];
+      const raw = String(value || '').trim();
+      const normalized = normalizeIdentifier(raw);
+      if (!raw || !normalized || seenValues.has(normalized)) return;
+      seenValues.add(normalized);
+      candidates.push({
+        value: raw,
+        payloadField: key,
+        personIdField: groupName,
+      });
+    });
+  });
+
+  return candidates;
 }
 
 function resolveUserDisplayName(userData) {
@@ -1452,7 +1605,7 @@ async function getWhatsAppConfigByNit(nitRut) {
     throw new functions.https.HttpsError('failed-precondition', 'El canal de WhatsApp del plantel esta inactivo.');
   }
   if (String(data.provider || '').trim() !== 'meta_cloud_api') {
-    throw new functions.https.HttpsError('failed-precondition', 'Solo esta soportado Meta Cloud API en esta fase.');
+    throw new functions.https.HttpsError('failed-precondition', 'Solo esta soportada la integracion Meta Cloud API.');
   }
   if (!String(data.phoneNumberId || '').trim() || !String(data.accessToken || '').trim()) {
     throw new functions.https.HttpsError('failed-precondition', 'La configuracion de WhatsApp esta incompleta.');
@@ -1620,6 +1773,107 @@ function resolveUserSmsPhone(userData) {
   ).trim();
 }
 
+function maskPhoneNumber(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const visibleDigits = raw.replace(/\D/g, '');
+  if (visibleDigits.length <= 4) return raw;
+  return `***${visibleDigits.slice(-4)}`;
+}
+
+function buildPasswordResetActionSettings() {
+  const customDomain = 'app.edupleace.com';
+  const targetUrl = `https://${customDomain}/login`;
+
+  return {
+    url: targetUrl,
+    linkDomain: customDomain,
+    handleCodeInApp: false,
+  };
+}
+
+function buildCustomPasswordResetHandlerLink(rawLink) {
+  const customDomain = 'app.edupleace.com';
+
+  try {
+    const parsedUrl = new URL(String(rawLink || '').trim());
+    const mode = String(parsedUrl.searchParams.get('mode') || 'resetPassword').trim() || 'resetPassword';
+    const oobCode = String(parsedUrl.searchParams.get('oobCode') || '').trim();
+    const apiKey = String(parsedUrl.searchParams.get('apiKey') || '').trim();
+    const lang = String(parsedUrl.searchParams.get('lang') || 'es').trim() || 'es';
+    const continueUrl = String(parsedUrl.searchParams.get('continueUrl') || `https://${customDomain}/login`).trim();
+
+    if (!oobCode || !apiKey) {
+      return String(rawLink || '').trim();
+    }
+
+    const handlerUrl = new URL(`https://${customDomain}/auth/action`);
+    handlerUrl.searchParams.set('mode', mode);
+    handlerUrl.searchParams.set('oobCode', oobCode);
+    handlerUrl.searchParams.set('apiKey', apiKey);
+    handlerUrl.searchParams.set('continueUrl', continueUrl);
+    handlerUrl.searchParams.set('lang', lang);
+    return handlerUrl.toString();
+  } catch (_error) {
+    return String(rawLink || '').trim();
+  }
+}
+
+function buildPasswordResetEmailHtml({ recipientName, resetLink }) {
+  const safeName = String(recipientName || 'Usuario').trim() || 'Usuario';
+  const safeLink = String(resetLink || '').trim();
+  return `
+    <!doctype html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Recuperar contrasena</title>
+      </head>
+      <body style="margin:0;padding:0;background:#eef5fb;font-family:Arial,sans-serif;color:#16324f;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef5fb;padding:24px 12px;">
+          <tr>
+            <td align="center">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border-radius:24px;overflow:hidden;border:1px solid #dbe7f3;box-shadow:0 16px 40px rgba(15,23,42,.08);">
+                <tr>
+                  <td style="padding:28px 28px 18px;background:linear-gradient(135deg,#ffffff 0%,#eef6ff 100%);">
+                    <div style="display:inline-block;padding:8px 14px;border-radius:999px;background:#d9eefc;color:#0f5d91;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;">Recuperacion segura</div>
+                    <h1 style="margin:18px 0 8px;font-size:30px;line-height:1.15;color:#0f3758;">Restablecer contrasena</h1>
+                    <p style="margin:0;font-size:16px;line-height:1.7;color:#4d6a86;">Hola ${safeName}, recibimos una solicitud para cambiar tu clave de acceso en EduPleace.</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 28px 28px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:20px;background:linear-gradient(180deg,#f8fbff 0%,#eef6ff 100%);border:1px solid #dbe7f3;">
+                      <tr>
+                        <td style="padding:22px;">
+                          <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#4d6a86;">
+                            Usa el siguiente boton para abrir la pagina segura de recuperacion con la imagen de EduPleace:
+                          </p>
+                          <p style="margin:22px 0;text-align:center;">
+                            <a href="${safeLink}" style="display:inline-block;background:#1787e0;color:#ffffff;text-decoration:none;padding:14px 22px;border-radius:14px;font-size:15px;font-weight:700;">Cambiar contrasena</a>
+                          </p>
+                          <p style="margin:0;font-size:13px;line-height:1.7;color:#6a8096;word-break:break-word;">
+                            Si el boton no funciona, copia y pega este enlace en tu navegador:<br />
+                            <a href="${safeLink}" style="color:#1787e0;text-decoration:none;">${safeLink}</a>
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:#6a8096;">
+                      Si no solicitaste este cambio, puedes ignorar este mensaje. Por seguridad, el enlace puede expirar despues de un tiempo.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
+}
+
 async function sendSmsBatchViaHablame({
   nitRut,
   campaignName = '',
@@ -1737,6 +1991,277 @@ async function sendSmsBatchViaHablame({
     testPhone: testModeResult.testPhone || '',
   };
 }
+
+async function getMailerSettingsByNit(nitRut) {
+  const safeNitRut = String(nitRut || '').trim();
+  if (safeNitRut) {
+    const settingsSnapshot = await db.collection('configuracion').doc(`mail_server_settings_${safeNitRut}`).get();
+    const settingsData = settingsSnapshot.data() || {};
+    const host = String(settingsData.host || '').trim();
+    const port = Number(settingsData.port || 587);
+    const user = String(settingsData.user || '').trim();
+    const pass = String(settingsData.pass || '').trim();
+    const fromEmail = String(settingsData.fromEmail || '').trim();
+    const fromName = String(settingsData.fromName || 'Plataforma Escolar').trim() || 'Plataforma Escolar';
+    const secure = Boolean(settingsData.secure) || port === 465;
+
+    if (host && port && user && pass && fromEmail) {
+      return { host, port, user, pass, fromEmail, fromName, secure };
+    }
+  }
+
+  return getMailerSettings();
+}
+
+exports.updateUserEmailByAdmin = functions.https.onCall(async (data, context) => {
+  if (!context.auth?.uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Debes iniciar sesion para cambiar correos.');
+  }
+
+  const targetUid = String(data?.targetUid || '').trim();
+  const nextEmail = String(data?.email || '').trim().toLowerCase();
+
+  if (!targetUid) {
+    throw new functions.https.HttpsError('invalid-argument', 'Debes indicar el usuario a actualizar.');
+  }
+
+  if (!nextEmail) {
+    throw new functions.https.HttpsError('invalid-argument', 'Debes indicar el nuevo correo.');
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(nextEmail)) {
+    throw new functions.https.HttpsError('invalid-argument', 'El correo no tiene un formato valido.');
+  }
+
+  const [requesterSnapshot, targetSnapshot] = await Promise.all([
+    db.collection('users').doc(context.auth.uid).get(),
+    db.collection('users').doc(targetUid).get(),
+  ]);
+
+  if (!requesterSnapshot.exists) {
+    throw new functions.https.HttpsError('permission-denied', 'No fue posible validar tu usuario.');
+  }
+
+  if (!targetSnapshot.exists) {
+    throw new functions.https.HttpsError('not-found', 'No existe el usuario a actualizar.');
+  }
+
+  const requesterData = requesterSnapshot.data() || {};
+  const requesterProfile = requesterData.profile || {};
+  const requesterNit = normalizeTenantNit(requesterData.nitRut || requesterProfile.nitRut || '');
+  const requesterRole = String(requesterData.role || '').trim().toLowerCase();
+
+  const targetData = targetSnapshot.data() || {};
+  const targetProfile = targetData.profile || {};
+  const targetNit = normalizeTenantNit(targetData.nitRut || targetProfile.nitRut || '');
+  const currentEmail = String(targetData.email || '').trim().toLowerCase();
+
+  if (!requesterNit || !targetNit || requesterNit !== targetNit) {
+    throw new functions.https.HttpsError('permission-denied', 'Solo puedes cambiar correos dentro de tu mismo plantel.');
+  }
+
+  if (!['administrador', 'directivo'].includes(requesterRole)) {
+    throw new functions.https.HttpsError('permission-denied', 'Tu rol no tiene permisos para cambiar correos de usuarios.');
+  }
+
+  if (currentEmail === nextEmail) {
+    return {
+      success: true,
+      updated: false,
+      email: nextEmail,
+    };
+  }
+
+  try {
+    await admin.auth().updateUser(targetUid, {
+      email: nextEmail,
+    });
+  } catch (error) {
+    const code = String(error?.code || '').trim().toLowerCase();
+    if (code === 'auth/email-already-exists') {
+      throw new functions.https.HttpsError('already-exists', 'Este correo ya esta registrado.');
+    }
+    if (code === 'auth/invalid-email') {
+      throw new functions.https.HttpsError('invalid-argument', 'El correo no tiene un formato valido.');
+    }
+    throw new functions.https.HttpsError('internal', 'No fue posible actualizar el correo en autenticacion.');
+  }
+
+  await db.collection('users').doc(targetUid).set({
+    email: nextEmail,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: context.auth.uid,
+  }, { merge: true });
+
+  return {
+    success: true,
+    updated: true,
+    email: nextEmail,
+  };
+});
+
+exports.sendPasswordResetSms = functions.https.onCall(async (data) => {
+  const normalizedEmail = String(data?.email || '').trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new functions.https.HttpsError('invalid-argument', 'Debes indicar el correo del usuario.');
+  }
+
+  const snapshot = await db.collection('users')
+    .where('email', '==', normalizedEmail)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    throw new functions.https.HttpsError('not-found', 'No existe una cuenta con ese correo.');
+  }
+
+  const userSnapshot = snapshot.docs[0];
+  const userData = userSnapshot.data() || {};
+  const profile = userData.profile || {};
+  const userNit = normalizeTenantNit(userData.nitRut || profile.nitRut || '');
+  if (!userNit) {
+    throw new functions.https.HttpsError('failed-precondition', 'El usuario no tiene un plantel asociado para el envio del SMS.');
+  }
+
+  const latestPlan = await getLatestPlanByNit(userNit);
+  const operationalMeta = resolvePlanOperationalMeta(latestPlan);
+  if (latestPlan && !operationalMeta.isOperational) {
+    throw new functions.https.HttpsError('permission-denied', 'El plan asociado al usuario no se encuentra activo.');
+  }
+
+  const phone = resolveUserSmsPhone(userData);
+  if (!phone) {
+    throw new functions.https.HttpsError('failed-precondition', 'El usuario no tiene un numero de celular registrado para recibir el SMS.');
+  }
+
+  const generatedResetLink = await admin.auth().generatePasswordResetLink(
+    normalizedEmail,
+    buildPasswordResetActionSettings(),
+  );
+  const resetLink = buildCustomPasswordResetHandlerLink(generatedResetLink);
+
+  const recipientName =
+    String(userData.name || '').trim() ||
+    `${String(profile.nombres || '').trim()} ${String(profile.apellidos || '').trim()}`.trim() ||
+    normalizedEmail;
+
+  await sendSmsBatchViaHablame({
+    nitRut: userNit,
+    campaignName: 'recuperacion_contrasena',
+    messages: [{
+      to: phone,
+      text: sanitizeSmsText(`Hola ${recipientName}. Recupera tu contrasena de EduPleace aqui: ${resetLink}`),
+      recipientUid: userSnapshot.id,
+      recipientName,
+      recipientRole: String(userData.role || '').trim() || 'usuario',
+      variables: {
+        email: normalizedEmail,
+        resetLink,
+      },
+    }],
+    createdByUid: 'password_reset',
+    createdByName: 'Recuperacion de contrasena',
+    sourceModule: 'auth',
+    templateSlug: 'password_reset',
+    dedupeByPhone: true,
+  });
+
+  await db.collection('password_reset_sms_logs').add({
+    uid: userSnapshot.id,
+    email: normalizedEmail,
+    nitRut: userNit,
+    phone: normalizePhoneNumber(phone),
+    maskedPhone: maskPhoneNumber(phone),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAtISO: new Date().toISOString(),
+  });
+
+  return {
+    success: true,
+    sentTo: maskPhoneNumber(phone),
+  };
+});
+
+exports.sendPasswordResetEmailCustom = functions.https.onCall(async (data) => {
+  const normalizedEmail = String(data?.email || '').trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new functions.https.HttpsError('invalid-argument', 'Debes indicar el correo del usuario.');
+  }
+
+  const snapshot = await db.collection('users')
+    .where('email', '==', normalizedEmail)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    throw new functions.https.HttpsError('not-found', 'No existe una cuenta con ese correo.');
+  }
+
+  const userSnapshot = snapshot.docs[0];
+  const userData = userSnapshot.data() || {};
+  const profile = userData.profile || {};
+  const userNit = normalizeTenantNit(userData.nitRut || profile.nitRut || '');
+  if (!userNit) {
+    throw new functions.https.HttpsError('failed-precondition', 'El usuario no tiene un plantel asociado para el envio del correo.');
+  }
+
+  const latestPlan = await getLatestPlanByNit(userNit);
+  const operationalMeta = resolvePlanOperationalMeta(latestPlan);
+  if (latestPlan && !operationalMeta.isOperational) {
+    throw new functions.https.HttpsError('permission-denied', 'El plan asociado al usuario no se encuentra activo.');
+  }
+
+  const generatedResetLink = await admin.auth().generatePasswordResetLink(
+    normalizedEmail,
+    buildPasswordResetActionSettings(),
+  );
+  const resetLink = buildCustomPasswordResetHandlerLink(generatedResetLink);
+
+  const recipientName =
+    String(userData.name || '').trim() ||
+    `${String(profile.nombres || '').trim()} ${String(profile.apellidos || '').trim()}`.trim() ||
+    normalizedEmail;
+
+  const settings = await getMailerSettingsByNit(userNit);
+  const transporter = getMailerTransport(settings);
+  const sender = settings.fromName
+    ? `"${settings.fromName.replace(/"/g, '')}" <${settings.fromEmail}>`
+    : settings.fromEmail;
+
+  try {
+    await transporter.sendMail({
+      from: sender,
+      to: normalizedEmail,
+      subject: 'Recupera tu contrasena de EduPleace',
+      text: `Hola ${recipientName}. Recupera tu contrasena aqui: ${resetLink}`,
+      html: buildPasswordResetEmailHtml({
+        recipientName,
+        resetLink,
+      }),
+    });
+  } catch (error) {
+    console.error('sendPasswordResetEmailCustom failed', error);
+    throw new functions.https.HttpsError(
+      'internal',
+      'No fue posible enviar el correo de recuperacion personalizado.',
+    );
+  }
+
+  await db.collection('password_reset_email_logs').add({
+    uid: userSnapshot.id,
+    email: normalizedEmail,
+    nitRut: userNit,
+    resetLink,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAtISO: new Date().toISOString(),
+  });
+
+  return {
+    success: true,
+    sentTo: normalizedEmail,
+  };
+});
 
 async function getWhatsAppConfigByVerifyToken(verifyToken) {
   const token = String(verifyToken || '').trim();
@@ -1856,23 +2381,7 @@ async function getUserMailerSettings(uid) {
   const profile = userData.profile || {};
   const nitRut = String(userData.nitRut || profile.nitRut || '').trim();
 
-  if (nitRut) {
-    const settingsSnapshot = await db.collection('configuracion').doc(`mail_server_settings_${nitRut}`).get();
-    const settingsData = settingsSnapshot.data() || {};
-    const host = String(settingsData.host || '').trim();
-    const port = Number(settingsData.port || 587);
-    const user = String(settingsData.user || '').trim();
-    const pass = String(settingsData.pass || '').trim();
-    const fromEmail = String(settingsData.fromEmail || '').trim();
-    const fromName = String(settingsData.fromName || 'Plataforma Escolar').trim() || 'Plataforma Escolar';
-    const secure = Boolean(settingsData.secure) || port === 465;
-
-    if (host && port && user && pass && fromEmail) {
-      return { host, port, user, pass, fromEmail, fromName, secure };
-    }
-  }
-
-  return getMailerSettings();
+  return getMailerSettingsByNit(nitRut);
 }
 
 function resolvePlanTimestamp(plan) {
@@ -1893,6 +2402,509 @@ async function getLatestPlanByNit(nitRut) {
   plans.sort((a, b) => resolvePlanTimestamp(b) - resolvePlanTimestamp(a));
   return plans[0] || null;
 }
+
+function toIsoDate(value) {
+  if (!value) return '';
+  if (typeof value?.toDate === 'function') {
+    return value.toDate().toISOString().slice(0, 10);
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+}
+
+function resolveTodayIsoLocal() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function resolvePlanOperationalMeta(plan) {
+  const status = String(plan?.estado || 'activo').trim().toLowerCase();
+  const startDate = toIsoDate(plan?.fechaInicioOperacion || plan?.fechaAdquisicion);
+  const endDate = toIsoDate(plan?.fechaVencimiento);
+  const trialDays = Math.max(Number(plan?.diasPrueba || 0), 0);
+  const graceDays = Math.max(Number(plan?.diasCortesia || 0), 0);
+  const shouldBlock = plan?.bloquearModulosAlVencer !== false;
+  const todayIso = resolveTodayIsoLocal();
+
+  if (!plan || !startDate || !endDate) {
+    return {
+      status: status === 'inactivo' ? 'inactive' : 'active',
+      shouldBlockModules: false,
+      isOperational: status !== 'inactivo',
+    };
+  }
+
+  const graceEnd = new Date(`${endDate}T00:00:00`);
+  graceEnd.setDate(graceEnd.getDate() + graceDays);
+  const graceEndIso = graceEnd.toISOString().slice(0, 10);
+  const trialEnd = new Date(`${startDate}T00:00:00`);
+  trialEnd.setDate(trialEnd.getDate() + Math.max(trialDays - 1, 0));
+  const trialEndIso = trialEnd.toISOString().slice(0, 10);
+
+  if (status === 'inactivo') {
+    return { status: 'inactive', shouldBlockModules: true, isOperational: false };
+  }
+  if (todayIso < startDate) {
+    return { status: 'scheduled', shouldBlockModules: false, isOperational: true };
+  }
+  if (trialDays > 0 && todayIso <= trialEndIso) {
+    return { status: 'trial', shouldBlockModules: false, isOperational: true };
+  }
+  if (todayIso > graceEndIso) {
+    return { status: 'expired', shouldBlockModules: shouldBlock, isOperational: !shouldBlock };
+  }
+  if (todayIso > endDate) {
+    return { status: 'grace', shouldBlockModules: false, isOperational: true };
+  }
+  return { status: 'active', shouldBlockModules: false, isOperational: true };
+}
+
+function encodeBase64Url(input) {
+  return Buffer.from(input).toString('base64url');
+}
+
+function decodeBase64Url(value) {
+  return Buffer.from(String(value || ''), 'base64url');
+}
+
+function getAllowedWebAuthnHosts() {
+  const projectId =
+    String(process.env.GCLOUD_PROJECT || admin.app().options.projectId || '').trim();
+  const envHosts = String(process.env.WEBAUTHN_ALLOWED_HOSTS || '')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  const hosts = new Set(envHosts);
+  if (projectId) {
+    hosts.add(`${projectId}.web.app`);
+    hosts.add(`${projectId}.firebaseapp.com`);
+  }
+  return hosts;
+}
+
+function resolveWebAuthnRequestContext(data) {
+  const rawOrigin = String(data?.origin || '').trim();
+  if (!rawOrigin) {
+    throw new functions.https.HttpsError('invalid-argument', 'El origen del navegador es obligatorio.');
+  }
+
+  let parsedOrigin;
+  try {
+    parsedOrigin = new URL(rawOrigin);
+  } catch (_error) {
+    throw new functions.https.HttpsError('invalid-argument', 'El origen del navegador no es valido.');
+  }
+
+  const host = String(parsedOrigin.hostname || '').trim().toLowerCase();
+  const protocol = String(parsedOrigin.protocol || '').trim().toLowerCase();
+  const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+  const allowedHosts = getAllowedWebAuthnHosts();
+
+  if (isLocalhost) {
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      throw new functions.https.HttpsError('permission-denied', 'El origen localhost no es valido para WebAuthn.');
+    }
+  } else {
+    if (protocol !== 'https:' || !allowedHosts.has(host)) {
+      throw new functions.https.HttpsError('permission-denied', 'El origen no esta autorizado para WebAuthn.');
+    }
+  }
+
+  return {
+    origin: parsedOrigin.origin,
+    rpID: host,
+  };
+}
+
+function createWebAuthnChallengeId() {
+  return crypto.randomBytes(18).toString('base64url');
+}
+
+function getWebAuthnChallengeRef(challengeId) {
+  return db.collection('webauthn_challenges').doc(String(challengeId || '').trim());
+}
+
+async function saveWebAuthnChallenge({ challengeId, type, uid = '', challenge, origin, rpID }) {
+  await getWebAuthnChallengeRef(challengeId).set({
+    challengeId,
+    type,
+    uid: String(uid || '').trim(),
+    challenge: String(challenge || '').trim(),
+    origin: String(origin || '').trim(),
+    rpID: String(rpID || '').trim(),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + WEBAUTHN_CHALLENGE_TTL_MS),
+  });
+}
+
+async function getValidWebAuthnChallengeOrThrow({ challengeId, type, uid = '' }) {
+  const safeChallengeId = String(challengeId || '').trim();
+  if (!safeChallengeId) {
+    throw new functions.https.HttpsError('invalid-argument', 'challengeId es obligatorio.');
+  }
+
+  const challengeRef = getWebAuthnChallengeRef(safeChallengeId);
+  const challengeSnapshot = await challengeRef.get();
+  if (!challengeSnapshot.exists) {
+    throw new functions.https.HttpsError('not-found', 'La sesion WebAuthn no existe o ya vencio.');
+  }
+
+  const challengeData = challengeSnapshot.data() || {};
+  if (String(challengeData.type || '') !== String(type || '').trim()) {
+    throw new functions.https.HttpsError('failed-precondition', 'La sesion WebAuthn no corresponde a la operacion solicitada.');
+  }
+
+  if (uid && String(challengeData.uid || '').trim() !== String(uid || '').trim()) {
+    throw new functions.https.HttpsError('permission-denied', 'La sesion WebAuthn no pertenece al usuario autenticado.');
+  }
+
+  const expiresAtMillis = challengeData.expiresAt?.toMillis?.() || 0;
+  if (!expiresAtMillis || Date.now() > expiresAtMillis) {
+    await challengeRef.delete().catch(() => {});
+    throw new functions.https.HttpsError('deadline-exceeded', 'La sesion WebAuthn ya vencio. Intenta de nuevo.');
+  }
+
+  return { challengeRef, challengeData };
+}
+
+async function assertUserCanAuthenticateByUid(uid) {
+  const safeUid = String(uid || '').trim();
+  if (!safeUid) {
+    throw new functions.https.HttpsError('invalid-argument', 'El usuario es obligatorio.');
+  }
+
+  const userSnapshot = await db.collection('users').doc(safeUid).get();
+  if (!userSnapshot.exists) {
+    throw new functions.https.HttpsError('not-found', 'No fue posible identificar el usuario asociado a la passkey.');
+  }
+
+  const userData = userSnapshot.data() || {};
+  const profile = userData.profile || {};
+  const infoComplementaria = profile.informacionComplementaria || {};
+  const estado = String(infoComplementaria.estado || profile.estado || 'activo').trim().toLowerCase();
+
+  if (estado !== 'activo') {
+    throw new functions.https.HttpsError('permission-denied', 'El usuario no se encuentra activo.');
+  }
+
+  const userNit = String(userData.nitRut || profile.nitRut || '').trim();
+  if (userNit) {
+    const latestPlan = await getLatestPlanByNit(userNit);
+    const operationalMeta = resolvePlanOperationalMeta(latestPlan);
+    if (latestPlan && !operationalMeta.isOperational) {
+      throw new functions.https.HttpsError('permission-denied', 'El plan asociado al usuario no se encuentra activo.');
+    }
+  }
+
+  return { uid: safeUid, userData };
+}
+
+async function getUserPasskeyDocs(uid) {
+  return db.collection('users').doc(String(uid || '').trim()).collection('passkeys').get();
+}
+
+function serializePasskeyDoc(passkeyId, data) {
+  return {
+    credentialId: String(passkeyId || data?.credentialID || '').trim(),
+    label: String(data?.label || '').trim() || 'Este dispositivo',
+    rpID: String(data?.rpID || '').trim(),
+    transports: Array.isArray(data?.transports) ? data.transports : [],
+    deviceType: String(data?.deviceType || '').trim() || 'singleDevice',
+    backedUp: Boolean(data?.backedUp),
+    createdAtISO: data?.createdAt?.toDate?.()?.toISOString?.() || '',
+    lastUsedAtISO: data?.lastUsedAt?.toDate?.()?.toISOString?.() || '',
+  };
+}
+
+async function registerWebAuthnCredentialForUser({ uid, credentialId, publicKey, counter, transports, deviceType, backedUp, rpID, label }) {
+  const safeUid = String(uid || '').trim();
+  const safeCredentialId = String(credentialId || '').trim();
+  if (!safeUid || !safeCredentialId) {
+    throw new functions.https.HttpsError('invalid-argument', 'No fue posible guardar la passkey.');
+  }
+
+  const payload = {
+    uid: safeUid,
+    credentialID: safeCredentialId,
+    publicKey: String(publicKey || '').trim(),
+    counter: Number(counter) || 0,
+    transports: Array.isArray(transports) ? transports.filter(Boolean) : [],
+    deviceType: String(deviceType || '').trim() || 'singleDevice',
+    backedUp: Boolean(backedUp),
+    rpID: String(rpID || '').trim(),
+    label: String(label || '').trim() || 'Este dispositivo',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const batch = db.batch();
+  batch.set(db.collection('users').doc(safeUid).collection('passkeys').doc(safeCredentialId), payload, { merge: true });
+  batch.set(db.collection('webauthn_credentials').doc(safeCredentialId), payload, { merge: true });
+  await batch.commit();
+}
+
+async function updateWebAuthnCredentialUsage({ uid, credentialId, counter }) {
+  const safeUid = String(uid || '').trim();
+  const safeCredentialId = String(credentialId || '').trim();
+  const payload = {
+    counter: Number(counter) || 0,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const batch = db.batch();
+  batch.set(db.collection('users').doc(safeUid).collection('passkeys').doc(safeCredentialId), payload, { merge: true });
+  batch.set(db.collection('webauthn_credentials').doc(safeCredentialId), payload, { merge: true });
+  await batch.commit();
+}
+
+exports.beginPasskeyRegistration = functions.https.onCall(async (data, context) => {
+  if (!context.auth?.uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Debes iniciar sesion para activar Face ID.');
+  }
+
+  const { uid, userData } = await assertUserCanAuthenticateByUid(context.auth.uid);
+  const { origin, rpID } = resolveWebAuthnRequestContext(data);
+  const passkeyDocs = await getUserPasskeyDocs(uid);
+  const excludeCredentials = passkeyDocs.docs
+    .map((docSnapshot) => docSnapshot.data() || {})
+    .filter((item) => !item.rpID || String(item.rpID || '').trim() === rpID)
+    .map((item) => ({
+      id: String(item.credentialID || '').trim(),
+      transports: Array.isArray(item.transports) ? item.transports : [],
+    }))
+    .filter((item) => item.id);
+
+  const profile = userData.profile || {};
+  const userName = String(userData.email || context.auth.token?.email || '').trim() || `${uid}@edupleace.local`;
+  const userDisplayName =
+    String(userData.name || '').trim() ||
+    `${String(profile.nombres || '').trim()} ${String(profile.apellidos || '').trim()}`.trim() ||
+    userName;
+
+  const options = await generateRegistrationOptions({
+    rpName: WEBAUTHN_RP_NAME,
+    rpID,
+    userName,
+    userID: uid,
+    userDisplayName,
+    attestationType: 'none',
+    excludeCredentials,
+    authenticatorSelection: {
+      residentKey: 'required',
+      userVerification: 'required',
+      authenticatorAttachment: 'platform',
+    },
+  });
+
+  const challengeId = createWebAuthnChallengeId();
+  await saveWebAuthnChallenge({
+    challengeId,
+    type: 'registration',
+    uid,
+    challenge: options.challenge,
+    origin,
+    rpID,
+  });
+
+  return {
+    challengeId,
+    options,
+  };
+});
+
+exports.finishPasskeyRegistration = functions.https.onCall(async (data, context) => {
+  if (!context.auth?.uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Debes iniciar sesion para activar Face ID.');
+  }
+
+  const uid = String(context.auth.uid || '').trim();
+  const credential = data?.credential;
+  if (!credential || typeof credential !== 'object') {
+    throw new functions.https.HttpsError('invalid-argument', 'La credencial WebAuthn es obligatoria.');
+  }
+
+  const { challengeRef, challengeData } = await getValidWebAuthnChallengeOrThrow({
+    challengeId: data?.challengeId,
+    type: 'registration',
+    uid,
+  });
+
+  let verification;
+  try {
+    verification = await verifyRegistrationResponse({
+      response: credential,
+      expectedChallenge: String(challengeData.challenge || '').trim(),
+      expectedOrigin: String(challengeData.origin || '').trim(),
+      expectedRPID: String(challengeData.rpID || '').trim(),
+      requireUserVerification: true,
+    });
+  } catch (error) {
+    throw new functions.https.HttpsError('invalid-argument', error?.message || 'No fue posible validar la passkey.');
+  }
+
+  if (!verification?.verified || !verification.registrationInfo?.credential) {
+    throw new functions.https.HttpsError('failed-precondition', 'La passkey no pudo validarse.');
+  }
+
+  const registeredCredential = verification.registrationInfo.credential;
+  const transports = Array.isArray(credential?.response?.transports)
+    ? credential.response.transports
+    : Array.isArray(registeredCredential.transports)
+      ? registeredCredential.transports
+      : [];
+
+  await registerWebAuthnCredentialForUser({
+    uid,
+    credentialId: registeredCredential.id,
+    publicKey: encodeBase64Url(registeredCredential.publicKey),
+    counter: verification.registrationInfo.credential.counter,
+    transports,
+    deviceType: verification.registrationInfo.credentialDeviceType,
+    backedUp: verification.registrationInfo.credentialBackedUp,
+    rpID: String(challengeData.rpID || '').trim(),
+    label: String(data?.label || '').trim(),
+  });
+
+  await challengeRef.delete().catch(() => {});
+
+  return {
+    verified: true,
+    credentialId: registeredCredential.id,
+  };
+});
+
+exports.listPasskeyCredentials = functions.https.onCall(async (_data, context) => {
+  if (!context.auth?.uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Debes iniciar sesion para consultar las passkeys.');
+  }
+
+  const snapshot = await getUserPasskeyDocs(context.auth.uid);
+  return {
+    credentials: snapshot.docs.map((docSnapshot) => serializePasskeyDoc(docSnapshot.id, docSnapshot.data() || {})),
+  };
+});
+
+exports.deletePasskeyCredential = functions.https.onCall(async (data, context) => {
+  if (!context.auth?.uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Debes iniciar sesion para eliminar la passkey.');
+  }
+
+  const credentialId = String(data?.credentialId || '').trim();
+  if (!credentialId) {
+    throw new functions.https.HttpsError('invalid-argument', 'credentialId es obligatorio.');
+  }
+
+  const batch = db.batch();
+  batch.delete(db.collection('users').doc(context.auth.uid).collection('passkeys').doc(credentialId));
+  batch.delete(db.collection('webauthn_credentials').doc(credentialId));
+  await batch.commit();
+
+  return { ok: true };
+});
+
+exports.beginPasskeyAuthentication = functions.https.onCall(async (data) => {
+  const { origin, rpID } = resolveWebAuthnRequestContext(data);
+  const options = await generateAuthenticationOptions({
+    rpID,
+    userVerification: 'required',
+  });
+
+  const challengeId = createWebAuthnChallengeId();
+  await saveWebAuthnChallenge({
+    challengeId,
+    type: 'authentication',
+    challenge: options.challenge,
+    origin,
+    rpID,
+  });
+
+  return {
+    challengeId,
+    options,
+  };
+});
+
+exports.finishPasskeyAuthentication = functions.https.onCall(async (data) => {
+  const credential = data?.credential;
+  if (!credential || typeof credential !== 'object') {
+    throw new functions.https.HttpsError('invalid-argument', 'La credencial WebAuthn es obligatoria.');
+  }
+
+  const credentialId = String(credential.id || credential.rawId || '').trim();
+  if (!credentialId) {
+    throw new functions.https.HttpsError('invalid-argument', 'La passkey enviada no incluye un identificador valido.');
+  }
+
+  const { challengeRef, challengeData } = await getValidWebAuthnChallengeOrThrow({
+    challengeId: data?.challengeId,
+    type: 'authentication',
+  });
+
+  const storedCredentialSnapshot = await db.collection('webauthn_credentials').doc(credentialId).get();
+  if (!storedCredentialSnapshot.exists) {
+    throw new functions.https.HttpsError('not-found', 'No se encontro una passkey registrada para este dispositivo.');
+  }
+
+  const storedCredentialData = storedCredentialSnapshot.data() || {};
+  if (String(storedCredentialData.rpID || '').trim() !== String(challengeData.rpID || '').trim()) {
+    throw new functions.https.HttpsError('permission-denied', 'La passkey no pertenece al dominio actual.');
+  }
+
+  let verification;
+  try {
+    verification = await verifyAuthenticationResponse({
+      response: credential,
+      expectedChallenge: String(challengeData.challenge || '').trim(),
+      expectedOrigin: String(challengeData.origin || '').trim(),
+      expectedRPID: String(challengeData.rpID || '').trim(),
+      requireUserVerification: true,
+      credential: {
+        id: credentialId,
+        publicKey: decodeBase64Url(storedCredentialData.publicKey),
+        counter: Number(storedCredentialData.counter) || 0,
+        transports: Array.isArray(storedCredentialData.transports) ? storedCredentialData.transports : [],
+      },
+    });
+  } catch (error) {
+    throw new functions.https.HttpsError('invalid-argument', error?.message || 'No fue posible validar la autenticacion biometrica.');
+  }
+
+  if (!verification?.verified) {
+    throw new functions.https.HttpsError('failed-precondition', 'La autenticacion con passkey no pudo verificarse.');
+  }
+
+  const { uid, userData } = await assertUserCanAuthenticateByUid(storedCredentialData.uid);
+  await updateWebAuthnCredentialUsage({
+    uid,
+    credentialId,
+    counter: verification.authenticationInfo.newCounter,
+  });
+  await challengeRef.delete().catch(() => {});
+
+  const customToken = await admin.auth().createCustomToken(uid);
+  const profile = userData.profile || {};
+  const displayName =
+    String(userData.name || '').trim() ||
+    `${String(profile.nombres || '').trim()} ${String(profile.apellidos || '').trim()}`.trim() ||
+    String(userData.email || '').trim() ||
+    'Usuario';
+
+  return {
+    customToken,
+    user: {
+      uid,
+      email: String(userData.email || '').trim(),
+      displayName,
+      role: String(userData.role || '').trim(),
+    },
+  };
+});
 
 function validateQrSessionPayload(data) {
   const sessionId = String(data?.sessionId || '').trim();
@@ -4141,17 +5153,32 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
     return;
   }
 
-  const bodyPayload = req.body && typeof req.body === 'object' ? req.body : {};
-  const nestedPayload = bodyPayload.data && typeof bodyPayload.data === 'object' ? bodyPayload.data : {};
-  const payload = {
-    ...bodyPayload,
-    ...nestedPayload,
-    ...req.query,
-  };
+  const {
+    bodyPayload,
+    rawBodyText,
+    parsedRawBody,
+    payload,
+  } = resolveAttendanceRequestPayload(req);
   const sourcePath = String(req.get('x-device-route') || req.path || '').trim();
 
   const token = String(payload.token || req.query.token || '').trim();
   if (!token) {
+    await writeAttendanceDeviceRawRequest({
+      nitRut: '',
+      status: 'sin_token',
+      requestMethod: req.method,
+      path: sourcePath,
+      query: req.query || {},
+      body: bodyPayload,
+      rawBodyText: rawBodyText.slice(0, 4000),
+      parsedRawBody,
+      headers: {
+        'content-type': String(req.get('content-type') || '').trim(),
+        'user-agent': String(req.get('user-agent') || '').trim(),
+        host: String(req.get('host') || '').trim(),
+      },
+      ip: String(req.ip || '').trim(),
+    }).catch(() => {});
     res.status(401).json({ ok: false, message: 'Falta token de integracion.' });
     return;
   }
@@ -4163,6 +5190,23 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
       .get();
 
     if (configSnapshot.empty) {
+      await writeAttendanceDeviceRawRequest({
+        nitRut: '',
+        status: 'token_invalido',
+        requestMethod: req.method,
+        path: sourcePath,
+        query: req.query || {},
+        body: bodyPayload,
+        rawBodyText: rawBodyText.slice(0, 4000),
+        parsedRawBody,
+        normalizedPayload: payload,
+        headers: {
+          'content-type': String(req.get('content-type') || '').trim(),
+          'user-agent': String(req.get('user-agent') || '').trim(),
+          host: String(req.get('host') || '').trim(),
+        },
+        ip: String(req.ip || '').trim(),
+      }).catch(() => {});
       res.status(401).json({ ok: false, message: 'Token invalido.' });
       return;
     }
@@ -4181,60 +5225,84 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    const personId = String(pickFirstValue(payload, [
-      'employeeIc',
-      'employeeIC',
-      'employee_ic',
-      'employeeIcNo',
-      'employee_ic_no',
-      'icCardNumber',
-      'ic_card_number',
-      'cardNumber',
-      'card_number',
-      'personId',
-      'PersonId',
-      'person_id',
-      'personid',
-      'employeeId',
-      'employee_id',
-      'personnelId',
-      'personnel_id',
-      'id',
-      'ID',
-      'userId',
-    ])).trim();
+    const preferredPersonIdField = String(config.personIdField || 'employeeIc').trim();
+    const personIdCandidates = getAttendancePersonIdCandidates(payload, preferredPersonIdField);
+    const personId = String(personIdCandidates[0]?.value || '').trim();
 
     if (!personId) {
+      await writeAttendanceDeviceRawRequest({
+        nitRut,
+        token,
+        configDocId: configDoc.id,
+        status: 'sin_person_id',
+        requestMethod: req.method,
+        path: sourcePath,
+        query: req.query || {},
+        body: bodyPayload,
+        rawBodyText: rawBodyText.slice(0, 4000),
+        parsedRawBody,
+        normalizedPayload: payload,
+        headers: {
+          'content-type': String(req.get('content-type') || '').trim(),
+          'user-agent': String(req.get('user-agent') || '').trim(),
+          host: String(req.get('host') || '').trim(),
+        },
+        ip: String(req.ip || '').trim(),
+      }).catch(() => {});
       res.status(202).json({ ok: true, ignored: true, reason: 'sin_person_id' });
       return;
     }
 
-    const eventDateParts = parseAttendanceEventDate(
-      pickFirstValue(payload, [
-        'passageTime',
-        'pass_time',
-        'recordTime',
-        'record_time',
-        'captureTime',
-        'capture_time',
-        'time',
-        'timestamp',
-      ]),
-    );
-    const eventDateRaw = eventDateParts?.isoDateTime || String(pickFirstValue(payload, ['passageTime', 'recordTime', 'time', 'timestamp'])).trim();
+    const {
+      key: eventDateSourceKey,
+      raw: eventDateRawInput,
+      parts: eventDateParts,
+    } = resolveAttendanceEventDate(payload);
+    const eventDateRaw = eventDateParts?.isoDateTime || eventDateRawInput;
     const matchType = resolveAttendanceMarkType(payload);
 
-    const userMatch = await findAttendanceUserByIdentifier({
-      nitRut,
-      personId,
-      personIdField: String(config.personIdField || 'employeeIc').trim(),
-    });
+    let userMatch = null;
+    let matchedPersonCandidate = null;
+    for (const candidate of personIdCandidates) {
+      userMatch = await findAttendanceUserByIdentifier({
+        nitRut,
+        personId: candidate.value,
+        personIdField: candidate.personIdField,
+      });
+      if (userMatch) {
+        matchedPersonCandidate = candidate;
+        break;
+      }
+    }
 
     if (!userMatch) {
+      const eventFingerprint = buildAttendanceEventFingerprint({
+        nitRut,
+        personId,
+        eventDateRaw,
+        attendanceDateIso: eventDateParts?.isoDate || '',
+        matchType,
+        sourcePath,
+      });
+      await db.collection('attendance_device_logs').doc(eventFingerprint).set({
+        fingerprint: eventFingerprint,
+        nitRut,
+        status: 'usuario_no_encontrado',
+        requestMethod: req.method,
+        path: sourcePath,
+        personId,
+        personIdField: preferredPersonIdField,
+        personIdCandidates,
+        eventDateRaw,
+        matchType,
+        payload,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => {});
       res.status(202).json({ ok: true, ignored: true, reason: 'usuario_no_encontrado' });
       return;
     }
 
+    const resolvedPersonId = String(matchedPersonCandidate?.value || personId).trim();
     const userData = userMatch.data || {};
     const profile = userData.profile || {};
     const role = String(userData.role || '').trim().toLowerCase();
@@ -4247,7 +5315,7 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
     const userName = resolveUserDisplayName(userData);
     const eventFingerprint = buildAttendanceEventFingerprint({
       nitRut,
-      personId,
+      personId: resolvedPersonId,
       eventDateRaw,
       attendanceDateIso,
       matchType,
@@ -4265,7 +5333,7 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
         ok: true,
         status: 'duplicado',
         uid: userMatch.id,
-        personId,
+        personId: resolvedPersonId,
         attendanceDateIso,
       });
       return;
@@ -4287,7 +5355,10 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
         status: blockedByReportedAbsence ? 'bloqueado_inasistencia' : 'ya_marcado',
         requestMethod: req.method,
         path: sourcePath,
-        personId,
+        personId: resolvedPersonId,
+        personIdPayloadField: matchedPersonCandidate?.payloadField || personIdCandidates[0]?.payloadField || '',
+        personIdMatchField: matchedPersonCandidate?.personIdField || preferredPersonIdField,
+        personIdCandidates,
         uid: userMatch.id,
         attendanceDateIso,
         matchType,
@@ -4298,7 +5369,7 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
         ok: true,
         status: blockedByReportedAbsence ? 'bloqueado_inasistencia' : 'ya_marcado',
         uid: userMatch.id,
-        personId,
+        personId: resolvedPersonId,
         attendanceDateIso,
       });
       return;
@@ -4322,7 +5393,10 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
       dispositivoIp: String(config.deviceIp || payload.deviceIp || payload.ip || '').trim(),
       deviceEventAtRaw: eventDateRaw,
       deviceEventAt: buildTimestampFromParts(eventDateParts),
-      personIdRegistrado: personId,
+      deviceEventDateSource: eventDateSourceKey || 'server_fallback',
+      personIdRegistrado: resolvedPersonId,
+      personIdPayloadField: matchedPersonCandidate?.payloadField || personIdCandidates[0]?.payloadField || '',
+      personIdMatchField: matchedPersonCandidate?.personIdField || preferredPersonIdField,
       userName,
       rawPayload: payload,
     }, { merge: true });
@@ -4337,6 +5411,8 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
       path: sourcePath,
       query: req.query || {},
       body: bodyPayload,
+      rawBodyText: rawBodyText.slice(0, 4000),
+      parsedRawBody,
       normalizedPayload: payload,
       headers: {
         'content-type': String(req.get('content-type') || '').trim(),
@@ -4344,9 +5420,13 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
         host: String(req.get('host') || '').trim(),
       },
       ip: String(req.ip || '').trim(),
-      personId,
+      personId: resolvedPersonId,
+      personIdPayloadField: matchedPersonCandidate?.payloadField || personIdCandidates[0]?.payloadField || '',
+      personIdMatchField: matchedPersonCandidate?.personIdField || preferredPersonIdField,
+      personIdCandidates,
       uid: userMatch.id,
       attendanceDateIso,
+      eventDateRaw,
       matchType,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -4357,11 +5437,15 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
       status: existingAttendance.exists ? 'actualizado' : 'creado',
       requestMethod: req.method,
       path: sourcePath,
-      personId,
+      personId: resolvedPersonId,
+      personIdPayloadField: matchedPersonCandidate?.payloadField || personIdCandidates[0]?.payloadField || '',
+      personIdMatchField: matchedPersonCandidate?.personIdField || preferredPersonIdField,
+      personIdCandidates,
       uid: userMatch.id,
       userName,
       matchType,
       attendanceDateIso,
+      eventDateRaw,
       payload,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -4370,7 +5454,7 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
       ok: true,
       status: existingAttendance.exists ? 'actualizado' : 'creado',
       uid: userMatch.id,
-      personId,
+      personId: resolvedPersonId,
       attendanceDateIso,
       matchType,
     });

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { collection, doc, getDocs, limit, orderBy, query, serverTimestamp, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { addDocTracked, updateDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
@@ -655,7 +655,7 @@ function EvaluationGradingPage() {
               const uploadPath = `evaluaciones_calificadas/${evaluationId}/${uploadedAt}_${safeFileName}`
               const uploadRef = ref(storage, uploadPath)
               await uploadBytesTracked(uploadRef, pdfFile)
-              const uploadedFileUrl = await getDownloadURL(uploadRef)
+              const uploadedFileUrl = await getTrackedDownloadURL(uploadRef)
               const segments = splitExamSegments(normalizedText)
               let ocrTextForFile = null
 

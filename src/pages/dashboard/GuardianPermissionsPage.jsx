@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import useGuardianPortal from '../../hooks/useGuardianPortal'
 import GuardianStudentSwitcher from '../../components/GuardianStudentSwitcher'
@@ -168,7 +168,7 @@ function GuardianPermissionsPage() {
       if (supportFile) {
         const storageRef = ref(storage, `soportes_permisos/${Date.now()}-${supportFile.name}`)
         await uploadBytesTracked(storageRef, supportFile)
-        soporteUrl = await getDownloadURL(storageRef)
+        soporteUrl = await getTrackedDownloadURL(storageRef)
       }
 
       const permissionRef = await addDocTracked(collection(db, 'permisos'), {

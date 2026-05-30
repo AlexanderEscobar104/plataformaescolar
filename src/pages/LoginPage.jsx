@@ -5,24 +5,11 @@ import { getAuthErrorMessage } from '../utils/authErrors'
 import logoFallback from '../assets/logo-plataforma.svg'
 import PasswordField from '../components/PasswordField'
 import OperationStatusModal from '../components/OperationStatusModal'
-import {
-  buildQrImageUrl,
-  consumeQrLoginSession,
-  createQrLoginSession,
-  getQrLoginSessionStatus,
-} from '../services/qrAuth'
+import { isLikelyMobileDevice } from '../utils/device'
 
-function isLikelyMobileDevice() {
-  if (typeof window === 'undefined') return false
-
-  const userAgent = String(window.navigator?.userAgent || '').toLowerCase()
-  const hasMobileAgent = /android|iphone|ipad|ipod|mobile|windows phone/i.test(userAgent)
-  const coarsePointer = typeof window.matchMedia === 'function'
-    ? window.matchMedia('(pointer: coarse)').matches
-    : false
-  const narrowViewport = window.innerWidth <= 820
-
-  return hasMobileAgent || (coarsePointer && narrowViewport)
+function buildQrImageUrl(payload, size = 280) {
+  const safeSize = Math.max(180, Number(size) || 280)
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${safeSize}x${safeSize}&data=${encodeURIComponent(payload)}`
 }
 
 function LoginPage() {
@@ -41,6 +28,9 @@ function LoginPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalMessage, setModalMessage] = useState('')
   const [showQrLogin, setShowQrLogin] = useState(() => !isLikelyMobileDevice())
+  const [isMobileDevice, setIsMobileDevice] = useState(() => isLikelyMobileDevice())
+  const [passkeySupported, setPasskeySupported] = useState(false)
+  const [checkingPasskeySupport, setCheckingPasskeySupport] = useState(false)
 
   const qrImageUrl = useMemo(() => {
     if (!qrSession?.qrPayload) return ''
@@ -53,6 +43,7 @@ function LoginPage() {
       setQrImageFailed(false)
       setQrSession(null)
       setQrStatus('Generando codigo QR...')
+      const { createQrLoginSession } = await import('../services/qrAuth')
       const session = await createQrLoginSession()
       setQrSession(session)
       setQrStatus('Escanea este codigo QR desde Configuracion > Dispositivos vinculados en tu celular.')
@@ -69,10 +60,12 @@ function LoginPage() {
     if (typeof window === 'undefined') return undefined
 
     const updateDeviceMode = () => {
-      const shouldShowQr = !isLikelyMobileDevice()
+      const mobileDevice = isLikelyMobileDevice()
+      const shouldShowQr = !mobileDevice
+      setIsMobileDevice(mobileDevice)
       setShowQrLogin(shouldShowQr)
       if (!shouldShowQr) {
-        setAuthMethod('password')
+        setAuthMethod((currentValue) => (currentValue === 'qr' ? 'password' : currentValue))
       }
     }
 
@@ -82,16 +75,55 @@ function LoginPage() {
   }, [])
 
   useEffect(() => {
-    if (!showQrLogin && authMethod === 'qr') {
-      setAuthMethod('password')
+    let active = true
+
+    const validateSupport = async () => {
+      try {
+        const { getPasskeySupport } = await import('../services/passkeys')
+        const support = await getPasskeySupport()
+        if (!active) return
+        setPasskeySupported(Boolean(support.supported))
+      } finally {
+        if (active) {
+          setCheckingPasskeySupport(false)
+        }
+      }
     }
-  }, [authMethod, showQrLogin])
+
+    const deferredValidation = () => {
+      setCheckingPasskeySupport(true)
+      validateSupport().catch(() => {
+        if (active) {
+          setCheckingPasskeySupport(false)
+        }
+      })
+    }
+
+    let timeoutId = 0
+    let idleRequestId = 0
+
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      idleRequestId = window.requestIdleCallback(deferredValidation, { timeout: 1200 })
+    } else {
+      timeoutId = window.setTimeout(deferredValidation, 250)
+    }
+
+    return () => {
+      active = false
+      if (typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function' && idleRequestId) {
+        window.cancelIdleCallback(idleRequestId)
+      }
+      if (timeoutId) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [])
 
   useEffect(() => {
-    if (authMethod === 'qr' && !qrSession && !qrLoading) {
-      startQrSession().catch(() => {})
+    if (!isMobileDevice) {
+      setPasskeySupported(false)
     }
-  }, [authMethod, qrLoading, qrSession])
+  }, [isMobileDevice])
 
   useEffect(() => {
     if (authMethod !== 'qr' || !qrSession?.sessionId || !qrSession?.sessionKey) {
@@ -102,6 +134,7 @@ function LoginPage() {
 
     const pollStatus = async () => {
       try {
+        const { consumeQrLoginSession, getQrLoginSessionStatus } = await import('../services/qrAuth')
         const sessionStatus = await getQrLoginSessionStatus({
           sessionId: qrSession.sessionId,
           sessionKey: qrSession.sessionKey,
@@ -113,7 +146,7 @@ function LoginPage() {
         if (status === 'approved' && sessionStatus?.customToken) {
           setQrStatus('Codigo aprobado. Iniciando sesion...')
           setLoading(true)
-          await loginWithCustomToken(sessionStatus.customToken)
+          await loginWithCustomToken(sessionStatus.customToken, 'ingreso_qr')
           await consumeQrLoginSession({
             sessionId: qrSession.sessionId,
             sessionKey: qrSession.sessionKey,
@@ -155,6 +188,24 @@ function LoginPage() {
     }
   }, [authMethod, loginWithCustomToken, navigate, qrSession])
 
+  useEffect(() => {
+    if (!showQrLogin && authMethod === 'qr') {
+      setAuthMethod('password')
+    }
+  }, [authMethod, showQrLogin])
+
+  useEffect(() => {
+    if ((!passkeySupported || !isMobileDevice) && authMethod === 'passkey') {
+      setAuthMethod('password')
+    }
+  }, [authMethod, isMobileDevice, passkeySupported])
+
+  useEffect(() => {
+    if (authMethod === 'qr' && !qrSession && !qrLoading) {
+      startQrSession().catch(() => {})
+    }
+  }, [authMethod, qrLoading, qrSession])
+
   const handleSubmit = async (event) => {
     event.preventDefault()
 
@@ -180,6 +231,21 @@ function LoginPage() {
 
   const handleRefreshQr = async () => {
     await startQrSession()
+  }
+
+  const handlePasskeySignIn = async () => {
+    try {
+      setLoading(true)
+      const { authenticateWithPasskey } = await import('../services/passkeys')
+      const result = await authenticateWithPasskey()
+      await loginWithCustomToken(result?.customToken, 'ingreso_biometrico')
+      navigate('/dashboard', { replace: true })
+    } catch (error) {
+      setModalMessage(error?.message || 'No fue posible iniciar sesion con Face ID.')
+      setModalOpen(true)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -213,6 +279,15 @@ function LoginPage() {
               Codigo QR
             </button>
           )}
+          {!checkingPasskeySupport && passkeySupported && isMobileDevice && (
+            <button
+              type="button"
+              className={`auth-method-button${authMethod === 'passkey' ? ' active' : ''}`}
+              onClick={() => setAuthMethod('passkey')}
+            >
+              Face ID / biometria
+            </button>
+          )}
         </div>
 
         {authMethod === 'password' ? (
@@ -242,7 +317,7 @@ function LoginPage() {
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
           </form>
-        ) : (
+        ) : authMethod === 'qr' ? (
           <div className="qr-login-panel">
             <div className="qr-login-code">
               {qrImageUrl && !qrImageFailed ? (
@@ -277,10 +352,31 @@ function LoginPage() {
               En el celular abre Configuracion &gt; Dispositivos vinculados, escanea el QR y aprueba el acceso.
             </p>
           </div>
+        ) : (
+          <div className="qr-login-panel passkey-login-panel">
+            <div className="qr-login-code passkey-login-card">
+              <div className="passkey-login-icon" aria-hidden="true">
+                ID
+              </div>
+              <strong>Ingreso con Face ID o biometria</strong>
+              <p className="subtitle">
+                Usa la passkey que activaste en tu perfil para entrar desde este dispositivo sin escribir la contrasena.
+              </p>
+            </div>
+            <div className="qr-login-actions">
+              <button type="button" className="button" onClick={handlePasskeySignIn} disabled={loading}>
+                {loading ? 'Validando biometria...' : 'Entrar con Face ID'}
+              </button>
+            </div>
+            <p className="feedback">
+              Si aun no lo activaste, entra con tu clave y luego ve a Mi perfil para activar el inicio biometrico.
+            </p>
+          </div>
         )}
 
         <div className="links">
           <Link to="/recuperar-contrasena">Recuperar contrasena</Link>
+          <small>Version 1.0.0.0</small>
         </div>
 
         <OperationStatusModal

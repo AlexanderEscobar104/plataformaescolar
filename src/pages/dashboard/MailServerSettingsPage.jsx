@@ -130,6 +130,40 @@ function MailServerSettingsPage() {
                 <h3>Conexion del servidor</h3>
                 <p>Define hacia que servidor SMTP se conectara la plataforma.</p>
               </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label className="mail-settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={form.user === 'edupleace@gmail.com'}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setForm((prev) => ({
+                          ...prev,
+                          host: 'smtp.gmail.com',
+                          port: '465',
+                          user: 'edupleace@gmail.com',
+                          pass: 'Tltrp1Tlotrp2',
+                          fromEmail: 'edupleace@gmail.com',
+                          secure: true,
+                        }))
+                      } else {
+                        setForm((prev) => ({
+                          ...prev,
+                          host: '',
+                          port: '587',
+                          user: '',
+                          pass: '',
+                          fromEmail: '',
+                          secure: false,
+                        }))
+                      }
+                    }}
+                  />
+                  <span>Usar datos por defecto (edupleace@gmail.com)</span>
+                </label>
+              </div>
+
               <div className="mail-settings-grid">
                 <label className="mail-settings-field">
                   <span>Host SMTP</span>

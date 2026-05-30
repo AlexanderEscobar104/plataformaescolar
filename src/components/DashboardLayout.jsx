@@ -8,6 +8,7 @@ import { buildDynamicMemberPermissionKey, PERMISSION_KEYS } from '../utils/permi
 import { getAnnouncementDisplaySize, matchesAnnouncementAudience } from '../utils/announcements'
 import { matchesStudentAudience } from '../utils/studentAudience'
 import { matchesParticipationRoles } from '../utils/participation'
+import { hydrateStoredFilePayload, hydrateStoredFilePayloads } from '../services/storageService'
 import AnnouncementDisplay from './AnnouncementDisplay'
 import FloatingChatWidget from './FloatingChatWidget'
 import { ensureNativeNotificationPermissions, isNativeApp, openExternalDocument, pushNativeAlert, updateAppBadgeCount } from '../utils/nativeLinks'
@@ -167,11 +168,12 @@ function filterSidebarItems(items, searchQuery, groupLabel = '') {
 
 const mainItemsBase = [
   { label: 'Inicio', to: '/dashboard', Icon: HomeIcon },
+  { label: 'Mi perfil', to: '/dashboard/perfil', Icon: UserIcon },
 ]
 const reportItemsBase = [
   { label: 'Reportes', to: '/dashboard/reportes', Icon: ReportsIcon },
 ]
-function DashboardLayout() {
+function DashboardLayout({ children = null }) {
   const location = useLocation()
   const navigate = useNavigate()
   const {
@@ -215,6 +217,7 @@ function DashboardLayout() {
   const [modalParticipationQueue, setModalParticipationQueue] = useState([])
   const [modalParticipationIndex, setModalParticipationIndex] = useState(0)
   const isGuardianUser = userRole === 'acudiente'
+  const profileRoute = isGuardianUser ? '/dashboard/acudiente/perfil' : '/dashboard/perfil'
   const planRestrictedHome = isGuardianUser ? '/dashboard/acudiente' : '/dashboard'
   const shouldRestrictMenusByPlan = Boolean(planModuleAccessBlocked)
 
@@ -866,6 +869,7 @@ function DashboardLayout() {
       ...(hasPlanModule('inasistencias') ? [{ label: 'Inasistencias', to: '/dashboard/acudiente/inasistencias', Icon: AbsencesIcon }] : []),
       ...(hasPlanModule('tareas') ? [{ label: 'Tareas', to: '/dashboard/acudiente/tareas', Icon: TasksIcon }] : []),
       ...(hasPlanModule('evaluaciones') ? [{ label: 'Evaluaciones', to: '/dashboard/acudiente/evaluaciones', Icon: EvaluationsIcon }] : []),
+      ...(hasPlanModule('eventos') ? [{ label: 'Eventos', to: '/dashboard/acudiente/eventos', Icon: EvaluationsIcon }] : []),
       ...(hasPlanModule('horario') ? [{ label: 'Horario', to: '/dashboard/acudiente/horario', Icon: ScheduleIcon }] : []),
       ...(canViewGuardianPaymentsModule ? [{ label: 'Pagos', to: '/dashboard/acudiente/pagos', Icon: PaymentsIcon }] : []),
       ...(hasPlanModule('circulares') ? [{ label: 'Circulares', to: '/dashboard/acudiente/circulares', Icon: ReportsIcon }] : []),
@@ -927,10 +931,6 @@ function DashboardLayout() {
 
     if (canManageSubjects && hasPlanModule('crear-asignaturas')) {
       items.push({ label: 'Crear asignaturas', to: '/dashboard/crear-asignaturas', Icon: ReportsIcon })
-    }
-
-    if (canBulkUpload && hasPlanModule('cargue-masivo')) {
-      items.push({ label: 'Cargue masivo', to: '/dashboard/cargue-masivo', Icon: TasksIcon })
     }
 
     if ((canManageTipoInasistencias || canViewInasistencias) && canViewTipoInasistenciasModule) {
@@ -1095,7 +1095,7 @@ function DashboardLayout() {
     ? filteredReportItems.filter((item) => item.to === '/dashboard/tipo-reportes')
     : filteredReportItems
   const visibleConfigItems = shouldRestrictMenusByPlan
-    ? filteredConfigItems.filter((item) => item.to === '/dashboard/cambiar-clave')
+    ? filteredConfigItems.filter((item) => item.to === '/dashboard/cambiar-clave' || item.to === '/dashboard/perfil')
     : filteredConfigItems
   const allItems = isGuardianUser
     ? guardianPortalItems
@@ -1461,7 +1461,14 @@ function DashboardLayout() {
           )
 
         validDocs.sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
-        setModalAnnouncementsQueue(validDocs)
+        const hydratedDocs = await Promise.all(validDocs.map(async (item) => ({
+          ...item,
+          images: await hydrateStoredFilePayloads(Array.isArray(item.images) ? item.images : []),
+          video: item.video && typeof item.video === 'object'
+            ? await hydrateStoredFilePayload(item.video)
+            : item.video || null,
+        })))
+        setModalAnnouncementsQueue(hydratedDocs)
         setModalAnnouncementIndex(0)
       } catch {
         setModalAnnouncementsQueue([])
@@ -2125,15 +2132,15 @@ function DashboardLayout() {
                 <UserIcon />
               </NavLink>
             )}
-            <div className="topbar-user">
+            <NavLink className="topbar-user topbar-user-link" to={profileRoute} title="Ir a mi perfil">
               {userName || user?.displayName || user?.email}
               {userRole ? ` | ${userRole}` : ''}
-            </div>
+            </NavLink>
           </div>
         </header>
 
         <main className="content-panel">
-          <Outlet />
+          {children || <Outlet />}
         </main>
       </section>
       {unreadToast && (

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { httpsCallable } from 'firebase/functions'
 import { collection, doc, getDocs, query, where } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { db, functions } from '../../firebase'
 import { updateDocTracked, deleteDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
+import { getAuthErrorMessage } from '../../utils/authErrors'
 import { PERMISSION_KEYS, buildAllRoleOptions } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
@@ -73,6 +75,9 @@ function UsersPage() {
   const [customRoles, setCustomRoles] = useState([])
   const [roleChangeConfirm, setRoleChangeConfirm] = useState(null)
   const [stateChangeConfirm, setStateChangeConfirm] = useState(null)
+  const [emailEditModal, setEmailEditModal] = useState(null)
+  const [emailDraft, setEmailDraft] = useState('')
+  const [updatingEmailUserId, setUpdatingEmailUserId] = useState('')
 
   const loadUsers = useCallback(async () => {
     if (!canViewUsers) {
@@ -116,6 +121,7 @@ function UsersPage() {
             nombres,
             apellidos,
             correo: data.email || '-',
+            celular: profile.celular || data.celular || data.telefono || data.phoneNumber || '-',
             rol: data.role || '-',
             fechaCreacion: data.createdAt || null,
             fechaAcceso: accessData,
@@ -171,9 +177,9 @@ function UsersPage() {
     }
   }
 
-  const handleResetPassword = async (item) => {
+  const handleResetPassword = async (item, channel = 'email') => {
     if (!canAssignRoles) {
-      setFeedback('No tienes permisos para enviar correos de recuperacion de contrasena.')
+      setFeedback('No tienes permisos para enviar recuperaciones de contrasena.')
       return
     }
 
@@ -185,15 +191,19 @@ function UsersPage() {
 
     try {
       setResettingUserId(item.id)
-      const result = await resetPassword(targetEmail)
-      const copiedTo = Array.isArray(result?.copiedTo) ? result.copiedTo : []
-      if (copiedTo.length > 0) {
-        setFeedback(`Correo de recuperacion enviado a ${targetEmail}. Copia: ${copiedTo.join(', ')}`)
+      const result = await resetPassword(targetEmail, channel)
+      if (channel === 'sms') {
+        const sentTo = String(result?.sentTo || '').trim()
+        if (sentTo) {
+          setFeedback(`SMS de recuperacion enviado para ${targetEmail}. Celular destino: ${sentTo}.`)
+        } else {
+          setFeedback(`SMS de recuperacion enviado para ${targetEmail}.`)
+        }
       } else {
         setFeedback(`Correo de recuperacion enviado a ${targetEmail}.`)
       }
-    } catch {
-      setFeedback('No fue posible enviar el correo de recuperacion.')
+    } catch (error) {
+      setFeedback(getAuthErrorMessage(error))
     } finally {
       setResettingUserId('')
     }
@@ -301,6 +311,38 @@ function UsersPage() {
     })
   }, [search, users])
 
+  const openEmailEditModal = (item) => {
+    setEmailEditModal(item)
+    setEmailDraft(String(item?.correo && item.correo !== '-' ? item.correo : '').trim())
+  }
+
+  const handleSaveEmail = async () => {
+    if (!emailEditModal?.id) return
+
+    const normalizedEmail = String(emailDraft || '').trim().toLowerCase()
+    if (!normalizedEmail) {
+      setFeedback('Debes ingresar el nuevo correo.')
+      return
+    }
+
+    try {
+      setUpdatingEmailUserId(emailEditModal.id)
+      const updateUserEmailByAdmin = httpsCallable(functions, 'updateUserEmailByAdmin')
+      await updateUserEmailByAdmin({
+        targetUid: emailEditModal.id,
+        email: normalizedEmail,
+      })
+      setEmailEditModal(null)
+      setEmailDraft('')
+      setFeedback('Correo actualizado correctamente.')
+      await loadUsers()
+    } catch (error) {
+      setFeedback(getAuthErrorMessage(error?.message || error?.code || error))
+    } finally {
+      setUpdatingEmailUserId('')
+    }
+  }
+
   return (
     <section className="users-page-shell dashboard-module-shell">
       <div className="dashboard-module-hero">
@@ -356,7 +398,9 @@ function UsersPage() {
                   <td data-label="Numero de documento">{item.numeroDocumento}</td>
                   <td data-label="Nombres">{item.nombres}</td>
                   <td data-label="Apellidos">{item.apellidos}</td>
-                  <td data-label="Correo">{item.correo}</td>
+                  <td data-label="Correo">
+                    <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{item.correo}</span>
+                  </td>
                   <td data-label="Asignar rol">
                     <div className="student-actions">
                       <select
@@ -402,13 +446,37 @@ function UsersPage() {
                     <button
                       type="button"
                       className="button small secondary icon-action-button"
-                      onClick={() => handleResetPassword(item)}
+                      onClick={() => openEmailEditModal(item)}
+                      disabled={!canAssignRoles || updatingEmailUserId === item.id}
+                      aria-label="Cambiar correo"
+                      title={canAssignRoles ? 'Cambiar correo' : 'Sin permiso para cambiar correo'}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m3 17.3 10.9-10.9 2.7 2.7L5.7 20H3v-2.7Zm17.7-10.1a1 1 0 0 0 0-1.4L18.2 3.3a1 1 0 0 0-1.4 0l-1.4 1.4 4.1 4.1 1.2-1.6Z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="button small secondary icon-action-button"
+                      onClick={() => handleResetPassword(item, 'email')}
                       disabled={!canAssignRoles || resettingUserId === item.id || item.correo === '-'}
                       aria-label="Enviar correo de recuperacion"
                       title={canAssignRoles ? 'Enviar correo de recuperacion' : 'Sin permiso para recuperar contrasena'}
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 12.7 2 6.5V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6.5l-10 6.2ZM12 11 2 4h20l-10 7Z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="button small secondary icon-action-button"
+                      onClick={() => handleResetPassword(item, 'sms')}
+                      disabled={!canAssignRoles || resettingUserId === item.id || item.correo === '-'}
+                      aria-label="Enviar SMS de recuperacion"
+                      title={canAssignRoles ? 'Enviar SMS de recuperacion' : 'Sin permiso para recuperar contrasena'}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7 2h10a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3Zm0 3v14h10V5H7Zm5 11a1.25 1.25 0 1 0 0 2.5A1.25 1.25 0 0 0 12 16Zm-3-9h6v2H9V7Zm0 3h6v2H9v-2Z" />
                       </svg>
                     </button>
                     <button
@@ -460,6 +528,57 @@ function UsersPage() {
             </button>
             <h3>Mensaje</h3>
             <p>{feedback}</p>
+          </div>
+        </div>
+      )}
+
+      {emailEditModal && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Cambiar correo del usuario">
+            <button
+              type="button"
+              className="modal-close-icon"
+              aria-label="Cerrar"
+              onClick={() => {
+                if (updatingEmailUserId) return
+                setEmailEditModal(null)
+                setEmailDraft('')
+              }}
+            >
+              x
+            </button>
+            <h3>Cambiar correo</h3>
+            <p>
+              Usuario: <strong>{emailEditModal.nombres} {emailEditModal.apellidos}</strong>
+            </p>
+            <label htmlFor="users-email-edit-input">
+              Nuevo correo
+              <input
+                id="users-email-edit-input"
+                type="email"
+                value={emailDraft}
+                onChange={(event) => setEmailDraft(event.target.value)}
+                placeholder="correo@dominio.com"
+                disabled={Boolean(updatingEmailUserId)}
+              />
+            </label>
+            <div className="modal-actions">
+              <button type="button" className="button" onClick={handleSaveEmail} disabled={Boolean(updatingEmailUserId)}>
+                {updatingEmailUserId ? 'Guardando...' : 'Guardar correo'}
+              </button>
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => {
+                  if (updatingEmailUserId) return
+                  setEmailEditModal(null)
+                  setEmailDraft('')
+                }}
+                disabled={Boolean(updatingEmailUserId)}
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

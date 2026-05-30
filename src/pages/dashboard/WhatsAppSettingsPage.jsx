@@ -170,7 +170,7 @@ function WhatsAppSettingsPage() {
       <div className="home-left-card evaluations-card" style={{ marginTop: '16px' }}>
         <h3>Webhook Meta</h3>
         <p style={{ marginTop: 0 }}>
-          En esta fase 2 ya puedes conectar Meta con la plataforma usando la URL del webhook y el verify token del plantel.
+          Integracion Meta Cloud API: conecta Meta con la plataforma usando la URL del webhook y el verify token del plantel.
         </p>
         <div className="guardian-message-list">
           <article className="guardian-message-card" style={{ cursor: 'default' }}>

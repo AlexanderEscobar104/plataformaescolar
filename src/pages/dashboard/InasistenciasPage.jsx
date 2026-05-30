@@ -8,9 +8,9 @@ import {
   orderBy,
   serverTimestamp,
 } from 'firebase/firestore'
-import { ref, getDownloadURL } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import PaginationControls from '../../components/PaginationControls'
@@ -248,7 +248,7 @@ function InasistenciasPage() {
         const storageRef = ref(storage, `soportes_inasistencia/${fileName}`)
         
         await uploadBytesTracked(storageRef, soporteFile)
-        soporteUrl = await getDownloadURL(storageRef)
+        soporteUrl = await getTrackedDownloadURL(storageRef)
       } else if (existingSoporteUrl) {
         soporteUrl = existingSoporteUrl
       }
@@ -447,7 +447,7 @@ function InasistenciasPage() {
       const storageRef = ref(storage, `soportes_inasistencia/${fileName}`)
       
       await uploadBytesTracked(storageRef, newSoporteFile)
-      const url = await getDownloadURL(storageRef)
+      const url = await getTrackedDownloadURL(storageRef)
 
       const updatedDescription = selectedItemForSoporte.descripcion 
         ? `${selectedItemForSoporte.descripcion}\n\n[Observación de soporte adjunto]: ${newSoporteObservacion.trim()}`

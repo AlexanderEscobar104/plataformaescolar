@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, functions, storage } from '../../firebase'
 import { addDocTracked, setDocTracked, updateDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { provisionUserWithRole } from '../../services/userProvisioning'
 import { GRADE_OPTIONS, GROUP_OPTIONS } from '../../constants/academicOptions'
 import { useAuth } from '../../hooks/useAuth'
@@ -715,7 +715,7 @@ function AdmissionsLeadDetailPage() {
       const filePath = `admisiones/${safeLeadId}/documentos/${Date.now()}-${documentFile.name}`
       const storageRef = ref(storage, filePath)
       await uploadBytesTracked(storageRef, documentFile)
-      const url = await getDownloadURL(storageRef)
+      const url = await getTrackedDownloadURL(storageRef)
 
       await addDocTracked(collection(db, 'admisiones_documents'), {
         nitRut: userNitRut,

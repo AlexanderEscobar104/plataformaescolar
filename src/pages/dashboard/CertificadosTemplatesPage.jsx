@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
 import { setDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import { fileToSafeDataUrl, MAX_DATAURL_CHARS } from '../../utils/imageDataUrl'
@@ -262,7 +262,7 @@ function CertificadosTemplatesPage() {
       name: backgroundNuevo.name,
       size: backgroundNuevo.size,
       type: backgroundNuevo.type || 'application/octet-stream',
-      url: await getDownloadURL(backgroundRef),
+      url: await getTrackedDownloadURL(backgroundRef),
       path: filePath,
       dataUrl: tooLarge ? '' : dataUrl,
     }
@@ -290,7 +290,7 @@ function CertificadosTemplatesPage() {
       name: picked.name,
       size: picked.size,
       type: picked.type || 'application/octet-stream',
-      url: await getDownloadURL(fileRef),
+      url: await getTrackedDownloadURL(fileRef),
       path: filePath,
       dataUrl: tooLarge ? '' : dataUrl,
     }

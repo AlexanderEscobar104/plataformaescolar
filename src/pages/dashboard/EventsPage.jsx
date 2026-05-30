@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDocs, serverTimestamp, query, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { addDocTracked, deleteDocTracked, updateDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
@@ -263,7 +263,7 @@ function EventsPage() {
         size: file.size,
         type: file.type || 'application/octet-stream',
         path: filePath,
-        url: await getDownloadURL(fileRef),
+        url: await getTrackedDownloadURL(fileRef),
       })
     }
     return uploaded

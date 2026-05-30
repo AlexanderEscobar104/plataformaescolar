@@ -107,6 +107,27 @@ function formatAttendanceDate(value) {
   return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleDateString('es-CO')
 }
 
+function formatAttendanceTime(row = {}) {
+  const rawDeviceTime = String(row.deviceEventAtRaw || '').trim()
+  const rawTimeMatch = rawDeviceTime.match(/(?:T|\s)(\d{2}:\d{2})(?::\d{2})?/)
+  if (rawTimeMatch) return rawTimeMatch[1]
+
+  const timestamp =
+    row.deviceEventAt?.toDate?.() ||
+    row.marcadoEn?.toDate?.() ||
+    null
+  if (timestamp) {
+    return timestamp.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const parsed = new Date(rawDeviceTime)
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  return '-'
+}
+
 function looksLikeEmail(value) {
   return String(value || '').includes('@')
 }
@@ -956,8 +977,7 @@ function AsistenciaPage() {
                             <td data-label="Apellidos">{item.apellidos}</td>
                             <td data-label="Asistencia hoy">{todayStatus}</td>
                             <td data-label="Inasistencia reportada">{hasReportedAbsence ? 'Si' : 'No'}</td>
-                            <td data-label="Acciones">
-                              <div className="student-actions attendance-action-list">
+                            <td className="student-actions attendance-action-list" data-label="Acciones">
                                 <button
                                   type="button"
                                   className="button secondary small icon-action-button"
@@ -988,7 +1008,6 @@ function AsistenciaPage() {
                                     )}
                                   </button>
                                 ) : null}
-                              </div>
                             </td>
                           </tr>
                         )
@@ -1074,6 +1093,7 @@ function AsistenciaPage() {
                   <thead>
                     <tr>
                       <th>Fecha</th>
+                      <th>Hora</th>
                       <th>Asistió</th>
                       <th>Rol</th>
                       <th>Grado</th>
@@ -1085,6 +1105,7 @@ function AsistenciaPage() {
                     {attendanceHistory.map((row) => (
                       <tr key={row.id}>
                         <td data-label="Fecha">{formatAttendanceDate(row.fecha)}</td>
+                        <td data-label="Hora">{formatAttendanceTime(row)}</td>
                         <td data-label="Asistió">{row.asistencia || '-'}</td>
                         <td data-label="Rol">{row.role || '-'}</td>
                         <td data-label="Grado">{row.grado || '-'}</td>

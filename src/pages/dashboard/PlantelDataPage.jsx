@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
+import { ref } from 'firebase/storage'
 import { db, storage } from '../../firebase'
 import { setDocTracked } from '../../services/firestoreProxy'
-import { uploadBytesTracked } from '../../services/storageService'
+import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
@@ -175,7 +175,7 @@ function PlantelDataPage() {
       name: logoNuevo.name,
       size: logoNuevo.size,
       type: logoNuevo.type || 'application/octet-stream',
-      url: await getDownloadURL(logoRef),
+      url: await getTrackedDownloadURL(logoRef),
       path: filePath,
       dataUrl: tooLarge ? '' : dataUrl,
     }

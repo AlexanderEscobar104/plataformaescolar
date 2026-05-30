@@ -5,6 +5,7 @@ import { db } from '../../firebase'
 import { updateDocTracked } from '../../services/firestoreProxy'
 import { useAuth } from '../../hooks/useAuth'
 import { GUARDIAN_DOCUMENT_OPTIONS, GUARDIAN_RELATIONSHIP_OPTIONS } from '../../constants/guardians'
+import PasskeySettingsCard from '../../components/PasskeySettingsCard'
 
 function GuardianProfilePage() {
   const { user } = useAuth()
@@ -203,6 +204,11 @@ function GuardianProfilePage() {
               </Link>
             </div>
           </form>
+
+          <PasskeySettingsCard
+            title="Inicio con Face ID"
+            description="Activa Face ID, huella o la biometria del dispositivo para volver a entrar al portal de acudiente sin depender siempre de la contrasena."
+          />
         </>
       )}
     </section>

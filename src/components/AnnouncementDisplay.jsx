@@ -15,7 +15,7 @@ function sanitizeAnnouncementContent(content) {
   })
 }
 
-function AnnouncementDisplay({ announcement, variant = 'panel', onActivate }) {
+function AnnouncementDisplay({ announcement, variant = 'panel', onActivate, disableActivation = false }) {
   const navigate = useNavigate()
   const images = getAnnouncementImages(announcement)
   const video = getAnnouncementVideo(announcement)
@@ -28,7 +28,7 @@ function AnnouncementDisplay({ announcement, variant = 'panel', onActivate }) {
   const [activeIndex, setActiveIndex] = useState(0)
   const rotationSeconds = normalizeRotationSeconds(announcement?.rotationSeconds)
   const hasMedia = Boolean(video?.url) || images.length > 0
-  const isInteractive = variant !== 'admin' && Boolean(target?.href)
+  const isInteractive = !disableActivation && variant !== 'admin' && Boolean(target?.href)
 
   useEffect(() => {
     setActiveIndex(0)

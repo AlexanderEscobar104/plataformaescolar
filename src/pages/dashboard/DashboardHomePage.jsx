@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { collection, doc, getCountFromServer, getDocs, limit, orderBy, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { setDocTracked } from '../../services/firestoreProxy'
+import { hydrateStoredFilePayload, hydrateStoredFilePayloads } from '../../services/storageService'
 import { useAuth } from '../../hooks/useAuth'
 import AnnouncementDisplay from '../../components/AnnouncementDisplay'
 import { matchesAnnouncementAudience, shouldShowAnnouncementOnHome } from '../../utils/announcements'
@@ -64,6 +65,7 @@ function DashboardHomePage() {
   const [pendingTasks, setPendingTasks] = useState(null)
   const [misServicios, setMisServicios] = useState([])
   const [anuncios, setAnuncios] = useState([])
+  const [expandedAnnouncement, setExpandedAnnouncement] = useState(null)
 
   const calendarCells = useMemo(() => buildCalendarCells(anchorDate), [anchorDate])
   const monthLabel = useMemo(() => monthTitle(anchorDate), [anchorDate])
@@ -173,7 +175,7 @@ function DashboardHomePage() {
         }
 
         // Anuncios
-        const mappedAnuncios = anunciosSnapshot.docs
+        const mappedAnunciosRaw = anunciosSnapshot.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter(
             (a) =>
@@ -186,6 +188,13 @@ function DashboardHomePage() {
               }),
           )
           .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+        const mappedAnuncios = await Promise.all(mappedAnunciosRaw.map(async (item) => ({
+          ...item,
+          images: await hydrateStoredFilePayloads(Array.isArray(item.images) ? item.images : []),
+          video: item.video && typeof item.video === 'object'
+            ? await hydrateStoredFilePayload(item.video)
+            : item.video || null,
+        })))
         setAnuncios(mappedAnuncios)
 
         // Events
@@ -352,37 +361,30 @@ function DashboardHomePage() {
         </div>
 
         {/* ── Stat cards ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '8px' }}>
+        <div className="home-stat-cards" style={{ marginBottom: '8px' }}>
           {/* Evaluaciones */}
           <button
             type="button"
+            className="home-stat-card home-stat-card--eval"
             onClick={() => navigate('/dashboard/evaluaciones')}
             style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              background: 'var(--card-bg, #fff)',
-              border: '1px solid var(--border-color, #e5e7eb)',
-              borderRadius: '14px',
-              padding: '16px 18px',
               cursor: 'pointer',
               textAlign: 'left',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-              transition: 'transform 0.15s, box-shadow 0.15s',
             }}
             onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(59,130,246,0.15)' }}
             onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)' }}
           >
-            <div style={{
-              width: '48px', height: '48px', borderRadius: '12px', flexShrink: 0,
+            <div className="home-stat-icon" style={{
+              width: '48px', height: '48px', borderRadius: '12px',
               background: 'linear-gradient(135deg, #1e40af, #3b82f6)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="white" aria-hidden="true">
                 <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4" />
               </svg>
             </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '2px' }}>Evaluaciones pendientes</div>
-              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1e40af', lineHeight: 1 }}>
+            <div className="home-stat-body">
+              <div className="home-stat-label">Evaluaciones pendientes</div>
+              <div className="home-stat-value" style={{ color: '#1e40af' }}>
                 {pendingEvaluations === null ? '—' : pendingEvaluations}
               </div>
             </div>
@@ -394,33 +396,26 @@ function DashboardHomePage() {
           {/* Tareas */}
           <button
             type="button"
+            className="home-stat-card home-stat-card--task"
             onClick={() => navigate('/dashboard/tareas')}
             style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              background: 'var(--card-bg, #fff)',
-              border: '1px solid var(--border-color, #e5e7eb)',
-              borderRadius: '14px',
-              padding: '16px 18px',
               cursor: 'pointer',
               textAlign: 'left',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-              transition: 'transform 0.15s, box-shadow 0.15s',
             }}
             onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(245,158,11,0.18)' }}
             onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)' }}
           >
-            <div style={{
-              width: '48px', height: '48px', borderRadius: '12px', flexShrink: 0,
+            <div className="home-stat-icon" style={{
+              width: '48px', height: '48px', borderRadius: '12px',
               background: 'linear-gradient(135deg, #d97706, #f59e0b)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="white" aria-hidden="true">
                 <path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1h-2zm3 18H5V8h14v11z" />
               </svg>
             </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '2px' }}>Tareas pendientes</div>
-              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#d97706', lineHeight: 1 }}>
+            <div className="home-stat-body">
+              <div className="home-stat-label">Tareas pendientes</div>
+              <div className="home-stat-value" style={{ color: '#d97706' }}>
                 {pendingTasks === null ? '—' : pendingTasks}
               </div>
             </div>
@@ -440,9 +435,21 @@ function DashboardHomePage() {
               </div>
             </div>
             {anuncios.map((anuncio) => (
-              <div key={anuncio.id} className="home-announcement-card">
+              <div
+                key={anuncio.id}
+                className="home-announcement-card home-announcement-card-button"
+                role="button"
+                tabIndex={0}
+                onClick={() => setExpandedAnnouncement(anuncio)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    setExpandedAnnouncement(anuncio)
+                  }
+                }}
+              >
                 <h4 style={{ margin: '0 0 10px 0', color: 'var(--primary)' }}>{anuncio.title}</h4>
-                <AnnouncementDisplay announcement={anuncio} variant="panel" />
+                <AnnouncementDisplay announcement={anuncio} variant="panel" disableActivation />
               </div>
             ))}
           </div>
@@ -656,6 +663,28 @@ function DashboardHomePage() {
               </div>
             )}
             {attendanceFeedback && <p className="feedback">{attendanceFeedback}</p>}
+          </div>
+        </div>
+      )}
+
+      {expandedAnnouncement && (
+        <div className="modal-overlay modal-overlay-welcome" role="presentation">
+          <div
+            className="modal-card modal-card-welcome"
+            role="dialog"
+            aria-modal="true"
+            aria-label={expandedAnnouncement.title || 'Anuncio'}
+            style={{ width: 'min(100%, 980px)', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}
+          >
+            <button
+              type="button"
+              className="modal-close-icon"
+              aria-label="Cerrar"
+              onClick={() => setExpandedAnnouncement(null)}
+            >
+              x
+            </button>
+            <AnnouncementDisplay announcement={expandedAnnouncement} variant="modal" disableActivation />
           </div>
         </div>
       )}
