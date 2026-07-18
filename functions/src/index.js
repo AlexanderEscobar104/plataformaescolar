@@ -445,12 +445,6 @@ async function writeAttendanceDeviceLog(data) {
   });
 }
 
-async function writeAttendanceDeviceRawRequest(data) {
-  await db.collection('attendance_device_raw_requests').add({
-    ...data,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-}
 
 function buildAttendanceEventFingerprint({ nitRut, personId, eventDateRaw, attendanceDateIso, matchType, sourcePath }) {
   const resolvedDateKey = String(eventDateRaw || '').trim() || String(attendanceDateIso || '').trim();
@@ -5163,22 +5157,6 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
 
   const token = String(payload.token || req.query.token || '').trim();
   if (!token) {
-    await writeAttendanceDeviceRawRequest({
-      nitRut: '',
-      status: 'sin_token',
-      requestMethod: req.method,
-      path: sourcePath,
-      query: req.query || {},
-      body: bodyPayload,
-      rawBodyText: rawBodyText.slice(0, 4000),
-      parsedRawBody,
-      headers: {
-        'content-type': String(req.get('content-type') || '').trim(),
-        'user-agent': String(req.get('user-agent') || '').trim(),
-        host: String(req.get('host') || '').trim(),
-      },
-      ip: String(req.ip || '').trim(),
-    }).catch(() => {});
     res.status(401).json({ ok: false, message: 'Falta token de integracion.' });
     return;
   }
@@ -5190,23 +5168,6 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
       .get();
 
     if (configSnapshot.empty) {
-      await writeAttendanceDeviceRawRequest({
-        nitRut: '',
-        status: 'token_invalido',
-        requestMethod: req.method,
-        path: sourcePath,
-        query: req.query || {},
-        body: bodyPayload,
-        rawBodyText: rawBodyText.slice(0, 4000),
-        parsedRawBody,
-        normalizedPayload: payload,
-        headers: {
-          'content-type': String(req.get('content-type') || '').trim(),
-          'user-agent': String(req.get('user-agent') || '').trim(),
-          host: String(req.get('host') || '').trim(),
-        },
-        ip: String(req.ip || '').trim(),
-      }).catch(() => {});
       res.status(401).json({ ok: false, message: 'Token invalido.' });
       return;
     }
@@ -5230,25 +5191,6 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
     const personId = String(personIdCandidates[0]?.value || '').trim();
 
     if (!personId) {
-      await writeAttendanceDeviceRawRequest({
-        nitRut,
-        token,
-        configDocId: configDoc.id,
-        status: 'sin_person_id',
-        requestMethod: req.method,
-        path: sourcePath,
-        query: req.query || {},
-        body: bodyPayload,
-        rawBodyText: rawBodyText.slice(0, 4000),
-        parsedRawBody,
-        normalizedPayload: payload,
-        headers: {
-          'content-type': String(req.get('content-type') || '').trim(),
-          'user-agent': String(req.get('user-agent') || '').trim(),
-          host: String(req.get('host') || '').trim(),
-        },
-        ip: String(req.ip || '').trim(),
-      }).catch(() => {});
       res.status(202).json({ ok: true, ignored: true, reason: 'sin_person_id' });
       return;
     }
@@ -5306,8 +5248,10 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
     const userData = userMatch.data || {};
     const profile = userData.profile || {};
     const role = String(userData.role || '').trim().toLowerCase();
-    const fallbackIsoDate = getAttendanceIsoDateForNow(new Date());
-    const attendanceDateIso = eventDateParts?.isoDate || fallbackIsoDate;
+    // Siempre usar la fecha actual en Colombia como fecha de asistencia.
+    // La passageTime del dispositivo puede tener desfase de reloj o venir de eventos pasados;
+    // por eso se guarda solo como referencia en deviceEventAtRaw, no como fecha del registro.
+    const attendanceDateIso = getAttendanceIsoDateForNow(new Date());
     const attendanceDocId = buildAttendanceDocId(nitRut, attendanceDateIso, userMatch.id);
     const attendanceRef = db.collection('asistencias').doc(attendanceDocId);
     const existingAttendance = await attendanceRef.get();
@@ -5321,14 +5265,10 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
       matchType,
       sourcePath,
     });
-    const rawRequestRef = db.collection('attendance_device_raw_requests').doc(eventFingerprint);
     const logRef = db.collection('attendance_device_logs').doc(eventFingerprint);
-    const [existingRawRequest, existingLog] = await Promise.all([
-      rawRequestRef.get(),
-      logRef.get(),
-    ]);
+    const existingLog = await logRef.get();
 
-    if (existingRawRequest.exists || existingLog.exists) {
+    if (existingLog.exists) {
       res.status(200).json({
         ok: true,
         status: 'duplicado',
@@ -5400,36 +5340,6 @@ exports.attendanceDevicePush = functions.https.onRequest(async (req, res) => {
       userName,
       rawPayload: payload,
     }, { merge: true });
-
-    await rawRequestRef.set({
-      fingerprint: eventFingerprint,
-      nitRut,
-      token,
-      configDocId: configDoc.id,
-      status: existingAttendance.exists ? 'actualizado' : 'creado',
-      requestMethod: req.method,
-      path: sourcePath,
-      query: req.query || {},
-      body: bodyPayload,
-      rawBodyText: rawBodyText.slice(0, 4000),
-      parsedRawBody,
-      normalizedPayload: payload,
-      headers: {
-        'content-type': String(req.get('content-type') || '').trim(),
-        'user-agent': String(req.get('user-agent') || '').trim(),
-        host: String(req.get('host') || '').trim(),
-      },
-      ip: String(req.ip || '').trim(),
-      personId: resolvedPersonId,
-      personIdPayloadField: matchedPersonCandidate?.payloadField || personIdCandidates[0]?.payloadField || '',
-      personIdMatchField: matchedPersonCandidate?.personIdField || preferredPersonIdField,
-      personIdCandidates,
-      uid: userMatch.id,
-      attendanceDateIso,
-      eventDateRaw,
-      matchType,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
 
     await logRef.set({
       fingerprint: eventFingerprint,
@@ -5695,4 +5605,7 @@ exports.sendScheduledPaymentReminders = functions.pubsub
     console.log('sendScheduledPaymentReminders completed', { date: todayIso, sentCount });
     return null;
   });
+
+const { chatbotQuery } = require('./chatbot');
+exports.chatbotQuery = chatbotQuery;
 

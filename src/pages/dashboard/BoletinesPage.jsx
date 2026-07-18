@@ -132,6 +132,7 @@ function BoletinesPage() {
   const [plantelData, setPlantelData] = useState(null)
   const [subjectsById, setSubjectsById] = useState({})
   const [students, setStudents] = useState([])
+  const [studentSearch, setStudentSearch] = useState('')
 
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [anio, setAnio] = useState(String(CURRENT_YEAR))
@@ -165,6 +166,15 @@ function BoletinesPage() {
     () => students.find((s) => s.id === selectedStudentId) || null,
     [selectedStudentId, students],
   )
+
+  const filteredStudents = useMemo(() => {
+    const normalized = studentSearch.trim().toLowerCase()
+    if (!normalized) return students
+    return students.filter((student) => {
+      const haystack = `${student.nombreCompleto || ''} ${student.numeroDocumento || ''} ${student.grado || ''} ${student.grupo || ''}`.toLowerCase()
+      return haystack.includes(normalized)
+    })
+  }, [studentSearch, students])
 
   const resolvedGrade = useMemo(() => {
     return String(gradeGroupOverride.grado || selectedStudent?.grado || '').trim()
@@ -264,17 +274,18 @@ function BoletinesPage() {
 
   const loadStructure = useCallback(async () => {
     if (!structureDocId) {
-      setEstructura({ grupos: [], firma1Nombre: '', firma1Cargo: '', firma1Imagen: null, firma2Nombre: '', firma2Cargo: '', firma2Imagen: null })
+      setEstructura({ grupos: [], aplicaBoletinesParciales: true, firma1Nombre: '', firma1Cargo: '', firma1Imagen: null, firma2Nombre: '', firma2Cargo: '', firma2Imagen: null })
       return
     }
     const snap = await getDoc(doc(db, 'boletin_estructuras', structureDocId))
     if (!snap.exists()) {
-      setEstructura({ grupos: [], firma1Nombre: '', firma1Cargo: '', firma1Imagen: null, firma2Nombre: '', firma2Cargo: '', firma2Imagen: null })
+      setEstructura({ grupos: [], aplicaBoletinesParciales: true, firma1Nombre: '', firma1Cargo: '', firma1Imagen: null, firma2Nombre: '', firma2Cargo: '', firma2Imagen: null })
       return
     }
     const data = snap.data() || {}
     setEstructura({
       grupos: Array.isArray(data.grupos) ? data.grupos : [],
+      aplicaBoletinesParciales: data.aplicaBoletinesParciales !== false,
       firma1Nombre: String(data.firma1Nombre || '').trim(),
       firma1Cargo: String(data.firma1Cargo || '').trim(),
       firma1Imagen: data.firma1Imagen || null,
@@ -363,6 +374,12 @@ function BoletinesPage() {
   }, [loadStructure])
 
   useEffect(() => {
+    if (estructura.aplicaBoletinesParciales === false && tipo === 'parcial') {
+      setTipo('final')
+    }
+  }, [estructura.aplicaBoletinesParciales, tipo])
+
+  useEffect(() => {
     loadNotas()
   }, [loadNotas])
 
@@ -374,7 +391,11 @@ function BoletinesPage() {
     loadFinalComputed()
   }, [loadFinalComputed])
 
-  const flatRows = useMemo(() => flattenStructure(estructura.grupos || []), [estructura.grupos])
+  const flatRows = useMemo(() => {
+    const rows = flattenStructure(estructura.grupos || [])
+    if (userRole !== 'profesor') return rows
+    return rows.filter((row) => row.type !== 'item' || String(row.docenteUid || '').trim() === String(user?.uid || '').trim())
+  }, [estructura.grupos, user?.uid, userRole])
 
   const resolvedNotas = useMemo(() => {
     return tipo === 'final' ? finalComputed : notasByItemId
@@ -1026,10 +1047,21 @@ function BoletinesPage() {
       <div className="home-left-card evaluations-card" style={{ width: '100%' }}>
         <div className="form evaluation-create-form">
           <label className="evaluation-field-full">
+            Buscar estudiante
+            <input
+              type="search"
+              value={studentSearch}
+              onChange={(e) => setStudentSearch(e.target.value)}
+              placeholder="Nombre, documento, grado o grupo"
+              disabled={saving || generating}
+            />
+          </label>
+
+          <label className="evaluation-field-full">
             Estudiante
             <select value={selectedStudentId} onChange={(e) => setSelectedStudentId(e.target.value)} disabled={saving || generating}>
               <option value="">Selecciona...</option>
-              {students.map((s) => (
+              {filteredStudents.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.nombreCompleto} {s.numeroDocumento ? `(${s.numeroDocumento})` : ''}
                 </option>
@@ -1085,23 +1117,21 @@ function BoletinesPage() {
           <label>
             Tipo
             <select value={tipo} onChange={(e) => setTipo(e.target.value)} disabled={saving || generating}>
-              <option value="parcial">Parcial</option>
+              {estructura.aplicaBoletinesParciales !== false && <option value="parcial">Parcial</option>}
               <option value="final">Final</option>
             </select>
           </label>
 
-          {tipo === 'parcial' && (
-            <label>
-              Periodo
-              <select value={periodo} onChange={(e) => setPeriodo(e.target.value)} disabled={saving || generating}>
-                {PERIODS.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          <label>
+            Periodo
+            <select value={periodo} onChange={(e) => setPeriodo(e.target.value)} disabled={saving || generating}>
+              {PERIODS.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label>
             Fecha

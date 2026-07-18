@@ -87,9 +87,9 @@ function EvaluationOnlineStatusPage() {
       setEvaluation(mappedEvaluation)
 
       const [studentsSnapshot, gradesSnapshot, attemptsSnapshot] = await Promise.all([
-        getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante', where('nitRut', '==', userNitRut)))),
+        getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'evaluacion_calificaciones'), where('evaluationId', '==', evaluationId))),
-        getDocs(query(collection(db, 'evaluacion_intentos'), where('evaluationId', '==', evaluationId, where('nitRut', '==', userNitRut)))),
+        getDocs(query(collection(db, 'evaluacion_intentos'), where('evaluationId', '==', evaluationId), where('nitRut', '==', userNitRut))),
       ])
 
       const mappedStudents = studentsSnapshot.docs
@@ -182,7 +182,7 @@ function EvaluationOnlineStatusPage() {
     } finally {
       setLoading(false)
     }
-  }, [canManageEvaluations, evaluationId])
+  }, [canManageEvaluations, evaluationId, userNitRut])
 
   useEffect(() => {
     loadData()

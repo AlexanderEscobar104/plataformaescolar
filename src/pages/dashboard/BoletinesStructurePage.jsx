@@ -46,6 +46,7 @@ function BoletinesStructurePage() {
   const [saving, setSaving] = useState(false)
   const [subjects, setSubjects] = useState([])
   const [teachers, setTeachers] = useState([])
+  const [aplicaBoletinesParciales, setAplicaBoletinesParciales] = useState(true)
   const [estructura, setEstructura] = useState({ grupos: [] })
   const [firma1Nombre, setFirma1Nombre] = useState('')
   const [firma1Cargo, setFirma1Cargo] = useState('')
@@ -57,6 +58,9 @@ function BoletinesStructurePage() {
   const [firma2ImagenActual, setFirma2ImagenActual] = useState(null)
   const [firma2ImagenNueva, setFirma2ImagenNueva] = useState(null)
   const [firma2InputKey, setFirma2InputKey] = useState(0)
+  const [replicateGrades, setReplicateGrades] = useState([])
+  const [replicateGroups, setReplicateGroups] = useState([])
+  const [replicating, setReplicating] = useState(false)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState('success')
@@ -98,7 +102,11 @@ function BoletinesStructurePage() {
         const profile = data.profile || {}
         const fullName = `${profile.nombres || ''} ${profile.apellidos || ''}`.replace(/\s+/g, ' ').trim()
         const normalized = fullName || data.name || data.email || ''
-        return { id: docSnapshot.id, name: normalized }
+        const infoComplementaria = profile.informacionComplementaria || {}
+        const subjectIds = Array.isArray(infoComplementaria.asignaturas)
+          ? infoComplementaria.asignaturas.map((item) => String(item?.id || item || '').trim()).filter(Boolean)
+          : []
+        return { id: docSnapshot.id, name: normalized, subjectIds }
       })
       .filter((t) => t.name)
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -112,6 +120,7 @@ function BoletinesStructurePage() {
       const snap = await getDoc(doc(db, 'boletin_estructuras', selectedKey))
       if (!snap.exists()) {
         setEstructura({ grupos: [] })
+        setAplicaBoletinesParciales(true)
         setFirma1Nombre('')
         setFirma1Cargo('')
         setFirma1ImagenActual(null)
@@ -127,6 +136,7 @@ function BoletinesStructurePage() {
       const data = snap.data() || {}
       const grupos = Array.isArray(data.grupos) ? data.grupos : []
       setEstructura({ grupos })
+      setAplicaBoletinesParciales(data.aplicaBoletinesParciales !== false)
       setFirma1Nombre(String(data.firma1Nombre || '').trim())
       setFirma1Cargo(String(data.firma1Cargo || '').trim())
       setFirma1ImagenActual(data.firma1Imagen || null)
@@ -407,6 +417,25 @@ function BoletinesStructurePage() {
     return String(found?.name || '').trim()
   }
 
+  const getTeachersForSubject = (subjectId) => {
+    const normalizedSubjectId = String(subjectId || '').trim()
+    if (!normalizedSubjectId) return teachers
+    const matching = teachers.filter((teacher) => (
+      Array.isArray(teacher.subjectIds) && teacher.subjectIds.includes(normalizedSubjectId)
+    ))
+    return matching.length > 0 ? matching : teachers
+  }
+
+  const resolveSubjectTeacherPatch = (subjectId) => {
+    const directTeachers = teachers.filter((teacher) => (
+      Array.isArray(teacher.subjectIds) && teacher.subjectIds.includes(String(subjectId || '').trim())
+    ))
+    if (directTeachers.length === 1) {
+      return { docenteUid: directTeachers[0].id, docente: directTeachers[0].name }
+    }
+    return { docenteUid: '', docente: '' }
+  }
+
   const sanitizeStructure = () => {
     const cleaned = (estructura.grupos || [])
       .map((g, idx) => {
@@ -455,6 +484,18 @@ function BoletinesStructurePage() {
     return { grupos: cleaned }
   }
 
+  const toggleReplicateGrade = (value) => {
+    setReplicateGrades((prev) => (
+      prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]
+    ))
+  }
+
+  const toggleReplicateGroup = (value) => {
+    setReplicateGroups((prev) => (
+      prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]
+    ))
+  }
+
   const handleSave = async (event) => {
     event.preventDefault()
     if (!canManage) {
@@ -487,6 +528,7 @@ function BoletinesStructurePage() {
         firma2Nombre: String(firma2Nombre || '').trim(),
         firma2Cargo: String(firma2Cargo || '').trim(),
         firma2Imagen: firma2Payload || null,
+        aplicaBoletinesParciales,
         ...payload,
         updatedAt: serverTimestamp(),
         updatedByUid: user?.uid || '',
@@ -497,6 +539,75 @@ function BoletinesStructurePage() {
       openModal('error', 'No fue posible guardar la estructura.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleReplicateStructure = async () => {
+    if (!canManage) {
+      openModal('error', 'No tienes permisos para configurar la estructura de boletines.')
+      return
+    }
+    if (!userNitRut) {
+      openModal('error', 'No hay NIT/RUT asociado al usuario.')
+      return
+    }
+    const sourceGrade = normalizeGrade(grade)
+    const sourceGroup = normalizeGroup(group)
+    if (!sourceGrade || !sourceGroup) {
+      openModal('error', 'Selecciona primero el grado y grupo origen.')
+      return
+    }
+    if (replicateGrades.length === 0 || replicateGroups.length === 0) {
+      openModal('error', 'Selecciona al menos un grado y un grupo destino.')
+      return
+    }
+
+    const targets = replicateGrades
+      .flatMap((targetGrade) => replicateGroups.map((targetGroup) => ({
+        grado: normalizeGrade(targetGrade),
+        grupo: normalizeGroup(targetGroup),
+      })))
+      .filter((target) => target.grado && target.grupo)
+      .filter((target) => !(target.grado === sourceGrade && target.grupo === sourceGroup))
+
+    if (targets.length === 0) {
+      openModal('error', 'Selecciona destinos diferentes al grado/grupo origen.')
+      return
+    }
+
+    try {
+      setReplicating(true)
+      const payload = sanitizeStructure()
+      const firma1Payload = await uploadFirmaIfNeeded(1)
+      const firma2Payload = await uploadFirmaIfNeeded(2)
+      const basePayload = {
+        nitRut: String(userNitRut).trim(),
+        firma1Nombre: String(firma1Nombre || '').trim(),
+        firma1Cargo: String(firma1Cargo || '').trim(),
+        firma1Imagen: firma1Payload || null,
+        firma2Nombre: String(firma2Nombre || '').trim(),
+        firma2Cargo: String(firma2Cargo || '').trim(),
+        firma2Imagen: firma2Payload || null,
+        aplicaBoletinesParciales,
+        ...payload,
+        replicatedFrom: selectedKey,
+        updatedAt: serverTimestamp(),
+        updatedByUid: user?.uid || '',
+      }
+
+      await Promise.all(targets.map((target) => (
+        setDocTracked(doc(db, 'boletin_estructuras', `${String(userNitRut).trim()}__${target.grado}__${target.grupo}`), {
+          ...basePayload,
+          grado: target.grado,
+          grupo: target.grupo,
+        }, { merge: true })
+      )))
+
+      openModal('success', `Estructura replicada en ${targets.length} grado/grupo.`)
+    } catch {
+      openModal('error', 'No fue posible replicar la estructura.')
+    } finally {
+      setReplicating(false)
     }
   }
 
@@ -523,7 +634,7 @@ function BoletinesStructurePage() {
 
       <div className="home-left-card evaluations-card" style={{ width: '100%' }}>
         <form id="boletin-structure-form" className="form evaluation-create-form" onSubmit={handleSave}>
-          <fieldset className="form-fieldset" disabled={saving}>
+          <fieldset className="form-fieldset" disabled={saving || replicating}>
             <label>
               Grado
               <select value={grade} onChange={(e) => setGrade(e.target.value)} disabled={loading}>
@@ -552,6 +663,65 @@ function BoletinesStructurePage() {
                 + Agregar grupo
               </button>
               {loading && <span className="feedback">Cargando estructura...</span>}
+            </div>
+
+            <label className="evaluation-checkbox-label evaluation-field-full">
+              <input
+                type="checkbox"
+                checked={aplicaBoletinesParciales}
+                onChange={(e) => setAplicaBoletinesParciales(e.target.checked)}
+                disabled={!selectedKey || loading}
+              />
+              <span>Aplica boletines parciales</span>
+            </label>
+
+            <div className="home-left-card evaluations-card boletin-replicate-card">
+              <h3>Replicar estructura</h3>
+              <p className="feedback">Copia la estructura actual, firmas y configuracion al grado/grupo seleccionado.</p>
+              <div className="form-grid-2">
+                <div>
+                  <strong>Grados destino</strong>
+                  <div className="boletin-replicate-options">
+                    {GRADE_OPTIONS.map((opt) => (
+                      <label key={opt} className="module-checkbox-option">
+                        <input
+                          type="checkbox"
+                          checked={replicateGrades.includes(opt)}
+                          onChange={() => toggleReplicateGrade(opt)}
+                          disabled={!selectedKey || loading}
+                        />
+                        <span>{opt}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <strong>Grupos destino</strong>
+                  <div className="boletin-replicate-options">
+                    {GROUP_OPTIONS.map((opt) => (
+                      <label key={opt} className="module-checkbox-option">
+                        <input
+                          type="checkbox"
+                          checked={replicateGroups.includes(opt)}
+                          onChange={() => toggleReplicateGroup(opt)}
+                          disabled={!selectedKey || loading}
+                        />
+                        <span>{opt}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="modal-actions evaluation-field-full">
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={handleReplicateStructure}
+                  disabled={!selectedKey || loading || replicating || replicateGrades.length === 0 || replicateGroups.length === 0}
+                >
+                  {replicating ? 'Replicando...' : 'Replicar estructura'}
+                </button>
+              </div>
             </div>
 
             {(estructura.grupos || []).length === 0 && (
@@ -693,7 +863,10 @@ function BoletinesStructurePage() {
                             <td data-label="Asignatura">
                               <select
                                 value={it.asignaturaId || ''}
-                                onChange={(e) => updateItemInGrupo(g.id, it.id, { asignaturaId: e.target.value })}
+                                onChange={(e) => updateItemInGrupo(g.id, it.id, {
+                                  asignaturaId: e.target.value,
+                                  ...resolveSubjectTeacherPatch(e.target.value),
+                                })}
                               >
                                 <option value="">(Manual)</option>
                                 {subjects.map((s) => (
@@ -724,7 +897,7 @@ function BoletinesStructurePage() {
                                 }}
                               >
                                 <option value="">(Manual)</option>
-                                {teachers.map((t) => (
+                                {getTeachersForSubject(it.asignaturaId).map((t) => (
                                   <option key={t.id} value={t.id}>
                                     {t.name}
                                   </option>
@@ -801,7 +974,10 @@ function BoletinesStructurePage() {
                                   <select
                                     value={it.asignaturaId || ''}
                                     onChange={(e) =>
-                                      updateItemInSubgrupo(g.id, s.id, it.id, { asignaturaId: e.target.value })
+                                      updateItemInSubgrupo(g.id, s.id, it.id, {
+                                        asignaturaId: e.target.value,
+                                        ...resolveSubjectTeacherPatch(e.target.value),
+                                      })
                                     }
                                   >
                                     <option value="">(Manual)</option>
@@ -835,7 +1011,7 @@ function BoletinesStructurePage() {
                                     }}
                                   >
                                     <option value="">(Manual)</option>
-                                    {teachers.map((t) => (
+                                    {getTeachersForSubject(it.asignaturaId).map((t) => (
                                       <option key={t.id} value={t.id}>
                                         {t.name}
                                       </option>

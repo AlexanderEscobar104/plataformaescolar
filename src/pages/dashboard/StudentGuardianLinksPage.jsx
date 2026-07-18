@@ -221,19 +221,6 @@ function StudentGuardianLinksPage() {
       {feedback && <p className="feedback">{feedback}</p>}
       {error && <p className="feedback error">{error}</p>}
 
-      {links.length > 0 && (
-        <div className="home-left-card evaluations-card member-module-card">
-          <h3>Auditoria de vinculos</h3>
-          <p style={{ marginTop: 0 }}>
-            Cada alta o retiro de vinculo queda registrada en el historial de modificaciones mediante la coleccion
-            <strong> student_guardians</strong>.
-          </p>
-          <p style={{ marginBottom: 0 }}>
-            Vinculos actuales: {links.map((link) => `${link.studentName || 'Estudiante'} (${link.studentDocument || '-'})`).join(', ')}
-          </p>
-        </div>
-      )}
-
       <div className="students-toolbar">
         <input
           type="text"

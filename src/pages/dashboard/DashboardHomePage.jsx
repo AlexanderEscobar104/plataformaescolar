@@ -7,7 +7,7 @@ import { hydrateStoredFilePayload, hydrateStoredFilePayloads } from '../../servi
 import { useAuth } from '../../hooks/useAuth'
 import AnnouncementDisplay from '../../components/AnnouncementDisplay'
 import { matchesAnnouncementAudience, shouldShowAnnouncementOnHome } from '../../utils/announcements'
-import { matchesStudentAudience } from '../../utils/studentAudience'
+import { matchesRoleGradeGroupAudience } from '../../utils/audience'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom']
 
@@ -87,24 +87,36 @@ function DashboardHomePage() {
     const loadData = async () => {
       setLoading(true)
       try {
-        const pendingTasksCountPromise = getCountFromServer(
-          query(
-            collection(db, 'tareas'),
-            where('nitRut', '==', tenantNitRut),
-            where('status', '==', 'pendiente'),
-          ),
-        )
-          .then((r) => r.data().count)
-          .catch(() => null)
+        const studentGrade = String(userProfile?.grado || '').trim()
+        const studentGroup = String(userProfile?.grupo || '').trim().toUpperCase()
+        const canLoadStudentPending = userRole === 'estudiante' && studentGrade && studentGroup
 
-        const pendingEvalsCountPromise = getCountFromServer(
-          query(
-            collection(db, 'evaluaciones'),
-            where('nitRut', '==', tenantNitRut),
-          ),
-        )
-          .then((r) => r.data().count)
-          .catch(() => null)
+        const pendingTasksCountPromise = canLoadStudentPending
+          ? getCountFromServer(
+            query(
+              collection(db, 'tareas'),
+              where('nitRut', '==', tenantNitRut),
+              where('status', '==', 'pendiente'),
+              where('grade', '==', studentGrade),
+              where('group', '==', studentGroup),
+            ),
+          )
+            .then((r) => r.data().count)
+            .catch(() => null)
+          : Promise.resolve(null)
+
+        const pendingEvalsCountPromise = canLoadStudentPending
+          ? getCountFromServer(
+            query(
+              collection(db, 'evaluaciones'),
+              where('nitRut', '==', tenantNitRut),
+              where('grade', '==', studentGrade),
+              where('group', '==', studentGroup),
+            ),
+          )
+            .then((r) => r.data().count)
+            .catch(() => null)
+          : Promise.resolve(null)
 
         const queries = [
           getDocs(
@@ -201,7 +213,11 @@ function DashboardHomePage() {
         const mappedEvents = eventsSnapshot.docs
           .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
           .filter((item) => typeof item.eventDate === 'string' && item.eventDate.trim() !== '')
-          .filter((item) => userRole !== 'estudiante' || matchesStudentAudience(item, userProfile?.grado || '', userProfile?.grupo || ''))
+          .filter((item) => matchesRoleGradeGroupAudience(item, {
+            role: userRole,
+            grade: userProfile?.grado || '',
+            group: userProfile?.grupo || '',
+          }))
         setEvents(mappedEvents)
 
         // Circulars
@@ -218,7 +234,11 @@ function DashboardHomePage() {
             }
             return true
           })
-          .filter((item) => userRole !== 'estudiante' || matchesStudentAudience(item, userProfile?.grado || '', userProfile?.grupo || ''))
+          .filter((item) => matchesRoleGradeGroupAudience(item, {
+            role: userRole,
+            grade: userProfile?.grado || '',
+            group: userProfile?.grupo || '',
+          }))
           .sort((a, b) => {
             const bValue = b.createdAt?.toMillis?.() || 0
             const aValue = a.createdAt?.toMillis?.() || 0
@@ -242,8 +262,8 @@ function DashboardHomePage() {
           pendingTasksCountPromise,
           pendingEvalsCountPromise,
         ])
-        if (typeof pendingTasksCount === 'number') setPendingTasks(pendingTasksCount)
-        if (typeof pendingEvalsCount === 'number') setPendingEvaluations(pendingEvalsCount)
+        setPendingTasks(typeof pendingTasksCount === 'number' ? pendingTasksCount : null)
+        setPendingEvaluations(typeof pendingEvalsCount === 'number' ? pendingEvalsCount : null)
       } finally {
         setLoading(false)
       }
@@ -361,6 +381,7 @@ function DashboardHomePage() {
         </div>
 
         {/* ── Stat cards ── */}
+        {userRole === 'estudiante' && (
         <div className="home-stat-cards" style={{ marginBottom: '8px' }}>
           {/* Evaluaciones */}
           <button
@@ -424,6 +445,7 @@ function DashboardHomePage() {
             </svg>
           </button>
         </div>
+        )}
 
         {/* ── Announcements (Panel) ── */}
         {anuncios.length > 0 && (
@@ -513,11 +535,12 @@ function DashboardHomePage() {
           ))}
           {calendarCells.map((cell) => {
             const count = (eventsByDay.get(cell.iso) || []).length
+            const isExpired = count > 0 && cell.iso < today
             return (
               <button
                 key={cell.iso}
                 type="button"
-                className={`events-day-button${cell.isCurrentMonth ? '' : ' muted'}${count > 0 ? ' has-event' : ''}`}
+                className={`events-day-button${cell.isCurrentMonth ? '' : ' muted'}${count > 0 ? ' has-event' : ''}${isExpired ? ' expired' : ''}`}
                 onClick={() => setSelectedDay(cell.iso)}
               >
                 <span>{cell.dayNumber}</span>
@@ -636,30 +659,43 @@ function DashboardHomePage() {
             {selectedDayEvents.length === 0 && <p>No hay eventos para este dia.</p>}
             {selectedDayEvents.length > 0 && (
               <div className="events-day-list">
-                {selectedDayEvents.map((eventItem) => (
-                  <div key={eventItem.id} className="events-day-item">
-                    <strong>{eventItem.title || 'Evento'}</strong>
-                    <p>{eventItem.description || 'Sin descripcion.'}</p>
-                    {canRespondAttendance && (
-                      <div className="modal-actions">
-                        <button
-                          type="button"
-                          className={`button small${eventAttendanceByEventId[eventItem.id] === 'asistire' ? '' : ' secondary'}`}
-                          onClick={() => saveAttendanceOption(eventItem.id, 'asistire', eventItem.eventDate)}
-                        >
-                          Asistire
-                        </button>
-                        <button
-                          type="button"
-                          className={`button small${eventAttendanceByEventId[eventItem.id] === 'no_asistire' ? '' : ' secondary'}`}
-                          onClick={() => saveAttendanceOption(eventItem.id, 'no_asistire', eventItem.eventDate)}
-                        >
-                          No asistire
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {selectedDayEvents.map((eventItem) => {
+                  const eventExpired = eventItem.eventDate < today
+                  return (
+                    <div key={eventItem.id} className={`events-day-item${eventExpired ? ' expired' : ''}`}>
+                      <strong>{eventItem.title || 'Evento'}</strong>
+                      <p>{eventItem.description || 'Sin descripcion.'}</p>
+                      {Array.isArray(eventItem.images) && eventItem.images.length > 0 && (
+                        <div className="event-image-grid">
+                          {eventItem.images.map((image) => (
+                            <a key={image.path || image.url} href={image.url} target="_blank" rel="noreferrer" className="event-image-item">
+                              <img src={image.url} alt={image.name || 'Imagen del evento'} />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {eventExpired && <p className="feedback">Evento vencido.</p>}
+                      {canRespondAttendance && !eventExpired && (
+                        <div className="modal-actions">
+                          <button
+                            type="button"
+                            className={`button small${eventAttendanceByEventId[eventItem.id] === 'asistire' ? '' : ' secondary'}`}
+                            onClick={() => saveAttendanceOption(eventItem.id, 'asistire', eventItem.eventDate)}
+                          >
+                            Asistire
+                          </button>
+                          <button
+                            type="button"
+                            className={`button small${eventAttendanceByEventId[eventItem.id] === 'no_asistire' ? '' : ' secondary'}`}
+                            onClick={() => saveAttendanceOption(eventItem.id, 'no_asistire', eventItem.eventDate)}
+                          >
+                            No asistire
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
             {attendanceFeedback && <p className="feedback">{attendanceFeedback}</p>}

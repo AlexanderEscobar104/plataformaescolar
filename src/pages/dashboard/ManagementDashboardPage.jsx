@@ -93,6 +93,33 @@ function formatMonthLabel(value) {
   return parsed.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' })
 }
 
+function shiftMonthKey(monthKey, offset) {
+  const match = String(monthKey || '').trim().match(/^(\d{4})-(\d{2})$/)
+  if (!match) return ''
+  const parsed = new Date(Number(match[1]), Number(match[2]) - 1 + offset, 1)
+  return parsed.toISOString().slice(0, 7)
+}
+
+function buildVisibleMonthKeys(dateFrom, dateTo, todayIso, maxMonths = 12) {
+  const endMonth = String(dateTo || todayIso || '').slice(0, 7)
+  if (!endMonth) return []
+
+  const requestedStartMonth = String(dateFrom || '').slice(0, 7)
+  const defaultStartMonth = shiftMonthKey(endMonth, -(maxMonths - 1))
+  const startMonth = requestedStartMonth && requestedStartMonth > defaultStartMonth
+    ? requestedStartMonth
+    : defaultStartMonth
+
+  const months = []
+  let cursor = startMonth
+  while (cursor && cursor <= endMonth && months.length < maxMonths) {
+    months.push(cursor)
+    cursor = shiftMonthKey(cursor, 1)
+  }
+
+  return months
+}
+
 function resolveLeadEnrollmentDate(item) {
   return (
     toDateValue(item?.enrolledAt) ||
@@ -570,11 +597,12 @@ function ManagementDashboardPage() {
       summary.set(key, (summary.get(key) || 0) + (Number(item.amount) || 0))
     })
 
-    return Array.from(summary.entries())
-      .map(([month, total]) => ({ month, label: formatMonthLabel(month), total }))
-      .sort((a, b) => a.month.localeCompare(b.month))
-      .slice(-6)
-  }, [filteredTransactions])
+    return buildVisibleMonthKeys(dateFrom, dateTo, todayIso).map((month) => ({
+      month,
+      label: formatMonthLabel(month),
+      total: summary.get(month) || 0,
+    }))
+  }, [dateFrom, dateTo, filteredTransactions, todayIso])
 
   const admissionsFunnel = useMemo(() => {
     const stages = [
@@ -1306,28 +1334,34 @@ function ManagementDashboardPage() {
           </div>
 
           <div className="management-chart-grid">
-            <article className="management-chart-card">
+            <article className="management-chart-card management-chart-card-wide">
               <header>
                 <h3>Recaudo por mes</h3>
-                <small>Ultimos 6 meses visibles</small>
+                <small>Grafico de barras mensual con los filtros actuales</small>
               </header>
-              <div className="management-bars">
-                {paymentsByMonth.length === 0 ? (
+              <div className="management-monthly-bar-chart">
+                {paymentsByMonth.every((item) => item.total <= 0) ? (
                   <p className="feedback">No hay pagos para graficar.</p>
                 ) : (
-                  paymentsByMonth.map((item) => {
-                    const maxValue = Math.max(...paymentsByMonth.map((row) => row.total), 1)
-                    const width = Math.max((item.total / maxValue) * 100, item.total > 0 ? 8 : 0)
-                    return (
-                      <div key={item.month} className="management-bar-row">
-                        <span>{item.label}</span>
-                        <div className="management-bar-track">
-                          <div className="management-bar-fill blue" style={{ width: `${width}%` }} />
+                  <div className="management-monthly-bars" aria-label="Recaudo por mes">
+                    {paymentsByMonth.map((item) => {
+                      const maxValue = Math.max(...paymentsByMonth.map((row) => row.total), 1)
+                      const height = Math.max((item.total / maxValue) * 100, item.total > 0 ? 8 : 0)
+                      return (
+                        <div key={item.month} className="management-monthly-bar-item">
+                          <strong>{formatCurrency(item.total)}</strong>
+                          <div className="management-monthly-bar-track">
+                            <div
+                              className="management-monthly-bar-fill"
+                              style={{ height: `${height}%` }}
+                              title={`${item.label}: ${formatCurrency(item.total)}`}
+                            />
+                          </div>
+                          <span>{item.label}</span>
                         </div>
-                        <strong>{formatCurrency(item.total)}</strong>
-                      </div>
-                    )
-                  })
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             </article>

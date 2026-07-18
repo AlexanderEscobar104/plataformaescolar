@@ -5,6 +5,7 @@ import { provisionUserWithRole } from '../../services/userProvisioning'
 import { getAuthErrorMessage } from '../../utils/authErrors'
 import { PERMISSION_KEYS } from '../../utils/permissions'
 import { EMPTY_GUARDIAN_FORM, GUARDIAN_DOCUMENT_OPTIONS, GUARDIAN_RELATIONSHIP_OPTIONS } from '../../constants/guardians'
+import OperationStatusModal from '../../components/OperationStatusModal'
 
 function GuardianRegistrationPage() {
   const navigate = useNavigate()
@@ -14,6 +15,16 @@ function GuardianRegistrationPage() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_GUARDIAN_FORM)
   const [formError, setFormError] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalType, setModalType] = useState('error')
+  const [modalMessage, setModalMessage] = useState('')
+
+  const openModal = (type, message) => {
+    setFormError('')
+    setModalType(type)
+    setModalMessage(message)
+    setModalOpen(true)
+  }
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -24,17 +35,17 @@ function GuardianRegistrationPage() {
     setFormError('')
 
     if (!canManage) {
-      setFormError('No tienes permisos para crear acudientes.')
+      openModal('error', 'No tienes permisos para crear acudientes.')
       return
     }
 
     if (!form.nombres.trim() || !form.apellidos.trim() || !form.email.trim() || !form.password.trim()) {
-      setFormError('Nombres, apellidos, correo y clave son obligatorios.')
+      openModal('error', 'Nombres, apellidos, correo y clave son obligatorios.')
       return
     }
 
     if (form.password.trim().length < 6) {
-      setFormError('La clave debe tener al menos 6 caracteres.')
+      openModal('error', 'La clave debe tener al menos 6 caracteres.')
       return
     }
 
@@ -67,7 +78,7 @@ function GuardianRegistrationPage() {
 
       navigate('/dashboard/acudientes', { state: { flash: { text: 'Acudiente creado correctamente.' } } })
     } catch (error) {
-      setFormError(getAuthErrorMessage(error))
+      openModal('error', getAuthErrorMessage(error))
     } finally {
       setSaving(false)
     }
@@ -272,8 +283,6 @@ function GuardianRegistrationPage() {
             />
           </label>
 
-          {formError && <p className="feedback error">{formError}</p>}
-
           {canManage && (
             <button type="submit" className="button" disabled={saving}>
               {saving ? 'Guardando...' : 'Guardar acudiente'}
@@ -281,6 +290,16 @@ function GuardianRegistrationPage() {
           )}
         </fieldset>
       </form>
+      <OperationStatusModal
+        open={modalOpen || Boolean(formError)}
+        type={modalType}
+        title={modalType === 'success' ? 'Operacion exitosa' : 'Operacion fallida'}
+        message={modalMessage || formError}
+        onClose={() => {
+          setModalOpen(false)
+          setFormError('')
+        }}
+      />
     </section>
   )
 }

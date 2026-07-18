@@ -238,7 +238,7 @@ function LinkedDevicesPage() {
         </div>
       </div>
 
-      {isMobileView ? (
+      {isMobileView && (
         <div className="linked-devices-grid">
           <div className="linked-devices-card">
             <h3>Escanear codigo QR</h3>
@@ -262,35 +262,35 @@ function LinkedDevicesPage() {
               </button>
             )}
           </div>
-
-          <div className="linked-devices-card">
-            <h3>Ingresar codigo manual</h3>
-            <p className="subtitle">
-              Si la camara no abre o tu dispositivo no reconoce el QR, pega el codigo manualmente.
-            </p>
-            <form className="form" onSubmit={handleManualSubmit}>
-              <label htmlFor="linked-device-manual-code">
-                Codigo QR
-                <textarea
-                  id="linked-device-manual-code"
-                  value={manualCode}
-                  onChange={(event) => setManualCode(event.target.value)}
-                  rows="5"
-                  placeholder="plataformaescolar-qr-login:..."
-                  disabled={processing}
-                />
-              </label>
-              <button type="submit" className="button" disabled={processing}>
-                {processing ? 'Vinculando...' : 'Vincular dispositivo'}
-              </button>
-            </form>
-          </div>
-
-          {renderDevicesList()}
         </div>
-      ) : (
-        renderDevicesList()
       )}
+
+      {renderDevicesList()}
+
+      <div className="linked-devices-card">
+        <h3>Ingresar codigo manual</h3>
+        <p className="subtitle">
+          {isMobileView
+            ? 'Si la camara no abre o tu dispositivo no reconoce el QR, pega el codigo manualmente.'
+            : 'Pega aqui el codigo QR generado en la pantalla de inicio de sesion para aprobar el acceso.'}
+        </p>
+        <form className="form" onSubmit={handleManualSubmit}>
+          <label htmlFor="linked-device-manual-code">
+            Codigo QR
+            <textarea
+              id="linked-device-manual-code"
+              value={manualCode}
+              onChange={(event) => setManualCode(event.target.value)}
+              rows="5"
+              placeholder="plataformaescolar-qr-login:..."
+              disabled={processing}
+            />
+          </label>
+          <button type="submit" className="button" disabled={processing}>
+            {processing ? 'Vinculando...' : 'Vincular dispositivo'}
+          </button>
+        </form>
+      </div>
 
       <OperationStatusModal
         open={modalOpen}

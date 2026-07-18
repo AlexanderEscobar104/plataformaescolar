@@ -45,7 +45,7 @@ const PLAN_ACTIVE_STATUS = 'activo'
 const LINKED_DEVICE_SESSION_KEY = 'linked_device_session_id'
 const GEOLOCATION_TIMEOUT_MS = 8000
 const REVERSE_GEOCODE_TIMEOUT_MS = 6000
-const PLAN_BLOCK_EXEMPT_MODULES = new Set(['creacion-planes', 'tipo-reportes'])
+const PLAN_BLOCK_EXEMPT_MODULES = new Set(['creacion-planes', 'tipo-reportes', 'configuracion-asistente-ai'])
 
 function getLocalSessionId() {
   if (typeof window === 'undefined') return ''
@@ -384,7 +384,6 @@ function AuthProvider({ children }) {
 
       clearSessionWatcher()
       window.__TENANT_ID__ = undefined
-      window.__CURRENT_USER__ = undefined
       await signOut(auth).catch(() => {})
     })
   }
@@ -414,7 +413,6 @@ function AuthProvider({ children }) {
         setPlanModules([])
         setPlanModulesLoaded(false)
         window.__TENANT_ID__ = undefined
-        window.__CURRENT_USER__ = undefined
         setLoading(false)
         return
       }
@@ -429,7 +427,6 @@ function AuthProvider({ children }) {
         if (estado !== 'activo') {
           // Usuario bloqueado: no permitir sesion.
           window.__TENANT_ID__ = undefined
-          window.__CURRENT_USER__ = undefined
           setUser(null)
           setUserRole('')
           setUserNitRut('')
@@ -447,19 +444,7 @@ function AuthProvider({ children }) {
         setPlanModulesLoaded(false)
         await ensureLinkedDeviceSession(firebaseUser, userData)
 
-        // Needed by firestoreProxy history logger (historial_modificaciones).
-        // Keep the payload minimal: tenant id and current user identity fields only.
         window.__TENANT_ID__ = userData.nitRut || ''
-        window.__CURRENT_USER__ = {
-          uid: firebaseUser.uid,
-          nombre: resolveCurrentUserName(userData, firebaseUser),
-          numeroDocumento: userData.profile?.numeroDocumento || '',
-        }
-        
-        // ✅ CORRECCIÓN: NO contaminar window con datos sensibles
-        // Los datos se pasan a través de React Context en su lugar
-        // Antes: window.__TENANT_ID__ = userData.nitRut || ''
-        // Antes: window.__CURRENT_USER__ = { uid, nombre, numeroDocumento }
       } catch (error) {
         console.warn('Error loading user data:', {
           error: error.message,
@@ -473,7 +458,6 @@ function AuthProvider({ children }) {
         setPlanModulesLoaded(false)
         clearSessionWatcher()
         window.__TENANT_ID__ = undefined
-        window.__CURRENT_USER__ = undefined
       } finally {
         setLoading(false)
       }
@@ -665,7 +649,6 @@ function AuthProvider({ children }) {
     await markChatPresenceDisconnected(firebaseUser)
     await markLinkedDeviceSessionSignedOut(firebaseUser)
     window.__TENANT_ID__ = undefined
-    window.__CURRENT_USER__ = undefined
     return signOut(auth)
   }
 

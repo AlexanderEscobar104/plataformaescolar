@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Propuesta Comercial - Plataforma Escolar</title>
+<style>
+  @page { margin: 2cm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; line-height: 1.6; }
+  .page { width: 21cm; min-height: 29.7cm; margin: 0 auto; padding: 2cm; position: relative; }
+  @media screen { .page { margin: 20px auto; box-shadow: 0 0 20px rgba(0,0,0,.1); } }
+
+  /* Portada */
+  .cover { display: flex; flex-direction: column; justify-content: center; min-height: 25.7cm; }
+  .cover .logo { font-size: 42px; font-weight: 800; color: #1a73e8; letter-spacing: -1px; }
+  .cover .logo span { color: #34a853; }
+  .cover h1 { font-size: 36px; margin: 40px 0 10px; color: #1a1a1a; }
+  .cover .subtitle { font-size: 20px; color: #666; margin-bottom: 40px; }
+  .cover .meta { border-top: 3px solid #1a73e8; padding-top: 20px; font-size: 15px; color: #555; }
+  .cover .meta p { margin: 4px 0; }
+
+  /* Secciones */
+  h2 { font-size: 22px; color: #1a73e8; margin: 40px 0 15px; padding-bottom: 8px; border-bottom: 2px solid #e8f0fe; }
+  h3 { font-size: 17px; color: #333; margin: 20px 0 10px; }
+  p, li { font-size: 14px; color: #444; }
+  ul, ol { padding-left: 20px; margin: 10px 0; }
+  li { margin-bottom: 4px; }
+
+  .highlight-box { background: #e8f0fe; border-left: 4px solid #1a73e8; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+  .highlight-box strong { color: #1a73e8; }
+
+  /* Tabla de precios */
+  .pricing-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+  .pricing-table th, .pricing-table td { padding: 12px 15px; text-align: left; border: 1px solid #ddd; font-size: 14px; }
+  .pricing-table th { background: #1a73e8; color: #fff; font-weight: 600; }
+  .pricing-table tr:nth-child(even) { background: #f8f9fa; }
+  .pricing-table .total { font-weight: 700; background: #e8f0fe; }
+
+  /* Tabla de módulos */
+  .module-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+  .module-table th, .module-table td { padding: 10px 15px; text-align: left; border: 1px solid #ddd; font-size: 13px; }
+  .module-table th { background: #34a853; color: #fff; font-weight: 600; }
+  .module-table tr:nth-child(even) { background: #f8f9fa; }
+  .module-table .check { color: #34a853; font-weight: 700; }
+  .module-table .cross { color: #999; }
+
+  .footer { margin-top: 50px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 12px; color: #888; text-align: center; }
+
+  .signature-grid { display: flex; justify-content: space-between; margin: 40px 0; }
+  .signature-box { width: 45%; }
+  .signature-box .line { border-top: 1px solid #333; margin-top: 50px; padding-top: 8px; font-size: 13px; text-align: center; color: #555; }
+
+  .page-break { page-break-before: always; }
+  @media screen { .page-break { border-top: 2px dashed #ccc; margin: 40px 0; padding-top: 40px; } }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="cover">
+    <div class="logo">Plataforma<span>Escolar</span></div>
+    <h1>Propuesta Comercial</h1>
+    <p class="subtitle">Sistema Integral de Gestión Educativa</p>
+    <div class="meta">
+      <p><strong>Cliente:</strong> _________________________________________</p>
+      <p><strong>Fecha:</strong> __________________</p>
+      <p><strong>N.° de Estudiantes:</strong> 250</p>
+      <p><strong>Versión:</strong> 1.0</p>
+      <p><strong>Válida hasta:</strong> 30 días desde la fecha de emisión</p>
+    </div>
+  </div>
+</div>
+
+<div class="page page-break">
+  <h2>1. Resumen Ejecutivo</h2>
+  <p>PlataformaEscolar es un sistema integral de gestión educativa diseñado para digitalizar y optimizar todos los procesos administrativos, académicos y de comunicación de instituciones educativas. La presente propuesta detalla los términos, alcance y pricing para la implementación de la plataforma en una institución con <strong>250 estudiantes</strong>.</p>
+
+  <div class="highlight-box">
+    <strong>Objetivo:</strong> Proveer una solución tecnológica completa que centralice la gestión académica, facilite la comunicación entre docentes, estudiantes y padres, y automatice procesos administrativos clave.
+  </div>
+
+  <h2>2. Descripción de la Plataforma</h2>
+  <p>PlataformaEscolar es una aplicación web progresiva (PWA) accesible desde cualquier dispositivo con conexión a internet. Se compone de los siguientes módulos funcionales:</p>
+
+  <table class="module-table">
+    <thead>
+      <tr><th>Módulo</th><th>Descripción</th><th>Incluido</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Gestión de Usuarios</strong></td><td>Registro, roles (admin, docente, estudiante, padre), perfiles, autenticación segura</td><td class="check">✓</td></tr>
+      <tr><td><strong>Panel de Control</strong></td><td>Dashboard con estadísticas, calendario académico, eventos y notificaciones</td><td class="check">✓</td></tr>
+      <tr><td><strong>Gestión Académica</strong></td><td>Asignación de cursos, horarios, grupos, control de asistencia</td><td class="check">✓</td></tr>
+      <tr><td><strong>Calificaciones</strong></td><td>Registro de notas, promedios, reportes de rendimiento, boletines</td><td class="check">✓</td></tr>
+      <tr><td><strong>Comunicaciones</strong></td><td>Mensajería interna, anuncios, notificaciones push, foros</td><td class="check">✓</td></tr>
+      <tr><td><strong>Biblioteca Digital</strong></td><td>Gestión de materiales educativos, tareas, entregas digitales</td><td class="check">✓</td></tr>
+      <tr><td><strong>Eventos y Calendario</strong></td><td>Planificación de eventos académicos, exámenes, actividades extracurriculares</td><td class="check">✓</td></tr>
+      <tr><td><strong>Reportes</strong></td><td>Reportes personalizados de rendimiento, asistencia, estadísticas institucionales</td><td class="check">✓</td></tr>
+      <tr><td><strong>App Android</strong></td><td>Aplicación nativa Android (APK) para acceso desde dispositivos móviles</td><td class="check">✓</td></tr>
+    </tbody>
+  </table>
+
+  <h2>3. Especificaciones Técnicas</h2>
+  <ul>
+    <li><strong>Arquitectura:</strong> Web App (React + Firebase) + App Android nativa</li>
+    <li><strong>Alojamiento:</strong> Firebase Hosting con CDN global</li>
+    <li><strong>Base de datos:</strong> Firestore (NoSQL, tiempo real, escalable)</li>
+    <li><strong>Autenticación:</strong> Firebase Authentication (correo/contraseña, Google)</li>
+    <li><strong>Notificaciones:</strong> Firebase Cloud Messaging (push)</li>
+    <li><strong>Almacenamiento:</strong> Firebase Storage para archivos e imágenes</li>
+    <li><strong>Seguridad:</strong> Reglas de seguridad personalizadas, HTTPS, cifrado en tránsito</li>
+    <li><strong>App Android:</strong> Generada con Capacitor, firmada con keystore propio</li>
+  </ul>
+</div>
+
+<div class="page page-break">
+  <h2>4. Propuesta Económica</h2>
+
+  <h3>4.1 Inversión Inicial — Implementación</h3>
+  <table class="pricing-table">
+    <thead>
+      <tr><th>Concepto</th><th>Descripción</th><th>Monto (USD)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Configuración y puesta en marcha</td><td>Instalación, configuración de dominio, base de datos, usuarios iniciales</td><td>$250.00</td></tr>
+      <tr><td>Personalización de marca</td><td>Logo, colores institucionales, nombre del colegio en la plataforma</td><td>$150.00</td></tr>
+      <tr><td>Capacitación inicial</td><td>Sesión virtual de capacitación para administradores y docentes (hasta 2 horas)</td><td>$100.00</td></tr>
+      <tr><td>Generación App Android</td><td>Compilación y firma de APK/AAB personalizada con la marca de la institución</td><td>$100.00</td></tr>
+      <tr class="total"><td colspan="2"><strong>Total Inversión Inicial</strong></td><td><strong>$600.00</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.2 Suscripción Anual — 250 Estudiantes</h3>
+  <table class="pricing-table">
+    <thead>
+      <tr><th>Concepto</th><th>Detalle</th><th>Monto (USD/año)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Licencia de uso</td><td>$1.50 por estudiante / mes × 250 estudiantes × 12 meses</td><td>$4,500.00</td></tr>
+      <tr><td>Alojamiento y mantenimiento</td><td>Hosting, base de datos, almacenamiento, soporte técnico</td><td>$600.00</td></tr>
+      <tr><td>Actualizaciones de seguridad</td><td>Parches, actualizaciones de dependencias, monitoreo 24/7</td><td>$300.00</td></tr>
+      <tr><td>Soporte técnico</td><td>Correo electrónico y chat en horario laboral (lun–vie, 8am–6pm)</td><td>$360.00</td></tr>
+      <tr class="total"><td colspan="2"><strong>Total Suscripción Anual</strong></td><td><strong>$5,760.00</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <strong>Precio por estudiante:</strong> $1.92/mes — <strong>Precio por estudiante al año:</strong> $23.04
+  </div>
+
+  <h3>4.3 Resumen de Inversión Primer Año</h3>
+  <table class="pricing-table">
+    <thead>
+      <tr><th>Concepto</th><th>Monto (USD)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Inversión Inicial (única)</td><td>$600.00</td></tr>
+      <tr><td>Suscripción Anual</td><td>$5,760.00</td></tr>
+      <tr class="total"><td><strong>Total Primer Año</strong></td><td><strong>$6,360.00</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h2>5. Formas de Pago</h2>
+  <ul>
+    <li><strong>Opción A — Pago único anual:</strong> 100% al inicio del contrato (descuento del 5%: <strong>$6,042.00</strong>)</li>
+    <li><strong>Opción B — Pago semestral:</strong> 50% al inicio, 50% a los 6 meses</li>
+    <li><strong>Opción C — Pago trimestral:</strong> 4 pagos iguales de <strong>$1,590.00</strong></li>
+    <li><strong>Opción D — Pago mensual:</strong> 12 pagos de <strong>$530.00</strong></li>
+  </ul>
+
+  <p>Métodos de pago aceptados: Transferencia bancaria, depósito en cuenta, PayPal, tarjeta de crédito/débito.</p>
+</div>
+
+<div class="page page-break">
+  <h2>6. Plan de Implementación</h2>
+  <table class="pricing-table">
+    <thead>
+      <tr><th>Fase</th><th>Actividad</th><th>Plazo</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Fase 1</strong></td><td>Configuración inicial de la plataforma y personalización de marca</td><td>Día 1 – 3</td></tr>
+      <tr><td><strong>Fase 2</strong></td><td>Carga de datos institucionales (usuarios, cursos, horarios, grupos)</td><td>Día 4 – 7</td></tr>
+      <tr><td><strong>Fase 3</strong></td><td>Capacitación virtual a administradores y docentes</td><td>Día 8 – 9</td></tr>
+      <tr><td><strong>Fase 4</strong></td><td>Generación y entrega de App Android personalizada</td><td>Día 10 – 11</td></tr>
+      <tr><td><strong>Fase 5</strong></td><td>Pruebas, ajustes finales y puesta en producción</td><td>Día 12 – 14</td></tr>
+      <tr><td><strong>Fase 6</strong></td><td>Inicio de operación oficial</td><td>Día 15</td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <strong>Tiempo total estimado:</strong> 15 días hábiles desde la firma del contrato y recepción del pago inicial.
+  </div>
+
+  <h2>7. Soporte y Garantía</h2>
+  <ul>
+    <li><strong>Garantía de funcionamiento:</strong> 30 días posteriores a la puesta en producción para corrección de errores sin costo adicional.</li>
+    <li><strong>Soporte técnico:</strong> Incluido en la suscripción anual vía correo electrónico y chat en horario laboral (lun–vie, 8:00 am – 6:00 pm).</li>
+    <li><strong>Tiempo de respuesta:</strong> Máximo 24 horas hábiles para incidencias críticas.</li>
+    <li><strong>Actualizaciones:</strong> Todas las actualizaciones de seguridad y funcionales menores están incluidas.</li>
+    <li><strong>Disponibilidad:</strong> 99.5% de uptime garantizado gracias a infraestructura Firebase/Google Cloud.</li>
+  </ul>
+
+  <h2>8. Términos y Condiciones</h2>
+  <ol>
+    <li><strong>Vigencia de la propuesta:</strong> 30 días calendario a partir de la fecha de emisión.</li>
+    <li><strong>Contrato:</strong> La prestación del servicio se formalizará mediante un contrato anual renovable automáticamente.</li>
+    <li><strong>Propiedad intelectual:</strong> La institución adquiere el derecho de uso de la plataforma. El código fuente y la propiedad intelectual pertenecen al proveedor.</li>
+    <li><strong>Datos:</strong> La institución es la propietaria de los datos almacenados. El proveedor se compromete a no compartirlos con terceros.</li>
+    <li><strong>Cancelación:</strong> Cualquiera de las partes puede rescindir el contrato con 30 días de aviso por escrito.</li>
+    <li><strong>Reembolsos:</strong> No se realizan reembolsos por pagos anuales ya procesados. Pagos trimestrales/mensuales pueden cancelarse sin penalización al final del período.</li>
+  </ol>
+</div>
+
+<div class="page page-break">
+  <h2>9. Valor Agregado</h2>
+  <ul>
+    <li><strong>Multiplataforma:</strong> Acceso desde navegador web y app Android nativa.</li>
+    <li><strong>Tiempo real:</strong> Sincronización instantánea de calificaciones, asistencia y comunicaciones.</li>
+    <li><strong>Notificaciones push:</strong> Alertas inmediatas a padres y estudiantes sobre eventos, calificaciones y anuncios.</li>
+    <li><strong>Sin límite de almacenamiento:</strong> Almacenamiento ilimitado para archivos y materiales educativos dentro del plan.</li>
+    <li><strong>Escalabilidad:</strong> La plataforma crece con la institución sin necesidad de migraciones costosas.</li>
+    <li><strong>Reportes avanzados:</strong> Dashboards interactivos y reportes exportables para la toma de decisiones institucionales.</li>
+  </ul>
+
+  <h2>10. Próximos Pasos</h2>
+  <ol>
+    <li>Revisión y aprobación de la propuesta.</li>
+    <li>Firma del contrato de prestación de servicios.</li>
+    <li>Emisión de factura proforma y recepción del pago inicial.</li>
+    <li>Inicio del plan de implementación (Día 1).</li>
+  </ol>
+
+  <div class="highlight-box">
+    <strong>¿Listo para comenzar?</strong> Contáctenos para agendar una reunión virtual, resolver dudas o iniciar el proceso de contratación.
+  </div>
+
+  <div class="signature-grid">
+    <div class="signature-box">
+      <p class="line">Firma del Cliente</p>
+      <p style="margin-top:8px;font-size:13px;color:#888;text-align:center;">Nombre: _________________________________</p>
+      <p style="font-size:13px;color:#888;text-align:center;">Cargo: __________________________________</p>
+    </div>
+    <div class="signature-box">
+      <p class="line">Firma del Proveedor</p>
+      <p style="margin-top:8px;font-size:13px;color:#888;text-align:center;">PlataformaEscolar</p>
+      <p style="font-size:13px;color:#888;text-align:center;">_________________________________</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p><strong>PlataformaEscolar</strong> — plataformaescolar-e0090.web.app</p>
+    <p>Esta propuesta es confidencial y de uso exclusivo del destinatario.</p>
+  </div>
+</div>
+
+</body>
+</html>

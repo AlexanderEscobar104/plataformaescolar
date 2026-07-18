@@ -13,8 +13,11 @@ import {
 } from 'firebase/firestore'
 import { ref } from 'firebase/storage'
 import { db, storage } from '../firebase'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../firebase'
 import { addDocTracked, setDocTracked, updateDocTracked } from '../services/firestoreProxy'
 import { useAuth } from '../hooks/useAuth'
+import { PERMISSION_KEYS } from '../utils/permissions'
 import { uploadBytesTracked, getTrackedDownloadURL } from '../services/storageService'
 import DragDropFileInput from './DragDropFileInput'
 
@@ -73,7 +76,7 @@ function normalizeLauncherPosition(value) {
 }
 
 function FloatingChatWidget({ launcherPosition = 'bottom-right' }) {
-  const { user, userRole, userNitRut } = useAuth()
+  const { user, userRole, userNitRut, hasPermission } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [users, setUsers] = useState([])
   const [presenceByUid, setPresenceByUid] = useState({})
@@ -95,6 +98,13 @@ function FloatingChatWidget({ launcherPosition = 'bottom-right' }) {
   const [remoteTyping, setRemoteTyping] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [sending, setSending] = useState(false)
+  const [isMaximized, setIsMaximized] = useState(false)
+  const [chatMode, setChatMode] = useState('human')
+  const [aiConversationId, setAiConversationId] = useState('')
+  const [aiMessages, setAiMessages] = useState([])
+  const [aiSending, setAiSending] = useState(false)
+  const [aiRolesEnabled, setAiRolesEnabled] = useState(null)
+  const [aiShowAssistant, setAiShowAssistant] = useState(true)
   const receivedMessageIdsRef = useRef(new Set())
   const receivedInitializedRef = useRef(false)
   const messagesEndRef = useRef(null)
@@ -142,6 +152,42 @@ function FloatingChatWidget({ launcherPosition = 'bottom-right' }) {
     loadChatPreferences()
     return undefined
   }, [user?.uid, userNitRut])
+
+  useEffect(() => {
+    if (!userNitRut) return undefined
+    const loadAiRolesConfig = async () => {
+      try {
+        const snapshot = await getDoc(doc(db, 'configuracion', `ai_assistant_roles_${userNitRut}`))
+        if (snapshot.exists()) {
+          const data = snapshot.data() || {}
+          setAiRolesEnabled((data.enabledRoles || []).map((r) => String(r).trim().toLowerCase()))
+          setAiShowAssistant(data.showAssistant !== false)
+        } else {
+          setAiRolesEnabled(null)
+          setAiShowAssistant(true)
+        }
+      } catch {
+        setAiRolesEnabled(null)
+        setAiShowAssistant(true)
+      }
+    }
+    loadAiRolesConfig()
+    return undefined
+  }, [userNitRut])
+
+  const canUseAi = useMemo(() => {
+    if (!aiShowAssistant) return false
+    const hasPerm = hasPermission(PERMISSION_KEYS.CHATBOT_USE) || hasPermission(PERMISSION_KEYS.PERMISSIONS_MANAGE)
+    if (!hasPerm) return false
+    if (aiRolesEnabled === null) return true
+    return aiRolesEnabled.includes(String(userRole || '').trim().toLowerCase())
+  }, [aiShowAssistant, aiRolesEnabled, userRole, hasPermission])
+
+  useEffect(() => {
+    if (!canUseAi && chatMode === 'ai') {
+      setChatMode('human')
+    }
+  }, [canUseAi, chatMode])
 
   useEffect(() => {
     if (!userNitRut) return undefined
@@ -351,7 +397,7 @@ function FloatingChatWidget({ launcherPosition = 'bottom-right' }) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [selectedConversation, activeRecipientUid, isOpen])
+  }, [selectedConversation, activeRecipientUid, isOpen, aiMessages])
 
   const setTypingState = async (recipientUid, isTyping) => {
     if (!user?.uid || !recipientUid || !userNitRut) return
@@ -566,6 +612,34 @@ function FloatingChatWidget({ launcherPosition = 'bottom-right' }) {
     }
   }
 
+  const handleAiSend = async (event) => {
+    event.preventDefault()
+    if (!messageText.trim() || aiSending) return
+
+    const userMessage = messageText.trim()
+    setMessageText('')
+    setAiSending(true)
+    setAiMessages((prev) => [...prev, { role: 'user', text: userMessage, timestamp: new Date().toISOString() }])
+
+    try {
+      const chatbotQueryFn = httpsCallable(functions, 'chatbotQuery')
+      const result = await chatbotQueryFn({
+        message: userMessage,
+        conversationId: aiConversationId || undefined,
+      })
+      const data = result.data
+      setAiConversationId(data.conversationId)
+      setAiMessages((prev) => [...prev, { role: 'assistant', text: data.response, timestamp: new Date().toISOString() }])
+    } catch (err) {
+      const errorCode = err?.code || ''
+      const errorMsg = err?.message || 'Error al comunicarse con el asistente.'
+      const details = err?.details ? ` (${err.details})` : ''
+      setAiMessages((prev) => [...prev, { role: 'assistant', text: `Error: ${errorMsg}${errorCode ? ` [${errorCode}]` : ''}${details}`, timestamp: new Date().toISOString() }])
+    } finally {
+      setAiSending(false)
+    }
+  }
+
   const selectedRecipient = recipientOptions.find((item) => item.uid === activeRecipientUid)
   const selectedRecipientStatus = selectedRecipient?.status || 'desconectado'
   const selfStatusValue = presenceByUid[user?.uid]?.status || selfStatus
@@ -651,9 +725,19 @@ function FloatingChatWidget({ launcherPosition = 'bottom-right' }) {
       )}
 
       {isOpen && (
-        <section className="floating-chat-panel" aria-label="Chat en linea">
+        <section className={`floating-chat-panel${isMaximized ? ' floating-chat-panel--maximized' : ''}`} aria-label="Chat en linea">
           <header className="floating-chat-header">
             <strong>Chat en linea</strong>
+            <div className="floating-chat-header-tabs">
+              <button type="button" className={`floating-chat-tab${chatMode === 'human' ? ' active' : ''}`} onClick={() => { setChatMode('human'); setMessageText(''); setFeedback('') }}>
+                Chat
+              </button>
+              {canUseAi && (
+                <button type="button" className={`floating-chat-tab${chatMode === 'ai' ? ' active' : ''}`} onClick={() => { setChatMode('ai'); setMessageText(''); setFeedback('') }}>
+                  Asistente IA
+                </button>
+              )}
+            </div>
             <div className="floating-chat-header-actions">
               <button type="button" className="floating-chat-expand-btn" onClick={() => setUsersPanelOpen((value) => !value)}>
                 {usersPanelOpen ? 'Ocultar contactos' : 'Expandir contactos'}
@@ -668,13 +752,69 @@ function FloatingChatWidget({ launcherPosition = 'bottom-right' }) {
                 <span className={`chat-status-dot ${statusClass(selfStatusValue)}`} aria-hidden="true" />
                 ⚙
               </button>
-              <button type="button" className="floating-chat-close" onClick={() => setIsOpen(false)} aria-label="Ocultar chat">
+              <button
+                type="button"
+                className="floating-chat-maximize"
+                onClick={() => setIsMaximized((v) => !v)}
+                aria-label={isMaximized ? 'Reducir ventana' : 'Expandir ventana'}
+                title={isMaximized ? 'Reducir ventana' : 'Expandir ventana'}
+              >
+                {isMaximized ? '⤡' : '⤢'}
+              </button>
+              <button type="button" className="floating-chat-close" onClick={() => { setIsOpen(false); setIsMaximized(false) }} aria-label="Ocultar chat">
                 x
               </button>
             </div>
           </header>
 
-          {recipientOptions.length === 0 ? (
+          {chatMode === 'ai' && canUseAi ? (
+            <div className="floating-chat-ai">
+              <div className="floating-chat-messages">
+                {aiMessages.length === 0 && (
+                  <p className="floating-chat-feedback">Preguntale al asistente de IA sobre la plataforma.</p>
+                )}
+                {aiMessages.map((msg, index) => (
+                  <div key={index} className={`floating-chat-message${msg.role === 'user' ? ' mine' : ''}`}>
+                    <span>{msg.text}</span>
+                    <small className="floating-chat-message-time">
+                      {new Date(msg.timestamp).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                    </small>
+                  </div>
+                ))}
+                {aiSending && (
+                  <div className="floating-chat-message">
+                    <span>Escribiendo...</span>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+              <form className="floating-chat-form" onSubmit={handleAiSend}>
+                <textarea
+                  value={messageText}
+                  onChange={(event) => setMessageText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      handleAiSend(event)
+                    }
+                  }}
+                  placeholder="Escribe tu pregunta para el asistente IA..."
+                  rows={2}
+                  disabled={aiSending}
+                />
+                <div className="floating-chat-ai-actions">
+                  <button type="submit" className="button small" disabled={aiSending || !messageText.trim()}>
+                    {aiSending ? 'Enviando...' : 'Enviar'}
+                  </button>
+                  {aiMessages.length > 0 && (
+                    <button type="button" className="button small secondary" onClick={() => { setAiMessages([]); setAiConversationId('') }}>
+                      Nueva conversacion
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          ) : recipientOptions.length === 0 ? (
             <p className="floating-chat-feedback">No hay contactos disponibles.</p>
           ) : (
             <>

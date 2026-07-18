@@ -171,8 +171,6 @@ function GuardiansListPage() {
         )}
       </div>
 
-      {flashMessage && <p className="feedback">{flashMessage}</p>}
-
       <div className="students-toolbar">
         <input
           type="text"
@@ -264,6 +262,23 @@ function GuardiansListPage() {
             itemsPerPage={10}
             onPageChange={setCurrentPage}
           />
+        </div>
+      )}
+
+      {flashMessage && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Mensaje">
+            <button type="button" className="modal-close-icon" aria-label="Cerrar" onClick={() => setFlashMessage('')}>
+              x
+            </button>
+            <h3>Mensaje</h3>
+            <p>{flashMessage}</p>
+            <div className="modal-actions">
+              <button type="button" className="button" onClick={() => setFlashMessage('')}>
+                Aceptar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

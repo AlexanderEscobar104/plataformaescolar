@@ -16,8 +16,9 @@ import { PERMISSION_KEYS } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
 import { savePdfDocument } from '../../utils/nativeLinks'
+import Fuse from 'fuse.js'
 
-const ALLOWED_EXTENSIONS = ['.xlsx', '.xls', '.csv']
+const ALLOWED_EXTENSIONS = ['.xlsx', '.xls', '.csv', '.json']
 const TEMPLATE_HEADERS = [
   'pregunta',
   'respuesta a',
@@ -27,10 +28,43 @@ const TEMPLATE_HEADERS = [
   'respuesta correcta',
 ]
 const MAX_EXCEL_SIZE_BYTES = 10 * 1024 * 1024
+const MAX_QUESTION_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
+const MAX_EMBEDDED_QUESTIONS_BYTES = 850 * 1024
+const QUESTION_IMAGE_FIELDS = ['questionImage', 'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage']
 const VALID_CORRECT_ANSWERS = new Set(['A', 'B', 'C', 'D'])
 const EVALUATION_TYPE = {
   ONLINE: 'en_linea',
   FILE: 'en_archivo',
+}
+const QUESTION_TYPE = {
+  SINGLE_CHOICE: 'single_choice',
+  TRUE_FALSE: 'true_false',
+  MULTIPLE_CHOICE: 'multiple_choice',
+}
+const QUESTION_TYPE_LABELS = {
+  [QUESTION_TYPE.SINGLE_CHOICE]: 'Opcion multiple',
+  [QUESTION_TYPE.TRUE_FALSE]: 'Verdadero/Falso',
+  [QUESTION_TYPE.MULTIPLE_CHOICE]: 'Varias respuestas',
+}
+const BLANK_QUESTION = {
+  type: QUESTION_TYPE.SINGLE_CHOICE,
+  question: '',
+  optionA: '',
+  optionB: '',
+  optionC: '',
+  optionD: '',
+  correctAnswer: 'A',
+  correctAnswers: [],
+  questionImageUrl: '',
+  questionImageFile: null,
+  optionAImageUrl: '',
+  optionAImageFile: null,
+  optionBImageUrl: '',
+  optionBImageFile: null,
+  optionCImageUrl: '',
+  optionCImageFile: null,
+  optionDImageUrl: '',
+  optionDImageFile: null,
 }
 
 function PdfIcon() {
@@ -81,8 +115,237 @@ function DeleteIcon() {
   )
 }
 
+function QuestionImagePreview({ file, src, alt, onRemove }) {
+  const [previewUrl, setPreviewUrl] = useState(src || '')
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(src || '')
+      return undefined
+    }
+
+    const objectUrl = URL.createObjectURL(file)
+    setPreviewUrl(objectUrl)
+    return () => {
+      URL.revokeObjectURL(objectUrl)
+    }
+  }, [file, src])
+
+  if (!previewUrl) return null
+
+  return (
+    <div className="question-image-preview">
+      <img src={previewUrl} alt={alt} />
+      <button type="button" className="button small secondary" onClick={onRemove}>
+        Quitar imagen
+      </button>
+    </div>
+  )
+}
+
 function normalizeEvaluationType(value) {
   return value === EVALUATION_TYPE.ONLINE ? EVALUATION_TYPE.ONLINE : EVALUATION_TYPE.FILE
+}
+
+function normalizeQuestionType(value) {
+  if (value === QUESTION_TYPE.TRUE_FALSE) return QUESTION_TYPE.TRUE_FALSE
+  if (value === QUESTION_TYPE.MULTIPLE_CHOICE) return QUESTION_TYPE.MULTIPLE_CHOICE
+  return QUESTION_TYPE.SINGLE_CHOICE
+}
+
+function normalizeCorrectAnswers(value) {
+  const rawValues = Array.isArray(value) ? value : [value]
+  return Array.from(
+    new Set(
+      rawValues
+        .map((item) => String(item || '').trim().toUpperCase())
+        .filter((item) => VALID_CORRECT_ANSWERS.has(item)),
+    ),
+  ).sort()
+}
+
+function normalizeImageFields(question = {}) {
+  return QUESTION_IMAGE_FIELDS.reduce((acc, field) => {
+    acc[`${field}Url`] = String(question[`${field}Url`] || '').trim()
+    acc[`${field}File`] = question[`${field}File`] || null
+    return acc
+  }, {})
+}
+
+function stripTransientImageFields(question = {}) {
+  const nextQuestion = { ...question }
+  QUESTION_IMAGE_FIELDS.forEach((field) => {
+    delete nextQuestion[`${field}File`]
+  })
+  return nextQuestion
+}
+
+function hasQuestionImage(question = {}, field) {
+  return Boolean(question[`${field}Url`] || question[`${field}File`])
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    const objectUrl = URL.createObjectURL(file)
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      resolve(image)
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('No fue posible cargar la imagen.'))
+    }
+    image.src = objectUrl
+  })
+}
+
+async function compressImageToBase64(file) {
+  const image = await loadImageFromFile(file)
+  const maxDimension = 900
+  const scale = Math.min(1, maxDimension / Math.max(image.width, image.height))
+  const width = Math.max(1, Math.round(image.width * scale))
+  const height = Math.max(1, Math.round(image.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  context.drawImage(image, 0, 0, width, height)
+
+  const qualities = [0.78, 0.68, 0.58, 0.48]
+  let dataUrl = canvas.toDataURL('image/jpeg', qualities[0])
+  for (const quality of qualities) {
+    const nextDataUrl = canvas.toDataURL('image/jpeg', quality)
+    dataUrl = nextDataUrl
+    if (nextDataUrl.length <= 160 * 1024) break
+  }
+  return dataUrl
+}
+
+function normalizeQuestionForEditor(question = {}) {
+  const type = normalizeQuestionType(question.type)
+  const correctAnswer = type === QUESTION_TYPE.TRUE_FALSE
+    ? String(question.correctAnswer ?? 'true').toLowerCase() === 'false' ? 'false' : 'true'
+    : String(question.correctAnswer || 'A').trim().toUpperCase()
+
+  return {
+    type,
+    question: String(question.question || '').trim(),
+    optionA: String(question.optionA || '').trim(),
+    optionB: String(question.optionB || '').trim(),
+    optionC: String(question.optionC || '').trim(),
+    optionD: String(question.optionD || '').trim(),
+    correctAnswer,
+    correctAnswers: normalizeCorrectAnswers(question.correctAnswers),
+    ...normalizeImageFields(question),
+  }
+}
+
+function normalizeQuestionForSave(question = {}) {
+  const normalized = normalizeQuestionForEditor(question)
+
+  if (normalized.type === QUESTION_TYPE.TRUE_FALSE) {
+    return {
+      type: QUESTION_TYPE.TRUE_FALSE,
+      question: normalized.question,
+      correctAnswer: normalized.correctAnswer === 'false' ? 'false' : 'true',
+      questionImageUrl: normalized.questionImageUrl,
+      questionImageFile: normalized.questionImageFile,
+    }
+  }
+
+  if (normalized.type === QUESTION_TYPE.MULTIPLE_CHOICE) {
+    return {
+      type: QUESTION_TYPE.MULTIPLE_CHOICE,
+      question: normalized.question,
+      optionA: normalized.optionA,
+      optionB: normalized.optionB,
+      optionC: normalized.optionC,
+      optionD: normalized.optionD,
+      correctAnswers: normalized.correctAnswers,
+      ...normalizeImageFields(normalized),
+    }
+  }
+
+  return {
+    type: QUESTION_TYPE.SINGLE_CHOICE,
+    question: normalized.question,
+    optionA: normalized.optionA,
+    optionB: normalized.optionB,
+    optionC: normalized.optionC,
+    optionD: normalized.optionD,
+    correctAnswer: VALID_CORRECT_ANSWERS.has(normalized.correctAnswer) ? normalized.correctAnswer : 'A',
+    ...normalizeImageFields(normalized),
+  }
+}
+
+function validateQuestionForSave(question = {}, index = 0) {
+  const normalized = normalizeQuestionForEditor(question)
+  const questionNumber = index + 1
+  if (!normalized.question && !hasQuestionImage(normalized, 'questionImage')) {
+    throw new Error(`La pregunta ${questionNumber} debe tener texto o imagen.`)
+  }
+
+  if (normalized.type === QUESTION_TYPE.TRUE_FALSE) {
+    if (!['true', 'false'].includes(normalized.correctAnswer)) {
+      throw new Error(`La pregunta ${questionNumber} debe indicar si la respuesta correcta es verdadero o falso.`)
+    }
+    return
+  }
+
+  const options = [
+    [normalized.optionA, 'optionAImage'],
+    [normalized.optionB, 'optionBImage'],
+    [normalized.optionC, 'optionCImage'],
+    [normalized.optionD, 'optionDImage'],
+  ]
+  if (options.some(([optionText, imageField]) => !optionText && !hasQuestionImage(normalized, imageField))) {
+    throw new Error(`La pregunta ${questionNumber} debe tener texto o imagen en las opciones A, B, C y D.`)
+  }
+
+  if (normalized.type === QUESTION_TYPE.MULTIPLE_CHOICE) {
+    if (normalized.correctAnswers.length === 0) {
+      throw new Error(`La pregunta ${questionNumber} debe tener al menos una respuesta correcta.`)
+    }
+    return
+  }
+
+  if (!VALID_CORRECT_ANSWERS.has(normalized.correctAnswer)) {
+    throw new Error(`La pregunta ${questionNumber} debe tener una respuesta correcta valida.`)
+  }
+}
+
+function normalizeQuestionsForSave(questions = [], evaluationType = EVALUATION_TYPE.ONLINE) {
+  const normalizedQuestions = questions.map((item) => normalizeQuestionForSave(item))
+  normalizedQuestions.forEach((item, index) => {
+    if (evaluationType === EVALUATION_TYPE.FILE && item.type !== QUESTION_TYPE.SINGLE_CHOICE) {
+      throw new Error('Las evaluaciones en archivo solo admiten preguntas de opcion multiple A-D.')
+    }
+    validateQuestionForSave(item, index)
+  })
+  return normalizedQuestions
+}
+
+async function embedQuestionImagesAsBase64(questions = []) {
+  const uploadedQuestions = []
+  for (let questionIndex = 0; questionIndex < questions.length; questionIndex += 1) {
+    const question = { ...questions[questionIndex] }
+
+    for (const field of QUESTION_IMAGE_FIELDS) {
+      const imageFile = question[`${field}File`]
+      if (!imageFile) continue
+      question[`${field}Url`] = await compressImageToBase64(imageFile)
+    }
+
+    uploadedQuestions.push(stripTransientImageFields(question))
+  }
+
+  const embeddedSize = new Blob([JSON.stringify(uploadedQuestions)]).size
+  if (embeddedSize > MAX_EMBEDDED_QUESTIONS_BYTES) {
+    throw new Error('Las imagenes en base64 superan el tamano permitido para guardar la evaluacion. Usa menos imagenes o imagenes mas livianas.')
+  }
+
+  return uploadedQuestions
 }
 
 function sanitizePdfText(value) {
@@ -124,6 +387,7 @@ function parseQuestionsFromRows(rows) {
       }
 
       return {
+        type: QUESTION_TYPE.SINGLE_CHOICE,
         question: String(values[questionIndex] || '').trim(),
         optionA: String(values[optionAIndex] || '').trim(),
         optionB: String(values[optionBIndex] || '').trim(),
@@ -159,6 +423,31 @@ function parseQuestionsFromFile(file, extension) {
     const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
     return parseQuestionsFromRows(rows)
   })
+}
+
+function normalizeRawQuestion(raw) {
+  const type = raw.tipo || raw.type || 'single_choice'
+  const isTF = type === 'true_false'
+  const correctAnswer = raw.respuesta_correcta || raw.correctAnswer || ''
+  return {
+    type,
+    question: String(raw.pregunta || raw.question || '').trim(),
+    optionA: String(raw.opcion_a || raw.optionA || '').trim(),
+    optionB: String(raw.opcion_b || raw.optionB || '').trim(),
+    optionC: String(raw.opcion_c || raw.optionC || '').trim(),
+    optionD: String(raw.opcion_d || raw.optionD || '').trim(),
+    correctAnswer: isTF
+      ? String(correctAnswer).toLowerCase() === 'false' ? 'false' : 'true'
+      : String(correctAnswer || 'A').trim().toUpperCase(),
+    correctAnswers: raw.respuestas_correctas || raw.correctAnswers || [],
+    questionImageUrl: raw.pregunta_imagen || raw.questionImageUrl || '',
+    optionAImageUrl: raw.imagen_a || raw.optionAImageUrl || '',
+    optionBImageUrl: raw.imagen_b || raw.optionBImageUrl || '',
+    optionCImageUrl: raw.imagen_c || raw.optionCImageUrl || '',
+    optionDImageUrl: raw.imagen_d || raw.optionDImageUrl || '',
+    grado: String(raw.grado ?? raw.grade ?? ''),
+    asignatura: raw.asignatura || raw.subject || '',
+  }
 }
 
 async function downloadExamPdfByEvaluation({ evaluation, studentsForEvaluation }) {
@@ -360,6 +649,7 @@ function EvaluationsPage() {
   const [evaluationFile, setEvaluationFile] = useState(null)
   const [parsedQuestionsFromFile, setParsedQuestionsFromFile] = useState([])
   const [evaluations, setEvaluations] = useState([])
+  const [subjects, setSubjects] = useState([])
   const [professors, setProfessors] = useState([])
   const [students, setStudents] = useState([])
   const [empleados, setEmpleados] = useState([])
@@ -370,6 +660,21 @@ function EvaluationsPage() {
   const [deleting, setDeleting] = useState(false)
   const [examSearch, setExamSearch] = useState('')
   const [fileInputKey, setFileInputKey] = useState(0)
+  const [showQuestionModal, setShowQuestionModal] = useState(false)
+  const [questionForm, setQuestionForm] = useState(BLANK_QUESTION)
+  const [editingQuestionIndex, setEditingQuestionIndex] = useState(null)
+
+  const [bankQuestions, setBankQuestions] = useState([])
+  const [bankFuse, setBankFuse] = useState(null)
+  const [bankSearchOpen, setBankSearchOpen] = useState(false)
+  const [bankSearchQuery, setBankSearchQuery] = useState('')
+  const [bankSearchResults, setBankSearchResults] = useState([])
+  const [bankGradeFilter, setBankGradeFilter] = useState('')
+  const [bankTypeFilter, setBankTypeFilter] = useState('')
+  const [bankImportJsonKey, setBankImportJsonKey] = useState(0)
+  const [bankImportFeedback, setBankImportFeedback] = useState('')
+  const [bankImportFeedbackType, setBankImportFeedbackType] = useState('info')
+  const [importingJson, setImportingJson] = useState(false)
 
   const [form, setForm] = useState({
     subject: '',
@@ -397,13 +702,20 @@ function EvaluationsPage() {
 
     setLoading(true)
     try {
-      const [evaluationsSnapshot, professorsSnapshot, studentsSnapshot, empleadosSnapshot, aprendicesSnapshot] = await Promise.all([
+      const [evaluationsSnapshot, professorsSnapshot, studentsSnapshot, empleadosSnapshot, aprendicesSnapshot, subjectsSnapshot] = await Promise.all([
         getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'users'), where('role', '==', 'profesor'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'empleados'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'users'), where('role', '==', 'aspirante'), where('nitRut', '==', userNitRut))),
+        getDocs(query(collection(db, 'asignaturas'), where('nitRut', '==', userNitRut))),
       ])
+      setSubjects(
+        subjectsSnapshot.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+          .filter((item) => String(item.status || 'activo').trim().toLowerCase() !== 'inactivo')
+          .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+      )
 
       const mappedProfessors = professorsSnapshot.docs
         .map((docSnapshot) => {
@@ -427,7 +739,7 @@ function EvaluationsPage() {
         })
         .map((docSnapshot) => {
           const data = docSnapshot.data()
-          const questions = Array.isArray(data.questions) ? data.questions : []
+          const questions = Array.isArray(data.questions) ? data.questions.map((item) => normalizeQuestionForEditor(item)) : []
           return {
             id: docSnapshot.id,
             subject: data.subject || '',
@@ -567,6 +879,216 @@ function EvaluationsPage() {
     loadBaseData()
   }, [loadBaseData])
 
+  const loadBankData = useCallback(async () => {
+    try {
+      const snap = await getDocs(collection(db, 'banco_preguntas'))
+      const questions = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      setBankQuestions(questions)
+      setBankFuse(new Fuse(questions, {
+        keys: ['question', 'tags'],
+        threshold: 0.4,
+        distance: 100,
+        minMatchCharLength: 2,
+      }))
+    } catch {
+      // Banco no disponible
+    }
+  }, [])
+
+  useEffect(() => {
+    if (canViewEvaluations) {
+      loadBankData()
+    }
+  }, [canViewEvaluations, loadBankData])
+
+  useEffect(() => {
+    if (bankQuestions.length > 0) {
+      setBankFuse(new Fuse(bankQuestions, {
+        keys: ['question', 'tags'],
+        threshold: 0.4,
+        distance: 100,
+        minMatchCharLength: 2,
+      }))
+    }
+  }, [bankQuestions])
+
+  const handleBankSearch = useCallback((query) => {
+    setBankSearchQuery(query)
+    if (!query.trim()) {
+      setBankSearchResults([])
+      return
+    }
+    if (!bankFuse) {
+      setBankSearchResults([])
+      return
+    }
+    let results = bankFuse.search(query.trim()).map((r) => r.item)
+    if (bankGradeFilter) {
+      results = results.filter((q) => q.grado === bankGradeFilter)
+    }
+    if (bankTypeFilter) {
+      results = results.filter((q) => q.type === bankTypeFilter)
+    }
+    setBankSearchResults(results.slice(0, 50))
+  }, [bankFuse, bankGradeFilter, bankTypeFilter])
+
+  const generateTags = useCallback((questionText) => {
+    const stopWords = new Set(['el', 'la', 'los', 'las', 'de', 'del', 'en', 'un', 'una', 'y', 'a', 'e', 'o', 'que', 'es', 'por', 'para', 'con', 'no', 'se', 'lo', 'como', 'mas', 'pero', 'sus', 'le', 'ya', 'este', 'entre', 'porque', 'donde', 'cual', 'quien'])
+    return (questionText || '')
+      .toLowerCase()
+      .replace(/[^\w\sáéíóúñ]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !stopWords.has(w))
+      .slice(0, 8)
+  }, [])
+
+  const saveQuestionToBank = useCallback(async (question, grade, subject, subjectId) => {
+    try {
+      const exists = bankQuestions.find((q) =>
+        q.question === question.question &&
+        q.optionA === question.optionA &&
+        q.optionB === question.optionB &&
+        q.optionC === question.optionC &&
+        q.optionD === question.optionD
+      )
+      if (exists) {
+        await updateDocTracked(doc(db, 'banco_preguntas', exists.id), {
+          vecesUsada: (exists.vecesUsada || 0) + 1,
+        })
+        return
+      }
+      await addDocTracked(collection(db, 'banco_preguntas'), {
+        type: question.type,
+        question: question.question,
+        optionA: question.optionA || '',
+        optionB: question.optionB || '',
+        optionC: question.optionC || '',
+        optionD: question.optionD || '',
+        correctAnswer: question.correctAnswer || '',
+        correctAnswers: Array.isArray(question.correctAnswers) ? question.correctAnswers : [],
+        questionImageUrl: question.questionImageUrl || '',
+        optionAImageUrl: question.optionAImageUrl || '',
+        optionBImageUrl: question.optionBImageUrl || '',
+        optionCImageUrl: question.optionCImageUrl || '',
+        optionDImageUrl: question.optionDImageUrl || '',
+        grado: grade,
+        asignatura: subject,
+        asignaturaId: subjectId || '',
+        tags: generateTags(question.question),
+        vecesUsada: 0,
+        creadoPor: user?.uid || '',
+        createdAt: serverTimestamp(),
+      })
+    } catch {
+      // Error silencioso al guardar en banco
+    }
+  }, [bankQuestions, generateTags, user?.uid, userNitRut])
+
+  const handleJsonImport = useCallback(async (file) => {
+    setImportingJson(true)
+    setBankImportFeedback('')
+    setBankImportFeedbackType('info')
+    try {
+      const text = await file.text()
+      let items
+      try {
+        items = JSON.parse(text)
+      } catch {
+        throw new Error('El archivo no es un JSON valido.')
+      }
+      if (!Array.isArray(items)) {
+        throw new Error('El JSON debe contener un array de preguntas.')
+      }
+      if (items.length === 0) {
+        throw new Error('El JSON no contiene preguntas.')
+      }
+      const seen = new Set()
+      let nuevas = 0
+      let existentes = 0
+      for (const raw of items) {
+        const normalized = normalizeRawQuestion(raw)
+        if (!normalized.question) continue
+        const key = normalized.question + '|' + normalized.optionA + '|' + normalized.optionB + '|' + normalized.optionC + '|' + normalized.optionD
+        if (seen.has(key)) continue
+        seen.add(key)
+        const exists = bankQuestions.find((bq) =>
+          bq.question === normalized.question &&
+          (bq.optionA || '') === normalized.optionA &&
+          (bq.optionB || '') === normalized.optionB &&
+          (bq.optionC || '') === normalized.optionC &&
+          (bq.optionD || '') === normalized.optionD
+        )
+        if (exists) {
+          await updateDocTracked(doc(db, 'banco_preguntas', exists.id), {
+            vecesUsada: (exists.vecesUsada || 0) + 1,
+          })
+          existentes++
+        } else {
+          await addDocTracked(collection(db, 'banco_preguntas'), {
+            type: normalized.type,
+            question: normalized.question,
+            optionA: normalized.optionA || '',
+            optionB: normalized.optionB || '',
+            optionC: normalized.optionC || '',
+            optionD: normalized.optionD || '',
+            correctAnswer: normalized.correctAnswer || '',
+            correctAnswers: Array.isArray(normalized.correctAnswers) ? normalized.correctAnswers : [],
+            questionImageUrl: normalized.questionImageUrl || '',
+            optionAImageUrl: normalized.optionAImageUrl || '',
+            optionBImageUrl: normalized.optionBImageUrl || '',
+            optionCImageUrl: normalized.optionCImageUrl || '',
+            optionDImageUrl: normalized.optionDImageUrl || '',
+            grado: normalized.grado,
+            asignatura: normalized.asignatura,
+            asignaturaId: '',
+            tags: generateTags(normalized.question),
+            vecesUsada: 0,
+            creadoPor: user?.uid || '',
+            createdAt: serverTimestamp(),
+          })
+          nuevas++
+        }
+      }
+      setBankImportFeedback(`${items.length} procesadas: ${nuevas} nuevas, ${existentes} existentes.`)
+      setBankImportFeedbackType('success')
+      setBankImportJsonKey((k) => k + 1)
+      await loadBankData()
+    } catch (err) {
+      setBankImportFeedback(err.message || 'Error al importar JSON.')
+      setBankImportFeedbackType('error')
+    } finally {
+      setImportingJson(false)
+    }
+  }, [bankQuestions, generateTags, user?.uid, loadBankData])
+
+  const handleJsonTemplateDownload = useCallback(() => {
+    const template = [
+      {
+        pregunta: '¿Cuál es la capital de Francia?',
+        tipo: 'single_choice',
+        opcion_a: 'Londres',
+        opcion_b: 'París',
+        opcion_c: 'Berlín',
+        opcion_d: 'Madrid',
+        respuesta_correcta: 'B',
+        grado: '5',
+        asignatura: 'Historia',
+      },
+    ]
+    const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'plantilla_banco_preguntas.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [])
+
+  const importFromBank = useCallback((bankQuestion) => {
+    const normalized = normalizeQuestionForEditor(bankQuestion)
+    setParsedQuestionsFromFile((prev) => [...prev, normalized])
+  }, [])
+
   const professorNameById = useMemo(() => {
     const map = new Map()
     professors.forEach((item) => map.set(item.id, item.name))
@@ -621,6 +1143,150 @@ function EvaluationsPage() {
     }
 
     setEvaluationFile(file)
+  }
+
+  const resetQuestionForm = () => {
+    setQuestionForm(BLANK_QUESTION)
+    setEditingQuestionIndex(null)
+  }
+
+  const handleOpenQuestionModal = () => {
+    resetQuestionForm()
+    setShowQuestionModal(true)
+  }
+
+  const handleCloseQuestionModal = () => {
+    setShowQuestionModal(false)
+    resetQuestionForm()
+  }
+
+  const handleEditQuestion = (index) => {
+    const question = parsedQuestionsFromFile[index]
+    setQuestionForm(normalizeQuestionForEditor(question))
+    setEditingQuestionIndex(index)
+  }
+
+  const handleDuplicateQuestion = (index) => {
+    const question = parsedQuestionsFromFile[index]
+    if (!question) return
+    setParsedQuestionsFromFile((prev) => [
+      ...prev,
+      normalizeQuestionForEditor({
+        ...question,
+        question: `${question.question || 'Pregunta'} (copia)`,
+      }),
+    ])
+  }
+
+  const handleDeleteQuestion = (index) => {
+    setParsedQuestionsFromFile((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+    if (editingQuestionIndex === index) {
+      resetQuestionForm()
+    }
+  }
+
+  const handleQuestionTypeChange = (nextType) => {
+    const normalizedType = normalizeQuestionType(nextType)
+    setQuestionForm((prev) => ({
+      ...prev,
+      type: normalizedType,
+      correctAnswer: normalizedType === QUESTION_TYPE.TRUE_FALSE ? 'true' : 'A',
+      correctAnswers: normalizedType === QUESTION_TYPE.MULTIPLE_CHOICE ? prev.correctAnswers : [],
+    }))
+  }
+
+  const handleToggleCorrectAnswer = (answer) => {
+    const normalizedAnswer = String(answer || '').trim().toUpperCase()
+    if (!VALID_CORRECT_ANSWERS.has(normalizedAnswer)) return
+    setQuestionForm((prev) => {
+      const current = normalizeCorrectAnswers(prev.correctAnswers)
+      const nextAnswers = current.includes(normalizedAnswer)
+        ? current.filter((item) => item !== normalizedAnswer)
+        : [...current, normalizedAnswer].sort()
+      return { ...prev, correctAnswers: nextAnswers }
+    })
+  }
+
+  const handleQuestionImageChange = (field, event) => {
+    const file = event.target.files?.[0] || null
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      setFeedback('Solo puedes adjuntar archivos de imagen.')
+      setFeedbackType('error')
+      event.target.value = ''
+      return
+    }
+
+    if (file.size > MAX_QUESTION_IMAGE_SIZE_BYTES) {
+      setFeedback('Cada imagen debe pesar maximo 5MB.')
+      setFeedbackType('error')
+      event.target.value = ''
+      return
+    }
+
+    setQuestionForm((prev) => ({
+      ...prev,
+      [`${field}File`]: file,
+      [`${field}Url`]: prev[`${field}Url`] || '',
+    }))
+    setFeedback('')
+    setFeedbackType('info')
+  }
+
+  const handleRemoveQuestionImage = (field) => {
+    setQuestionForm((prev) => ({
+      ...prev,
+      [`${field}File`]: null,
+      [`${field}Url`]: '',
+    }))
+  }
+
+  const handleSaveQuestion = () => {
+    try {
+      const normalizedQuestion = normalizeQuestionForSave(questionForm)
+      validateQuestionForSave(normalizedQuestion, editingQuestionIndex ?? parsedQuestionsFromFile.length)
+      setParsedQuestionsFromFile((prev) => {
+        if (editingQuestionIndex == null) {
+          return [...prev, normalizedQuestion]
+        }
+        return prev.map((item, index) => (index === editingQuestionIndex ? normalizedQuestion : item))
+      })
+      resetQuestionForm()
+      setFeedback('')
+      setFeedbackType('info')
+    } catch (validationError) {
+      setFeedback(validationError.message || 'No fue posible guardar la pregunta.')
+      setFeedbackType('error')
+    }
+  }
+
+  const renderQuestionImageInput = (field, label) => {
+    const imageFile = questionForm[`${field}File`]
+    const imageUrl = questionForm[`${field}Url`]
+    return (
+      <div className="question-image-control">
+        <DragDropFileInput
+          id={`question-image-${field}`}
+          label={label}
+          accept="image/*"
+          onChange={(event) => handleQuestionImageChange(field, event)}
+          prompt="Arrastra una imagen aqui o haz clic para seleccionar."
+          helperText="PNG, JPG o WebP. Maximo 5MB."
+        />
+        {imageFile && (
+          <p className="feedback">
+            Imagen seleccionada: <strong>{imageFile.name}</strong>
+          </p>
+        )}
+        <QuestionImagePreview
+          file={imageFile}
+          src={imageUrl}
+          alt={label}
+          onRemove={() => handleRemoveQuestionImage(field)}
+        />
+      </div>
+    )
   }
 
   const handleCreateEvaluation = async (event) => {
@@ -684,12 +1350,6 @@ function EvaluationsPage() {
       setFeedbackType('error')
       return
     }
-    if (!editingEvaluation && !evaluationFile) {
-      setFeedback('Debes cargar la plantilla CSV con preguntas.')
-      setFeedbackType('error')
-      return
-    }
-
     try {
       setSaving(true)
 
@@ -714,8 +1374,42 @@ function EvaluationsPage() {
         }
       }
 
+      try {
+        parsedQuestions = normalizeQuestionsForSave(parsedQuestions, evaluationType)
+      } catch (validationError) {
+        setFeedback(validationError.message || 'Debes agregar al menos una pregunta valida.')
+        setFeedbackType('error')
+        setSaving(false)
+        return
+      }
+
+      if (parsedQuestions.length === 0) {
+        setFeedback(
+          evaluationType === EVALUATION_TYPE.ONLINE
+            ? 'Debes crear preguntas en linea o importarlas desde Excel.'
+            : 'Debes cargar la plantilla Excel con preguntas.',
+        )
+        setFeedbackType('error')
+        setSaving(false)
+        return
+      }
+
+      if (evaluationType === EVALUATION_TYPE.ONLINE) {
+        try {
+          parsedQuestions = await embedQuestionImagesAsBase64(parsedQuestions)
+        } catch (imageError) {
+          setFeedback(imageError.message || 'No fue posible convertir las imagenes a base64.')
+          setFeedbackType('error')
+          setSaving(false)
+          return
+        }
+      } else {
+        parsedQuestions = parsedQuestions.map((item) => stripTransientImageFields(item))
+      }
+
       const payload = {
         subject: trimmedSubject,
+        subjectId: subjects.find((item) => item.name === trimmedSubject)?.id || '',
         evaluationType,
         timeLimitMinutes: evaluationType === EVALUATION_TYPE.ONLINE ? parsedTimeLimitMinutes : 0,
         maxAttempts: evaluationType === EVALUATION_TYPE.ONLINE ? parsedMaxAttempts : 1,
@@ -750,6 +1444,16 @@ function EvaluationsPage() {
           createdByName: user?.displayName || user?.email || '',
           createdAt: serverTimestamp(),
         })
+      }
+
+      // ── Guardar cada pregunta en el banco automaticamente ──
+      if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
+        const subjectId = subjects.find((item) => item.name === trimmedSubject)?.id || ''
+        const gradeToSave = form.esParaAprendiz ? '' : trimmedGrade
+        await Promise.allSettled(
+          parsedQuestions.map((q) => saveQuestionToBank(q, gradeToSave, trimmedSubject, subjectId))
+        )
+        loadBankData()
       }
 
       setForm((prev) => ({
@@ -950,7 +1654,7 @@ function EvaluationsPage() {
         <div className="tasks-page-hero-copy">
           <span className="tasks-page-eyebrow">Academico</span>
           <h2>Evaluaciones</h2>
-          <p>Gestiona la creacion de examenes y consulta los ya registrados. Crea evaluaciones con opciones multiples (a, b, c, o d), subiendo tu plantilla en formato xls o csv.</p>
+          <p>Gestiona la creacion de examenes y consulta los ya registrados. Crea preguntas manualmente para evaluaciones en linea o importa una plantilla en formato xls o csv.</p>
         </div>
         <div className="tasks-page-hero-actions">
           {(canCreateEvaluations || canEditEvaluations) && (
@@ -974,13 +1678,17 @@ function EvaluationsPage() {
           <form className="form evaluation-create-form" onSubmit={handleCreateEvaluation} id="evaluations-form">
             <fieldset className="form-fieldset" disabled={saving}>
               <label htmlFor="evaluation-subject" className="evaluation-field-full">
-                Asunto evaluacion
-                <input
+                Asignatura
+                <select
                   id="evaluation-subject"
-                  type="text"
                   value={form.subject}
                   onChange={(event) => setForm((prev) => ({ ...prev, subject: event.target.value }))}
-                />
+                >
+                  <option value="">Selecciona asignatura</option>
+                  {subjects.map((item) => (
+                    <option key={item.id} value={item.name || ''}>{item.name}</option>
+                  ))}
+                </select>
               </label>
               <label htmlFor="evaluation-date">
                 Fecha
@@ -1235,15 +1943,30 @@ function EvaluationsPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, observation: event.target.value }))}
                 />
               </label>
+              {form.evaluationType === EVALUATION_TYPE.ONLINE && (
+                <div className="evaluation-field-full question-builder-summary">
+                  <div>
+                    <strong>Preguntas en linea</strong>
+                    <p>
+                      {parsedQuestionsFromFile.length > 0
+                        ? `${parsedQuestionsFromFile.length} pregunta(s) lista(s) para guardar.`
+                        : 'Agrega preguntas manualmente o importa un Excel.'}
+                    </p>
+                  </div>
+                  <button type="button" className="button secondary" onClick={handleOpenQuestionModal}>
+                    Crear preguntas
+                  </button>
+                </div>
+              )}
               <div className="evaluation-field-full">
                 <DragDropFileInput
                   id="evaluation-file"
                   inputKey={fileInputKey}
-                  label="Cargar Excel (pregunta, respuesta a, respuesta b, respuesta c, respuesta D, respuesta correcta)"
+                  label="Importar Excel (pregunta, respuesta a, respuesta b, respuesta c, respuesta D, respuesta correcta)"
                   accept=".xlsx,.xls,.csv"
                   onChange={handleFileChange}
                   prompt="Arrastra el Excel aqui o haz clic para seleccionar."
-                  helperText="Formatos permitidos: .xlsx, .xls, .csv. Maximo 10MB."
+                  helperText="Formatos permitidos: .xlsx, .xls, .csv. Maximo 10MB. El Excel importa preguntas de opcion multiple A-D."
                 />
               </div>
               {evaluationFile && (
@@ -1433,6 +2156,243 @@ function EvaluationsPage() {
           )}
         </section>
       </div>
+      {showQuestionModal && (
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-card question-builder-modal" role="dialog" aria-modal="true" aria-label="Crear preguntas en linea">
+            <button
+              type="button"
+              className="modal-close-icon"
+              aria-label="Cerrar"
+              onClick={handleCloseQuestionModal}
+            >
+              x
+            </button>
+            <h3>Crear preguntas</h3>
+
+            <div className="bank-search-toggle-wrap">
+              <button type="button" className="button secondary small" onClick={() => setBankSearchOpen((prev) => !prev)}>
+                {bankSearchOpen ? 'Ocultar banco de preguntas' : 'Buscar en banco de preguntas'}
+              </button>
+            </div>
+
+            {bankSearchOpen && (
+              <div className="bank-search-panel">
+                <div className="bank-search-filters">
+                  <input
+                    type="search"
+                    placeholder="Buscar preguntas..."
+                    value={bankSearchQuery}
+                    onChange={(e) => handleBankSearch(e.target.value)}
+                  />
+                  <select value={bankGradeFilter} onChange={(e) => { setBankGradeFilter(e.target.value); if (bankSearchQuery) handleBankSearch(bankSearchQuery) }}>
+                    <option value="">Todos los grados</option>
+                    {GRADE_OPTIONS.map((g) => <option key={g} value={g}>Grado {g}</option>)}
+                  </select>
+                  <select value={bankTypeFilter} onChange={(e) => { setBankTypeFilter(e.target.value); if (bankSearchQuery) handleBankSearch(bankSearchQuery) }}>
+                    <option value="">Todos los tipos</option>
+                    <option value="single_choice">Opcion multiple</option>
+                    <option value="true_false">Verdadero/Falso</option>
+                    <option value="multiple_choice">Varias respuestas</option>
+                  </select>
+                </div>
+                <div className="bank-search-results">
+                  {!bankSearchQuery.trim() ? (
+                    <p className="feedback">Escribe para buscar preguntas...</p>
+                  ) : bankSearchResults.length === 0 ? (
+                    <p className="feedback">No se encontraron preguntas.</p>
+                  ) : (
+                    bankSearchResults.map((bq) => (
+                      <div key={bq.id} className="bank-search-item">
+                        <div className="bank-search-item-info">
+                          <span className="bank-search-item-type">{QUESTION_TYPE_LABELS[bq.type] || bq.type}</span>
+                          {bq.grado !== undefined && bq.grado !== '' && <span className="bank-search-item-grade">Grado {bq.grado}</span>}
+                          <p className="bank-search-item-text">{bq.question || 'Pregunta sin texto'}</p>
+                          {bq.optionA && <p className="bank-search-item-option">A) {bq.optionA}</p>}
+                          {bq.optionB && <p className="bank-search-item-option">B) {bq.optionB}</p>}
+                          {bq.optionC && <p className="bank-search-item-option">C) {bq.optionC}</p>}
+                          {bq.optionD && <p className="bank-search-item-option">D) {bq.optionD}</p>}
+                          <span className="bank-search-item-used">Usada {bq.vecesUsada || 0} vez(ces)</span>
+                        </div>
+                        <button type="button" className="button small" onClick={() => importFromBank(bq)}>
+                          Importar
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="bank-json-import-section">
+                  <hr />
+                  <h4>Importar preguntas desde JSON</h4>
+                  <DragDropFileInput
+                    id="bank-json-file"
+                    inputKey={bankImportJsonKey}
+                    label=""
+                    accept=".json"
+                    onChange={(e) => handleJsonImport(e.target.files?.[0])}
+                    prompt="Arrastra el JSON aqui o haz clic para seleccionar."
+                    helperText="Formato .json. Maximo 10MB."
+                  />
+                  {importingJson && <p className="feedback">Importando preguntas, espera...</p>}
+                  {bankImportFeedback && (
+                    <p className={`feedback ${bankImportFeedbackType === 'error' ? 'error' : 'success'}`}>
+                      {bankImportFeedback}
+                    </p>
+                  )}
+                  <button type="button" className="button secondary small" onClick={handleJsonTemplateDownload}>
+                    Descargar plantilla JSON
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="question-builder-layout">
+              <div className="question-builder-form">
+                <label htmlFor="question-type">
+                  Tipo de pregunta
+                  <select
+                    id="question-type"
+                    value={questionForm.type}
+                    onChange={(event) => handleQuestionTypeChange(event.target.value)}
+                  >
+                    <option value={QUESTION_TYPE.SINGLE_CHOICE}>Opcion multiple A-D</option>
+                    <option value={QUESTION_TYPE.TRUE_FALSE}>Verdadero/Falso</option>
+                    <option value={QUESTION_TYPE.MULTIPLE_CHOICE}>Varias respuestas A-D</option>
+                  </select>
+                </label>
+                <label htmlFor="question-text">
+                  Pregunta
+                  <textarea
+                    id="question-text"
+                    rows={3}
+                    value={questionForm.question}
+                    onChange={(event) => setQuestionForm((prev) => ({ ...prev, question: event.target.value }))}
+                  />
+                </label>
+                {renderQuestionImageInput('questionImage', 'Imagen de la pregunta')}
+
+                {questionForm.type !== QUESTION_TYPE.TRUE_FALSE && (
+                  <div className="question-options-grid">
+                    {[
+                      ['A', 'optionA'],
+                      ['B', 'optionB'],
+                      ['C', 'optionC'],
+                      ['D', 'optionD'],
+                    ].map(([letter, key]) => (
+                      <div key={letter} className="question-option-editor">
+                        <label htmlFor={`question-option-${letter}`}>
+                          Opcion {letter}
+                          <input
+                            id={`question-option-${letter}`}
+                            type="text"
+                            value={questionForm[key]}
+                            onChange={(event) => setQuestionForm((prev) => ({ ...prev, [key]: event.target.value }))}
+                          />
+                        </label>
+                        {renderQuestionImageInput(`${key}Image`, `Imagen opcion ${letter}`)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {questionForm.type === QUESTION_TYPE.SINGLE_CHOICE && (
+                  <label htmlFor="question-correct-answer">
+                    Respuesta correcta
+                    <select
+                      id="question-correct-answer"
+                      value={questionForm.correctAnswer}
+                      onChange={(event) => setQuestionForm((prev) => ({ ...prev, correctAnswer: event.target.value }))}
+                    >
+                      {['A', 'B', 'C', 'D'].map((letter) => (
+                        <option key={letter} value={letter}>{letter}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                {questionForm.type === QUESTION_TYPE.TRUE_FALSE && (
+                  <label htmlFor="question-true-false-answer">
+                    Respuesta correcta
+                    <select
+                      id="question-true-false-answer"
+                      value={questionForm.correctAnswer}
+                      onChange={(event) => setQuestionForm((prev) => ({ ...prev, correctAnswer: event.target.value }))}
+                    >
+                      <option value="true">Verdadero</option>
+                      <option value="false">Falso</option>
+                    </select>
+                  </label>
+                )}
+
+                {questionForm.type === QUESTION_TYPE.MULTIPLE_CHOICE && (
+                  <div className="question-correct-checkboxes">
+                    <strong>Respuestas correctas</strong>
+                    <div>
+                      {['A', 'B', 'C', 'D'].map((letter) => (
+                        <label key={letter}>
+                          <input
+                            type="checkbox"
+                            checked={normalizeCorrectAnswers(questionForm.correctAnswers).includes(letter)}
+                            onChange={() => handleToggleCorrectAnswer(letter)}
+                          />
+                          {letter}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="modal-actions">
+                  <button type="button" className="button" onClick={handleSaveQuestion}>
+                    {editingQuestionIndex == null ? 'Agregar pregunta' : 'Guardar pregunta'}
+                  </button>
+                  {editingQuestionIndex != null && (
+                    <button type="button" className="button secondary" onClick={resetQuestionForm}>
+                      Cancelar edicion
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="question-builder-list">
+                <strong>Preguntas agregadas ({parsedQuestionsFromFile.length})</strong>
+                {parsedQuestionsFromFile.length === 0 ? (
+                  <p className="feedback">Aun no hay preguntas.</p>
+                ) : (
+                  <div className="question-builder-items">
+                    {parsedQuestionsFromFile.map((item, index) => (
+                      <div key={`${item.question}-${index}`} className="question-builder-item">
+                        <div>
+                          <span>{index + 1}. {QUESTION_TYPE_LABELS[normalizeQuestionType(item.type)]}</span>
+                          <p>{item.question || 'Pregunta sin texto'}</p>
+                          {item.questionImageUrl && (
+                            <img className="question-builder-list-image" src={item.questionImageUrl} alt="Imagen de pregunta" />
+                          )}
+                        </div>
+                        <div className="student-actions">
+                          <button type="button" className="button small secondary" onClick={() => handleEditQuestion(index)}>
+                            Editar
+                          </button>
+                          <button type="button" className="button small secondary" onClick={() => handleDuplicateQuestion(index)}>
+                            Duplicar
+                          </button>
+                          <button type="button" className="button small danger" onClick={() => handleDeleteQuestion(index)}>
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="button secondary" onClick={handleCloseQuestionModal}>
+                Listo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {evaluationForPdf && (
         <div className="modal-overlay" role="presentation">
           <div className="modal-card" role="dialog" aria-modal="true" aria-label="Descargar PDF de evaluacion">

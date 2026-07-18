@@ -28,6 +28,7 @@ function StudentEditPage() {
 
   const [activeTab, setActiveTab] = useState('complementaria')
   const [teachers, setTeachers] = useState([])
+  const [subjects, setSubjects] = useState([])
   const [profesoresGradoSearch, setProfesoresGradoSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -59,6 +60,7 @@ function StudentEditPage() {
   const [autorizaCorreos, setAutorizaCorreos] = useState('si')
   const [directorGrupoUid, setDirectorGrupoUid] = useState('')
   const [profesoresGradoSeleccionados, setProfesoresGradoSeleccionados] = useState([])
+  const [asignaturasEstudiante, setAsignaturasEstudiante] = useState({})
   const [nombreAcudiente, setNombreAcudiente] = useState('')
   const [parentescoAcudiente, setParentescoAcudiente] = useState('Mama')
   const [telefonoAcudiente, setTelefonoAcudiente] = useState('')
@@ -82,18 +84,33 @@ function StudentEditPage() {
     const loadData = async () => {
       setLoading(true)
       try {
-        const [studentSnapshot, teacherSnapshot] = await Promise.all([
+        const [studentSnapshot, teacherSnapshot, subjectsSnapshot] = await Promise.all([
           getDoc(doc(db, 'users', studentId)),
           getDocs(query(collection(db, 'users'), where('role', '==', 'profesor'), where('nitRut', '==', userNitRut))),
+          getDocs(query(collection(db, 'asignaturas'), where('nitRut', '==', userNitRut))),
         ])
 
         const teacherList = teacherSnapshot.docs
-          .map((docSnapshot) => ({
-            uid: docSnapshot.id,
-            name: docSnapshot.data().name || docSnapshot.data().email || 'Profesor',
-          }))
+          .map((docSnapshot) => {
+            const data = docSnapshot.data() || {}
+            const profile = data.profile || {}
+            const info = profile.informacionComplementaria || {}
+            return {
+              uid: docSnapshot.id,
+              name: data.name || `${profile.nombres || ''} ${profile.apellidos || ''}`.replace(/\s+/g, ' ').trim() || data.email || 'Profesor',
+              estado: String(info.estado || 'activo').trim().toLowerCase(),
+              gradosActivos: Array.isArray(info.gradosActivos) ? info.gradosActivos : [],
+              asignaturas: Array.isArray(info.asignaturas) ? info.asignaturas : [],
+            }
+          })
           .sort((a, b) => a.name.localeCompare(b.name))
         setTeachers(teacherList)
+        setSubjects(
+          subjectsSnapshot.docs
+            .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+            .filter((item) => String(item.status || 'activo').trim().toLowerCase() !== 'inactivo')
+            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+        )
 
         if (!studentSnapshot.exists()) {
           setError('No se encontro el estudiante seleccionado.')
@@ -137,6 +154,12 @@ function StudentEditPage() {
                 .filter((uid) => typeof uid === 'string' && uid.trim() !== '')
             : [],
         )
+        const assignedSubjects = {}
+        ;(Array.isArray(infoComplementaria.asignaturas) ? infoComplementaria.asignaturas : []).forEach((item) => {
+          const subjectId = String(item?.id || item?.subjectId || '').trim()
+          if (subjectId) assignedSubjects[subjectId] = String(item?.teacherUid || '').trim()
+        })
+        setAsignaturasEstudiante(assignedSubjects)
         setNombreAcudiente(infoFamiliar.nombreAcudiente || '')
         setParentescoAcudiente(infoFamiliar.parentescoAcudiente || 'Mama')
         setTelefonoAcudiente(infoFamiliar.telefonoAcudiente || '')
@@ -237,9 +260,16 @@ function StudentEditPage() {
     )
   }
 
+  const profesoresActivosPorGrado = useMemo(() => (
+    teachers.filter((teacher) => (
+      teacher.estado !== 'inactivo' &&
+      (!grado || (Array.isArray(teacher.gradosActivos) && teacher.gradosActivos.includes(grado)))
+    ))
+  ), [grado, teachers])
+
   const profesoresGradoVisibles = isTeacherSelectionReadOnly
-    ? teachers.filter((teacher) => profesoresGradoSeleccionados.includes(teacher.uid))
-    : teachers
+    ? profesoresActivosPorGrado.filter((teacher) => profesoresGradoSeleccionados.includes(teacher.uid))
+    : profesoresActivosPorGrado
   const profesoresGradoFiltrados = useMemo(() => {
     const normalized = profesoresGradoSearch.trim().toLowerCase()
     if (!normalized) return profesoresGradoVisibles
@@ -249,6 +279,26 @@ function StudentEditPage() {
       return haystack.includes(normalized)
     })
   }, [profesoresGradoSearch, profesoresGradoVisibles])
+
+  const getTeachersForSubject = (subjectId) => {
+    const matching = profesoresActivosPorGrado.filter((teacher) => (
+      Array.isArray(teacher.asignaturas) &&
+      teacher.asignaturas.some((item) => String(item?.id || item || '').trim() === String(subjectId || '').trim())
+    ))
+    return matching.length > 0 ? matching : profesoresActivosPorGrado
+  }
+
+  const toggleAsignaturaEstudiante = (subjectId) => {
+    setAsignaturasEstudiante((prev) => {
+      if (Object.prototype.hasOwnProperty.call(prev, subjectId)) {
+        const next = { ...prev }
+        delete next[subjectId]
+        return next
+      }
+      const firstTeacher = getTeachersForSubject(subjectId)[0]
+      return { ...prev, [subjectId]: firstTeacher?.uid || '' }
+    })
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -301,6 +351,12 @@ function StudentEditPage() {
             profesoresGrado: profesoresGradoSeleccionados.map((teacherUid) => ({
               uid: teacherUid,
               name: teachers.find((teacher) => teacher.uid === teacherUid)?.name || '',
+            })),
+            asignaturas: Object.entries(asignaturasEstudiante).map(([subjectId, teacherUid]) => ({
+              id: subjectId,
+              name: subjects.find((subject) => subject.id === subjectId)?.name || '',
+              teacherUid,
+              teacherName: teachers.find((teacher) => teacher.uid === teacherUid)?.name || '',
             })),
             directorGrupoUid,
             directorGrupoNombre:
@@ -560,6 +616,13 @@ function StudentEditPage() {
           >
             Profesores grado
           </button>
+          <button
+            className={`tab-button${activeTab === 'asignaturas' ? ' active' : ''}`}
+            type="button"
+            onClick={() => setActiveTab('asignaturas')}
+          >
+            Asignaturas
+          </button>
         </div>
 
         <fieldset className="form-fieldset" disabled={!canEditStudent}>
@@ -806,6 +869,54 @@ function StudentEditPage() {
                   <span>{teacher.name}</span>
                 </label>
               ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'asignaturas' && (
+          <div className="tab-panel">
+            <p className="feedback">Selecciona las asignaturas que vera el estudiante y el profesor que corresponde.</p>
+            {subjects.length === 0 && <p className="feedback">No hay asignaturas activas registradas.</p>}
+            <div className="students-table-wrap">
+              <table className="students-table">
+                <thead>
+                  <tr>
+                    <th>Asignatura</th>
+                    <th>Ver</th>
+                    <th>Profesor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subjects.map((subject) => {
+                    const enabled = Object.prototype.hasOwnProperty.call(asignaturasEstudiante, subject.id)
+                    const subjectTeachers = getTeachersForSubject(subject.id)
+                    return (
+                      <tr key={subject.id}>
+                        <td data-label="Asignatura">{subject.name}</td>
+                        <td data-label="Ver">
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={() => toggleAsignaturaEstudiante(subject.id)}
+                          />
+                        </td>
+                        <td data-label="Profesor">
+                          <select
+                            value={asignaturasEstudiante[subject.id] || ''}
+                            onChange={(event) => setAsignaturasEstudiante((prev) => ({ ...prev, [subject.id]: event.target.value }))}
+                            disabled={!enabled}
+                          >
+                            <option value="">Seleccionar profesor</option>
+                            {subjectTeachers.map((teacher) => (
+                              <option key={teacher.uid} value={teacher.uid}>{teacher.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

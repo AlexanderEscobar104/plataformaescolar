@@ -8,9 +8,87 @@ import OperationStatusModal from '../../components/OperationStatusModal'
 
 const EVALUATION_TYPE_ONLINE = 'en_linea'
 const MAX_SCORE = 5
+const QUESTION_TYPE = {
+  SINGLE_CHOICE: 'single_choice',
+  TRUE_FALSE: 'true_false',
+  MULTIPLE_CHOICE: 'multiple_choice',
+}
 
 function normalizeEvaluationType(value) {
   return value === EVALUATION_TYPE_ONLINE ? EVALUATION_TYPE_ONLINE : 'en_archivo'
+}
+
+function normalizeQuestionType(value) {
+  if (value === QUESTION_TYPE.TRUE_FALSE) return QUESTION_TYPE.TRUE_FALSE
+  if (value === QUESTION_TYPE.MULTIPLE_CHOICE) return QUESTION_TYPE.MULTIPLE_CHOICE
+  return QUESTION_TYPE.SINGLE_CHOICE
+}
+
+function normalizeAnswerList(value) {
+  const rawValues = Array.isArray(value) ? value : [value]
+  return Array.from(
+    new Set(
+      rawValues
+        .map((item) => String(item || '').trim().toUpperCase())
+        .filter((item) => ['A', 'B', 'C', 'D'].includes(item)),
+    ),
+  ).sort()
+}
+
+function normalizeQuestion(question = {}) {
+  const imageFields = {
+    questionImageUrl: question.questionImageUrl || '',
+    optionAImageUrl: question.optionAImageUrl || '',
+    optionBImageUrl: question.optionBImageUrl || '',
+    optionCImageUrl: question.optionCImageUrl || '',
+    optionDImageUrl: question.optionDImageUrl || '',
+  }
+  const type = normalizeQuestionType(question.type)
+  if (type === QUESTION_TYPE.TRUE_FALSE) {
+    return {
+      type,
+      question: question.question || '',
+      correctAnswer: String(question.correctAnswer ?? 'true').toLowerCase() === 'false' ? 'false' : 'true',
+      ...imageFields,
+    }
+  }
+  if (type === QUESTION_TYPE.MULTIPLE_CHOICE) {
+    return {
+      type,
+      question: question.question || '',
+      optionA: question.optionA || '',
+      optionB: question.optionB || '',
+      optionC: question.optionC || '',
+      optionD: question.optionD || '',
+      correctAnswers: normalizeAnswerList(question.correctAnswers),
+      ...imageFields,
+    }
+  }
+  return {
+    type,
+    question: question.question || '',
+    optionA: question.optionA || '',
+    optionB: question.optionB || '',
+    optionC: question.optionC || '',
+    optionD: question.optionD || '',
+    correctAnswer: String(question.correctAnswer || '').trim().toUpperCase(),
+    ...imageFields,
+  }
+}
+
+function answersMatch(selectedValue, question) {
+  const normalizedQuestion = normalizeQuestion(question)
+  if (normalizedQuestion.type === QUESTION_TYPE.MULTIPLE_CHOICE) {
+    const selectedAnswers = normalizeAnswerList(selectedValue)
+    const expectedAnswers = normalizeAnswerList(normalizedQuestion.correctAnswers)
+    return selectedAnswers.length > 0
+      && selectedAnswers.length === expectedAnswers.length
+      && selectedAnswers.every((answer, index) => answer === expectedAnswers[index])
+  }
+  if (normalizedQuestion.type === QUESTION_TYPE.TRUE_FALSE) {
+    return String(selectedValue || '').toLowerCase() === normalizedQuestion.correctAnswer
+  }
+  return String(selectedValue || '').toUpperCase() === normalizedQuestion.correctAnswer
 }
 
 function formatTime(seconds) {
@@ -67,7 +145,7 @@ function EvaluationTakePage() {
       const [evaluationSnapshot, userSnapshot, attemptsSnapshot] = await Promise.all([
         getDoc(doc(db, 'evaluaciones', evaluationId)),
         getDoc(doc(db, 'users', user.uid)),
-        getDocs(query(collection(db, 'evaluacion_intentos'), where('evaluationId', '==', evaluationId, where('nitRut', '==', userNitRut)), where('studentUid', '==', user.uid))),
+        getDocs(query(collection(db, 'evaluacion_intentos'), where('evaluationId', '==', evaluationId), where('nitRut', '==', userNitRut), where('studentUid', '==', user.uid))),
       ])
 
       if (!evaluationSnapshot.exists()) {
@@ -84,7 +162,7 @@ function EvaluationTakePage() {
         return
       }
 
-      const questions = Array.isArray(evaluationData.questions) ? evaluationData.questions : []
+      const questions = Array.isArray(evaluationData.questions) ? evaluationData.questions.map((item) => normalizeQuestion(item)) : []
       if (questions.length === 0) {
         setEvaluation(null)
         setFeedback('Esta evaluacion no tiene preguntas.')
@@ -116,7 +194,7 @@ function EvaluationTakePage() {
     } finally {
       setLoading(false)
     }
-  }, [evaluationId, user])
+  }, [evaluationId, user, userNitRut])
 
   useEffect(() => {
     loadData()
@@ -132,6 +210,7 @@ function EvaluationTakePage() {
         const attemptNumber = attemptsUsed + 1
         const attemptRef = await addDocTracked(collection(db, 'evaluacion_intentos'), {
           evaluationId: evaluation.id,
+          nitRut: userNitRut,
           studentUid: user.uid,
           studentDocument: studentInfo.documentNumber || '-',
           studentName: studentInfo.fullName || 'Estudiante',
@@ -158,11 +237,11 @@ function EvaluationTakePage() {
     studentInfo.documentNumber,
     studentInfo.fullName,
     user,
+    userNitRut,
   ])
 
   const submitEvaluation = useCallback(async (reason = 'manual') => {
     if (!evaluation || !user?.uid || isFinished || saving) return
-    if (attemptsUsed >= evaluation.maxAttempts) return
     if (!currentAttemptId) return
 
     try {
@@ -174,11 +253,15 @@ function EvaluationTakePage() {
 
       for (let index = 0; index < totalQuestions; index += 1) {
         const questionNumber = index + 1
-        const selectedAnswer = String(answersByQuestionNumber[questionNumber] || '').toUpperCase()
-        const expectedAnswer = String(evaluation.questions[index]?.correctAnswer || '').toUpperCase()
-        if (selectedAnswer && selectedAnswer === expectedAnswer) correctAnswers += 1
-        if (selectedAnswer) {
-          detectedAnswers.push({ questionNumber, answer: selectedAnswer })
+        const question = normalizeQuestion(evaluation.questions[index])
+        const selectedAnswer = answersByQuestionNumber[questionNumber]
+        if (answersMatch(selectedAnswer, question)) correctAnswers += 1
+        if (Array.isArray(selectedAnswer) ? selectedAnswer.length > 0 : selectedAnswer) {
+          detectedAnswers.push({
+            questionNumber,
+            type: question.type,
+            answer: Array.isArray(selectedAnswer) ? normalizeAnswerList(selectedAnswer) : selectedAnswer,
+          })
         }
       }
 
@@ -192,6 +275,7 @@ function EvaluationTakePage() {
         sourceFileName: 'evaluacion_en_linea',
         sourceFileSegment: 1,
         attemptNumber: currentAttemptNumber || attemptsUsed,
+        nitRut: userNitRut,
         studentUid: user.uid,
         studentDocument: studentInfo.documentNumber || '-',
         studentName: studentInfo.fullName || 'Estudiante',
@@ -251,6 +335,7 @@ function EvaluationTakePage() {
     studentInfo.documentNumber,
     studentInfo.fullName,
     user,
+    userNitRut,
   ])
 
   useEffect(() => {
@@ -335,6 +420,20 @@ function EvaluationTakePage() {
     }))
   }
 
+  const handleToggleMultipleAnswer = (answer) => {
+    if (isFinished) return
+    setAnswersByQuestionNumber((prev) => {
+      const currentAnswers = normalizeAnswerList(prev[currentQuestionNumber])
+      const nextAnswers = currentAnswers.includes(answer)
+        ? currentAnswers.filter((item) => item !== answer)
+        : [...currentAnswers, answer].sort()
+      return {
+        ...prev,
+        [currentQuestionNumber]: nextAnswers,
+      }
+    })
+  }
+
   if (loading) {
     return (
       <section>
@@ -394,26 +493,54 @@ function EvaluationTakePage() {
         {!isFinished && attemptsUsed < evaluation.maxAttempts && currentQuestion && (
           <div className="home-right-card">
             <h3>Pregunta {currentQuestionNumber} de {totalQuestions}</h3>
-            <p>{currentQuestion.question || 'Pregunta sin texto'}</p>
+            {currentQuestion.question && <p>{currentQuestion.question}</p>}
+            {currentQuestion.questionImageUrl && (
+              <img className="evaluation-question-image" src={currentQuestion.questionImageUrl} alt="Imagen de la pregunta" />
+            )}
             <div className="teacher-checkbox-list">
-              {[
-                ['A', currentQuestion.optionA],
-                ['B', currentQuestion.optionB],
-                ['C', currentQuestion.optionC],
-                ['D', currentQuestion.optionD],
-              ].map(([letter, text]) => (
-                <label key={letter} className="teacher-checkbox-item">
-                  <input
-                    type="radio"
-                    name={`answer-${currentQuestionNumber}`}
-                    checked={answersByQuestionNumber[currentQuestionNumber] === letter}
-                    onChange={() => handleSelectAnswer(letter)}
-                  />
-                  <span>
-                    {letter}. {text || '-'}
-                  </span>
-                </label>
-              ))}
+              {normalizeQuestionType(currentQuestion.type) === QUESTION_TYPE.TRUE_FALSE && (
+                [
+                  ['true', 'Verdadero'],
+                  ['false', 'Falso'],
+                ].map(([value, label]) => (
+                  <label key={value} className="teacher-checkbox-item">
+                    <input
+                      type="radio"
+                      name={`answer-${currentQuestionNumber}`}
+                      checked={answersByQuestionNumber[currentQuestionNumber] === value}
+                      onChange={() => handleSelectAnswer(value)}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))
+              )}
+              {normalizeQuestionType(currentQuestion.type) !== QUESTION_TYPE.TRUE_FALSE && (
+                [
+                  ['A', currentQuestion.optionA, currentQuestion.optionAImageUrl],
+                  ['B', currentQuestion.optionB, currentQuestion.optionBImageUrl],
+                  ['C', currentQuestion.optionC, currentQuestion.optionCImageUrl],
+                  ['D', currentQuestion.optionD, currentQuestion.optionDImageUrl],
+                ].map(([letter, text, imageUrl]) => {
+                  const isMultipleChoice = normalizeQuestionType(currentQuestion.type) === QUESTION_TYPE.MULTIPLE_CHOICE
+                  const currentAnswers = normalizeAnswerList(answersByQuestionNumber[currentQuestionNumber])
+                  return (
+                    <label key={letter} className="teacher-checkbox-item">
+                      <input
+                        type={isMultipleChoice ? 'checkbox' : 'radio'}
+                        name={`answer-${currentQuestionNumber}`}
+                        checked={isMultipleChoice ? currentAnswers.includes(letter) : answersByQuestionNumber[currentQuestionNumber] === letter}
+                        onChange={() => (isMultipleChoice ? handleToggleMultipleAnswer(letter) : handleSelectAnswer(letter))}
+                      />
+                      <span>
+                        {letter}. {text || (imageUrl ? '' : '-')}
+                        {imageUrl && (
+                          <img className="evaluation-option-image" src={imageUrl} alt={`Imagen opcion ${letter}`} />
+                        )}
+                      </span>
+                    </label>
+                  )
+                })
+              )}
             </div>
             <div className="modal-actions">
               <button

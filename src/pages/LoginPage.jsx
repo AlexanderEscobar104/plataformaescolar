@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { getAuthErrorMessage } from '../utils/authErrors'
@@ -6,11 +6,6 @@ import logoFallback from '../assets/logo-plataforma.svg'
 import PasswordField from '../components/PasswordField'
 import OperationStatusModal from '../components/OperationStatusModal'
 import { isLikelyMobileDevice } from '../utils/device'
-
-function buildQrImageUrl(payload, size = 280) {
-  const safeSize = Math.max(180, Number(size) || 280)
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${safeSize}x${safeSize}&data=${encodeURIComponent(payload)}`
-}
 
 function LoginPage() {
   const navigate = useNavigate()
@@ -20,53 +15,18 @@ function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [qrSession, setQrSession] = useState(null)
-  const [qrLoading, setQrLoading] = useState(false)
-  const [qrStatus, setQrStatus] = useState('')
-  const [qrImageFailed, setQrImageFailed] = useState(false)
   const [logo, setLogo] = useState('/logo_plataforma_digital.png')
   const [modalOpen, setModalOpen] = useState(false)
   const [modalMessage, setModalMessage] = useState('')
-  const [showQrLogin, setShowQrLogin] = useState(() => !isLikelyMobileDevice())
   const [isMobileDevice, setIsMobileDevice] = useState(() => isLikelyMobileDevice())
   const [passkeySupported, setPasskeySupported] = useState(false)
   const [checkingPasskeySupport, setCheckingPasskeySupport] = useState(false)
-
-  const qrImageUrl = useMemo(() => {
-    if (!qrSession?.qrPayload) return ''
-    return buildQrImageUrl(qrSession.qrPayload)
-  }, [qrSession])
-
-  const startQrSession = async () => {
-    try {
-      setQrLoading(true)
-      setQrImageFailed(false)
-      setQrSession(null)
-      setQrStatus('Generando codigo QR...')
-      const { createQrLoginSession } = await import('../services/qrAuth')
-      const session = await createQrLoginSession()
-      setQrSession(session)
-      setQrStatus('Escanea este codigo QR desde Configuracion > Dispositivos vinculados en tu celular.')
-    } catch (error) {
-      setQrStatus('No fue posible generar el codigo QR.')
-      setModalMessage(error?.message || 'No fue posible generar el codigo QR.')
-      setModalOpen(true)
-    } finally {
-      setQrLoading(false)
-    }
-  }
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
 
     const updateDeviceMode = () => {
-      const mobileDevice = isLikelyMobileDevice()
-      const shouldShowQr = !mobileDevice
-      setIsMobileDevice(mobileDevice)
-      setShowQrLogin(shouldShowQr)
-      if (!shouldShowQr) {
-        setAuthMethod((currentValue) => (currentValue === 'qr' ? 'password' : currentValue))
-      }
+      setIsMobileDevice(isLikelyMobileDevice())
     }
 
     updateDeviceMode()
@@ -126,85 +86,10 @@ function LoginPage() {
   }, [isMobileDevice])
 
   useEffect(() => {
-    if (authMethod !== 'qr' || !qrSession?.sessionId || !qrSession?.sessionKey) {
-      return undefined
-    }
-
-    let cancelled = false
-
-    const pollStatus = async () => {
-      try {
-        const { consumeQrLoginSession, getQrLoginSessionStatus } = await import('../services/qrAuth')
-        const sessionStatus = await getQrLoginSessionStatus({
-          sessionId: qrSession.sessionId,
-          sessionKey: qrSession.sessionKey,
-        })
-
-        if (cancelled) return
-
-        const status = String(sessionStatus?.status || 'pending')
-        if (status === 'approved' && sessionStatus?.customToken) {
-          setQrStatus('Codigo aprobado. Iniciando sesion...')
-          setLoading(true)
-          await loginWithCustomToken(sessionStatus.customToken, 'ingreso_qr')
-          await consumeQrLoginSession({
-            sessionId: qrSession.sessionId,
-            sessionKey: qrSession.sessionKey,
-          }).catch(() => {})
-          navigate('/dashboard', { replace: true })
-          return
-        }
-
-        if (status === 'expired') {
-          setQrSession(null)
-          setQrStatus('El codigo QR vencio. Genera uno nuevo para continuar.')
-          return
-        }
-
-        if (status === 'consumed') {
-          setQrSession(null)
-          setQrStatus('Este codigo QR ya fue usado.')
-          return
-        }
-
-        setQrStatus('Esperando confirmacion desde el celular...')
-      } catch (error) {
-        if (!cancelled) {
-          setQrStatus(error?.message || 'No fue posible validar el estado del codigo QR.')
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    pollStatus()
-    const intervalId = window.setInterval(pollStatus, 2500)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(intervalId)
-    }
-  }, [authMethod, loginWithCustomToken, navigate, qrSession])
-
-  useEffect(() => {
-    if (!showQrLogin && authMethod === 'qr') {
-      setAuthMethod('password')
-    }
-  }, [authMethod, showQrLogin])
-
-  useEffect(() => {
     if ((!passkeySupported || !isMobileDevice) && authMethod === 'passkey') {
       setAuthMethod('password')
     }
   }, [authMethod, isMobileDevice, passkeySupported])
-
-  useEffect(() => {
-    if (authMethod === 'qr' && !qrSession && !qrLoading) {
-      startQrSession().catch(() => {})
-    }
-  }, [authMethod, qrLoading, qrSession])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -227,10 +112,6 @@ function LoginPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleRefreshQr = async () => {
-    await startQrSession()
   }
 
   const handlePasskeySignIn = async () => {
@@ -262,24 +143,17 @@ function LoginPage() {
         <h1>Iniciar sesion</h1>
         <p className="subtitle">Accede a tu plataforma escolar</p>
 
-        <div className="auth-method-switch" role="tablist" aria-label="Metodo de autenticacion">
-          <button
-            type="button"
-            className={`auth-method-button${authMethod === 'password' ? ' active' : ''}`}
-            onClick={() => setAuthMethod('password')}
-          >
-            Correo electronico y contrasena
-          </button>
-          {showQrLogin && (
-            <button
-              type="button"
-              className={`auth-method-button${authMethod === 'qr' ? ' active' : ''}`}
-              onClick={() => setAuthMethod('qr')}
-            >
-              Codigo QR
-            </button>
-          )}
-          {!checkingPasskeySupport && passkeySupported && isMobileDevice && (
+        {!checkingPasskeySupport && passkeySupported && isMobileDevice && (
+          <div className="auth-method-switch" role="tablist" aria-label="Metodo de autenticacion">
+            {authMethod === 'passkey' && (
+              <button
+                type="button"
+                className="auth-method-button"
+                onClick={() => setAuthMethod('password')}
+              >
+                Usar contrasena
+              </button>
+            )}
             <button
               type="button"
               className={`auth-method-button${authMethod === 'passkey' ? ' active' : ''}`}
@@ -287,8 +161,8 @@ function LoginPage() {
             >
               Face ID / biometria
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {authMethod === 'password' ? (
           <form className="form" onSubmit={handleSubmit}>
@@ -317,41 +191,6 @@ function LoginPage() {
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
           </form>
-        ) : authMethod === 'qr' ? (
-          <div className="qr-login-panel">
-            <div className="qr-login-code">
-              {qrImageUrl && !qrImageFailed ? (
-                <img
-                  src={qrImageUrl}
-                  alt="Codigo QR para iniciar sesion"
-                  className="qr-login-image"
-                  onError={() => setQrImageFailed(true)}
-                />
-              ) : (
-                <div className="qr-login-placeholder">
-                  {qrLoading ? 'Preparando codigo QR...' : 'No fue posible cargar la imagen del QR.'}
-                </div>
-              )}
-            </div>
-            <p className="subtitle qr-login-status">{qrStatus || 'Generando codigo QR...'}</p>
-            {qrSession?.qrPayload && (
-              <textarea
-                className="qr-login-payload"
-                readOnly
-                value={qrSession.qrPayload}
-                aria-label="Codigo QR en texto"
-                rows="3"
-              />
-            )}
-            <div className="qr-login-actions">
-              <button type="button" className="button" onClick={handleRefreshQr} disabled={qrLoading || loading}>
-                {qrLoading ? 'Generando...' : 'Generar nuevo QR'}
-              </button>
-            </div>
-            <p className="feedback">
-              En el celular abre Configuracion &gt; Dispositivos vinculados, escanea el QR y aprueba el acceso.
-            </p>
-          </div>
         ) : (
           <div className="qr-login-panel passkey-login-panel">
             <div className="qr-login-code passkey-login-card">

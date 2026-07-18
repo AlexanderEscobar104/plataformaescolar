@@ -248,6 +248,9 @@ function PaymentsPage() {
   const [receiptSignatures, setReceiptSignatures] = useState([])
   const [selectedRecipientRole, setSelectedRecipientRole] = useState('estudiante')
   const [selectedStudentId, setSelectedStudentId] = useState('')
+  const [recipientGradeFilter, setRecipientGradeFilter] = useState('')
+  const [recipientGroupFilter, setRecipientGroupFilter] = useState('')
+  const [recipientSearch, setRecipientSearch] = useState('')
   const [periodLabel, setPeriodLabel] = useState(normalizePeriodLabel(''))
   const [customDueDate, setCustomDueDate] = useState('')
   const [massPeriodLabel, setMassPeriodLabel] = useState(normalizePeriodLabel(''))
@@ -483,9 +486,37 @@ function PaymentsPage() {
   )
 
   const selectableRecipients = useMemo(
-    () => students.filter((student) => String(student.role || '').trim().toLowerCase() === String(selectedRecipientRole).trim().toLowerCase()),
-    [selectedRecipientRole, students],
+    () => {
+      const normalizedRole = String(selectedRecipientRole || '').trim().toLowerCase()
+      const normalizedSearch = recipientSearch.trim().toLowerCase()
+
+      return students.filter((student) => {
+        const role = String(student.role || '').trim().toLowerCase()
+        if (normalizedRole && role !== normalizedRole) return false
+        if (recipientGradeFilter && String(student.grado || '').trim() !== String(recipientGradeFilter).trim()) return false
+        if (recipientGroupFilter && String(student.grupo || '').trim() !== String(recipientGroupFilter).trim()) return false
+        if (!normalizedSearch) return true
+
+        const haystack = `${student.name || ''} ${student.numeroDocumento || ''} ${student.grado || ''} ${student.grupo || ''} ${role}`.toLowerCase()
+        return haystack.includes(normalizedSearch)
+      })
+    },
+    [recipientGradeFilter, recipientGroupFilter, recipientSearch, selectedRecipientRole, students],
   )
+
+  const recipientGradeOptions = useMemo(() => {
+    const source = students.filter((student) => String(student.role || '').trim().toLowerCase() === String(selectedRecipientRole).trim().toLowerCase())
+    return Array.from(new Set(source.map((student) => String(student.grado || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  }, [selectedRecipientRole, students])
+
+  const recipientGroupOptions = useMemo(() => {
+    const source = students.filter((student) => {
+      if (String(student.role || '').trim().toLowerCase() !== String(selectedRecipientRole).trim().toLowerCase()) return false
+      if (recipientGradeFilter && String(student.grado || '').trim() !== String(recipientGradeFilter).trim()) return false
+      return true
+    })
+    return Array.from(new Set(source.map((student) => String(student.grupo || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+  }, [recipientGradeFilter, selectedRecipientRole, students])
 
   useEffect(() => {
     if (!selectedStudentId) return
@@ -507,21 +538,39 @@ function PaymentsPage() {
 
   const filteredCharges = useMemo(() => {
     const normalized = search.trim().toLowerCase()
-    const byStudent = selectedStudentId
-      ? charges.filter((item) => String(item.recipientUid || item.studentUid || '') === String(selectedStudentId))
-      : charges
+    const selectedRecipientIds = new Set(selectableRecipients.map((item) => item.id))
+    const activePeriodLabel = String(periodLabel || '').trim()
 
-    if (!normalized) return byStudent
-    return byStudent.filter((item) => {
+    const byGenerationCardFilters = charges.filter((item) => {
+      const recipientId = String(item.recipientUid || item.studentUid || '').trim()
+      if (selectedStudentId && recipientId !== String(selectedStudentId)) return false
+      if (selectedRecipientRole && recipientId && !selectedRecipientIds.has(recipientId)) return false
+      if (activePeriodLabel && String(item.periodLabel || '').trim() !== activePeriodLabel) return false
+      if (recipientSearch.trim()) {
+        const haystack = `${item.recipientName || item.studentName || ''} ${item.recipientDocument || item.studentDocument || ''} ${item.conceptName || ''}`.toLowerCase()
+        if (!haystack.includes(recipientSearch.trim().toLowerCase()) && (!recipientId || !selectedRecipientIds.has(recipientId))) return false
+      }
+      return true
+    })
+
+    if (!normalized) return byGenerationCardFilters
+    return byGenerationCardFilters.filter((item) => {
       const haystack = `${item.recipientName || item.studentName || ''} ${item.conceptName || ''} ${item.periodLabel || ''} ${item.resolvedStatus || ''}`.toLowerCase()
       return haystack.includes(normalized)
     })
-  }, [charges, search, selectedStudentId])
+  }, [charges, periodLabel, recipientSearch, search, selectableRecipients, selectedRecipientRole, selectedStudentId])
 
   const filteredTransactions = useMemo(() => {
-    if (!selectedStudentId) return transactions
-    return transactions.filter((item) => String(item.recipientUid || item.studentUid || '') === String(selectedStudentId))
-  }, [selectedStudentId, transactions])
+    const selectedRecipientIds = new Set(selectableRecipients.map((item) => item.id))
+    const activePeriodLabel = String(periodLabel || '').trim()
+    return transactions.filter((item) => {
+      const recipientId = String(item.recipientUid || item.studentUid || '').trim()
+      if (selectedStudentId && recipientId !== String(selectedStudentId)) return false
+      if (selectedRecipientRole && recipientId && !selectedRecipientIds.has(recipientId)) return false
+      if (activePeriodLabel && String(item.periodLabel || '').trim() && String(item.periodLabel || '').trim() !== activePeriodLabel) return false
+      return true
+    })
+  }, [periodLabel, selectableRecipients, selectedRecipientRole, selectedStudentId, transactions])
 
   const studentsForMassGeneration = useMemo(() => {
     return students.filter((student) => {
@@ -548,8 +597,7 @@ function PaymentsPage() {
   )
 
   const summary = useMemo(() => {
-    const source = selectedStudentId ? filteredCharges : charges
-    return source.reduce(
+    return filteredCharges.reduce(
       (acc, item) => {
         const status = String(item.resolvedStatus || item.status || '').trim().toLowerCase()
         if (status === 'anulado') return acc
@@ -560,7 +608,7 @@ function PaymentsPage() {
       },
       { total: 0, paid: 0, balance: 0 },
     )
-  }, [charges, filteredCharges, selectedStudentId])
+  }, [filteredCharges])
 
   const openSmsFromPayment = useCallback(({ charge = null, transaction = null } = {}) => {
     const chargeData = charge || {}
@@ -1364,13 +1412,74 @@ function PaymentsPage() {
           </div>
           <label>
             <span>Rol</span>
-            <select className="guardian-student-switcher-select" value={selectedRecipientRole} onChange={(event) => setSelectedRecipientRole(event.target.value)} disabled={loading}>
+            <select
+              className="guardian-student-switcher-select"
+              value={selectedRecipientRole}
+              onChange={(event) => {
+                setSelectedRecipientRole(event.target.value)
+                setSelectedStudentId('')
+                setRecipientGradeFilter('')
+                setRecipientGroupFilter('')
+              }}
+              disabled={loading}
+            >
               {roleOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
             </select>
+          </label>
+          <label>
+            <span>Grupo</span>
+            <select
+              className="guardian-student-switcher-select"
+              value={recipientGradeFilter}
+              onChange={(event) => {
+                setRecipientGradeFilter(event.target.value)
+                setRecipientGroupFilter('')
+                setSelectedStudentId('')
+              }}
+              disabled={loading || selectedRecipientRole !== 'estudiante'}
+            >
+              <option value="">Todos</option>
+              {recipientGradeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Subgrupo</span>
+            <select
+              className="guardian-student-switcher-select"
+              value={recipientGroupFilter}
+              onChange={(event) => {
+                setRecipientGroupFilter(event.target.value)
+                setSelectedStudentId('')
+              }}
+              disabled={loading || selectedRecipientRole !== 'estudiante'}
+            >
+              <option value="">Todos</option>
+              {recipientGroupOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Buscar titular</span>
+            <input
+              value={recipientSearch}
+              onChange={(event) => {
+                setRecipientSearch(event.target.value)
+                setSelectedStudentId('')
+              }}
+              placeholder="Nombre o documento"
+              disabled={loading}
+            />
           </label>
           <label>
             <span>Titular</span>
@@ -1458,20 +1567,6 @@ function PaymentsPage() {
         </div>
       </div>
 
-
-      <div className="settings-module-card chat-settings-card">
-        <h3>Automatizacion de facturacion y cobro</h3>
-        <p>Los recordatorios para acudientes ahora se generan automaticamente todos los dias desde una tarea programada del backend.</p>
-        <p>
-          La generacion masiva crea o actualiza la facturacion del periodo y la fecha de vencimiento configurados en su propio panel para todos los titulares visibles del rol elegido. Para estudiantes puedes segmentar ademas por grupo y subgrupo.
-        </p>
-      </div>
-
-      <div className="settings-module-card chat-settings-card">
-        <h3>Estados de facturacion y recibos</h3>
-        <p>El recibo oficial se crea automaticamente al aplicar un pago. Si una transaccion aun no lo tiene, el boton `Emitir comprobante` lo genera y descarga el PDF.</p>
-        <p>El estado del cargo cambia de `pendiente` a `abonado` cuando recibe un pago parcial, a `pagado` cuando el saldo llega a cero, y a `vencido` cuando la fecha de vencimiento ya paso sin pago completo.</p>
-      </div>
 
       <div className="students-toolbar guardian-portal-toolbar" style={{ marginTop: '1.25rem' }}>
         <label style={{ flex: 1 }}>

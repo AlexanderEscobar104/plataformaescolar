@@ -1,0 +1,58 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "asistencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nitRut", "order": "ASCENDING" },
+        { "fieldPath": "uid", "order": "ASCENDING" },
+        { "fieldPath": "marcadoEn", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inasistencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nitRut", "order": "ASCENDING" },
+        { "fieldPath": "estudianteId", "order": "ASCENDING" },
+        { "fieldPath": "creadoEn", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "evaluacion_calificaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nitRut", "order": "ASCENDING" },
+        { "fieldPath": "estudianteUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "estado_cuenta_estudiantes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nitRut", "order": "ASCENDING" },
+        { "fieldPath": "studentUid", "order": "ASCENDING" },
+        { "fieldPath": "dueDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tareas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nitRut", "order": "ASCENDING" },
+        { "fieldPath": "cursoId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tareas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nitRut", "order": "ASCENDING" },
+        { "fieldPath": "creadoPorUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ]
+}

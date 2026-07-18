@@ -22,6 +22,7 @@ import {
 } from '../../utils/announcements'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import AnnouncementDisplay from '../../components/AnnouncementDisplay'
+import OperationStatusModal from '../../components/OperationStatusModal'
 
 const MAX_IMAGE_FILES = 5
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
@@ -111,6 +112,7 @@ function AnnouncementsPage() {
   const [newVideo, setNewVideo] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [operationModal, setOperationModal] = useState({ show: false, type: 'success', title: '', message: '' })
   const [previewImages, setPreviewImages] = useState([])
   const [previewVideo, setPreviewVideo] = useState(null)
   const [targetRoleOptions, setTargetRoleOptions] = useState([])
@@ -383,7 +385,7 @@ function AnnouncementsPage() {
     const allImages = [...existingImages, ...newImages, ...pickedFiles]
 
     if (allImages.length > MAX_IMAGE_FILES) {
-      setFeedback(`Solo puedes adjuntar hasta ${MAX_IMAGE_FILES} imagenes.`)
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: `Solo puedes adjuntar hasta ${MAX_IMAGE_FILES} imagenes.` })
       event.target.value = ''
       return
     }
@@ -392,7 +394,7 @@ function AnnouncementsPage() {
       (file) => !String(file.type || '').startsWith('image/') || file.size > MAX_FILE_SIZE_BYTES,
     )
     if (invalidFile) {
-      setFeedback(`La imagen "${invalidFile.name}" no es valida o supera 25MB.`)
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: `La imagen "${invalidFile.name}" no es valida o supera 25MB.` })
       event.target.value = ''
       return
     }
@@ -407,13 +409,13 @@ function AnnouncementsPage() {
     if (!pickedFile) return
 
     if (!String(pickedFile.type || '').startsWith('video/')) {
-      setFeedback('El archivo de video debe ser un video valido.')
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: 'El archivo de video debe ser un video valido.' })
       event.target.value = ''
       return
     }
 
     if (pickedFile.size > MAX_FILE_SIZE_BYTES) {
-      setFeedback('El video supera el limite de 25MB.')
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: 'El video supera el limite de 25MB.' })
       event.target.value = ''
       return
     }
@@ -460,17 +462,17 @@ function AnnouncementsPage() {
       formData.linkType === 'external' ? normalizeAnnouncementExternalUrl(formData.externalLink) : ''
 
     if (!formData.title.trim()) {
-      setFeedback('El titulo es obligatorio.')
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: 'El titulo es obligatorio.' })
       return
     }
 
     if (formData.videoUrl.trim() && !normalizedVideoUrl) {
-      setFeedback('La URL de video no es valida.')
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: 'La URL de video no es valida.' })
       return
     }
 
     if (formData.linkType === 'external' && !normalizedExternalLink) {
-      setFeedback('La URL externa del anuncio no es valida.')
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: 'La URL externa del anuncio no es valida.' })
       return
     }
 
@@ -478,7 +480,7 @@ function AnnouncementsPage() {
       formData.linkType === 'internal' &&
       !ANNOUNCEMENT_INTERNAL_LINK_OPTIONS.some((option) => option.value === formData.internalLink)
     ) {
-      setFeedback('Debes elegir una pagina interna valida.')
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: 'Debes elegir una pagina interna valida.' })
       return
     }
 
@@ -490,17 +492,17 @@ function AnnouncementsPage() {
       !newVideo &&
       !normalizedVideoUrl
     ) {
-      setFeedback('Debes agregar contenido, imagenes o video.')
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: 'Debes agregar contenido, imagenes o video.' })
       return
     }
 
     if (!formData.showAsModal && !formData.showOnHome) {
-      setFeedback('Debes marcar al menos una opcion: mostrar como modal o mostrar en el inicio.')
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: 'Debes marcar al menos una opcion: mostrar como modal o mostrar en el inicio.' })
       return
     }
 
     if (formData.expirationDate && new Date(formData.expirationDate) < new Date(todayDateInput)) {
-      setFeedback('La fecha de vencimiento no puede ser menor a hoy.')
+      setOperationModal({ show: true, type: 'error', title: 'Error de validacion', message: 'La fecha de vencimiento no puede ser menor a hoy.' })
       return
     }
 
@@ -557,8 +559,9 @@ function AnnouncementsPage() {
         })
       })
       resetForm()
+      setOperationModal({ show: true, type: 'success', title: 'Operacion exitosa', message: 'Anuncio guardado correctamente.' })
     } catch {
-      setFeedback('Ocurrio un error al guardar el anuncio.')
+      setOperationModal({ show: true, type: 'error', title: 'Error', message: 'Ocurrio un error al guardar el anuncio.' })
     } finally {
       setSubmitting(false)
     }
@@ -629,7 +632,13 @@ function AnnouncementsPage() {
             </div>
           </div>
 
-          {feedback && <p className="feedback error">{feedback}</p>}
+          <OperationStatusModal
+            open={operationModal.show}
+            type={operationModal.type}
+            title={operationModal.title}
+            message={operationModal.message}
+            onClose={() => setOperationModal({ ...operationModal, show: false })}
+          />
 
           {showForm ? (
             <form className="form announcements-form" onSubmit={handleSubmit}>

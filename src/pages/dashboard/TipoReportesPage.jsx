@@ -280,14 +280,6 @@ function TipoReportesPage() {
           type="button"
           className="button secondary small"
           disabled={saving}
-          onClick={() => createSuggestedType({ nombre: 'Historial de modificaciones', clave: 'historial_modificaciones' })}
-        >
-          Crear tipo Historial
-        </button>
-        <button
-          type="button"
-          className="button secondary small"
-          disabled={saving}
           onClick={() => createSuggestedType({ nombre: 'Auditoria de accesos', clave: 'auditoria_accesos' })}
         >
           Crear tipo Auditoria accesos

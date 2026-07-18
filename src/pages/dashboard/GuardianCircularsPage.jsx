@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import useGuardianPortal from '../../hooks/useGuardianPortal'
 import GuardianStudentSwitcher from '../../components/GuardianStudentSwitcher'
 import { matchesStudentAudience, summarizeStudentAudience } from '../../utils/studentAudience'
+import { openExternalDocument } from '../../utils/nativeLinks'
 import {
   findDocumentSignature,
   loadUserDocumentSignatures,
@@ -197,11 +198,11 @@ function GuardianCircularsPage() {
                     <td data-label="Aplica para">{summarizeStudentAudience(item)}</td>
                     <td data-label="Archivo">
                       {item.pdf?.url ? (
-                        <a href={item.pdf.url} target="_blank" rel="noreferrer" download className="pdf-download-icon" title="Descargar PDF" aria-label="Descargar PDF">
+                        <button type="button" onClick={() => openExternalDocument(item.pdf.url)} className="pdf-download-icon" title="Descargar PDF" aria-label="Descargar PDF">
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M6 2h8l4 4v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 1.5V7h3.5L13 3.5ZM8 12h2.2a2.3 2.3 0 0 1 0 4.6H8V12Zm2 1.4H9.5v1.8H10a.9.9 0 1 0 0-1.8Zm3-1.4h1.6a2.2 2.2 0 0 1 0 4.4H13V12Zm1.5 1.3V15h.1a.9.9 0 1 0 0-1.7h-.1Zm3.5-1.3H21v1.4h-1.5v.6h1.3v1.3h-1.3V17H18v-5Z" />
                           </svg>
-                        </a>
+                        </button>
                       ) : (
                         '-'
                       )}

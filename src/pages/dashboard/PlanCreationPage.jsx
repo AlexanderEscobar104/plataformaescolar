@@ -20,6 +20,7 @@ const MODULE_OPTIONS = [
   { key: 'auditoria-sistema', label: 'Auditoria del sistema', route: '/dashboard/auditoria-sistema' },
   { key: 'reconocimientos', label: 'Certificados', route: '/dashboard/reconocimientos' },
   { key: 'boletines', label: 'Boletines', route: '/dashboard/boletines' },
+  { key: 'reportar-notas', label: 'Reportar notas', route: '/dashboard/reportar-notas' },
   { key: 'tareas', label: 'Tareas', route: '/dashboard/tareas' },
   { key: 'evaluaciones', label: 'Evaluaciones', route: '/dashboard/evaluaciones' },
   { key: 'horario', label: 'Horario', route: '/dashboard/horario' },
@@ -63,6 +64,7 @@ const MODULE_OPTIONS = [
   { key: 'plantillas-certificados', label: 'Plantillas de certificados', route: '/dashboard/plantillas-certificados' },
   { key: 'estructura-boletines', label: 'Estructura de boletines', route: '/dashboard/estructura-boletines' },
   { key: 'configuracion-chat', label: 'Configuracion de chat', route: '/dashboard/configuracion-chat' },
+  { key: 'configuracion-asistente-ai', label: 'Configuracion de asistente IA', route: '/dashboard/configuracion-asistente-ai' },
   { key: 'cambiar-clave', label: 'Cambiar clave', route: '/dashboard/cambiar-clave' },
   { key: 'datos-servidor-correo', label: 'Datos del servidor de correo', route: '/dashboard/datos-servidor-correo' },
   { key: 'configuracion-mensajes', label: 'Configuracion de mensajes', route: '/dashboard/configuracion-mensajes' },
@@ -140,6 +142,17 @@ function normalizeCredentialSeed(value) {
     .toLowerCase()
     .replace(/\s+/g, '')
     .replace(/[^a-z0-9._-]/g, '')
+}
+
+const ADMIN_EMAIL_DOMAIN = 'edupleace.com'
+
+function buildDefaultAdminEmail(value) {
+  const seed = normalizeCredentialSeed(value)
+  return seed ? `${seed}@${ADMIN_EMAIL_DOMAIN}` : ''
+}
+
+function buildDefaultAdminPassword(value) {
+  return normalizeCredentialSeed(value)
 }
 
 function resolveDateInputValue(value) {
@@ -298,6 +311,8 @@ function PlanCreationPage() {
     razonSocial: '',
     nombreComercial: '',
     nitEmpresa: '',
+    adminEmail: '',
+    adminPassword: '',
     adminCelular: '',
     valorPlan: '',
     cantidadUsuariosPermitidos: '',
@@ -315,23 +330,8 @@ function PlanCreationPage() {
     estado: 'activo',
   })
 
-  const generatedEmail = useMemo(() => {
-    const normalizedNit = String(form.nitEmpresa || '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '')
-      .replace(/[^a-z0-9._-]/g, '')
-    if (!normalizedNit) return ''
-    return `${normalizedNit}@plataformaescolar.com`
-  }, [form.nitEmpresa])
-
-  const generatedPassword = useMemo(() => {
-    return String(form.nitEmpresa || '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '')
-      .replace(/[^a-z0-9._-]/g, '')
-  }, [form.nitEmpresa])
+  const generatedEmail = String(form.adminEmail || '').trim().toLowerCase()
+  const generatedPassword = String(form.adminPassword || '').trim()
 
   const filteredModuleOptions = useMemo(() => {
     const query = moduleSearch.trim().toLowerCase()
@@ -372,6 +372,8 @@ function PlanCreationPage() {
       razonSocial: '',
       nombreComercial: '',
       nitEmpresa: '',
+      adminEmail: '',
+      adminPassword: '',
       adminCelular: '',
       valorPlan: '',
       cantidadUsuariosPermitidos: '',
@@ -388,6 +390,15 @@ function PlanCreationPage() {
       bloquearModulosAlVencer: true,
       estado: 'activo',
     })
+  }
+
+  const handleNitEmpresaChange = (value) => {
+    setForm((prev) => ({
+      ...prev,
+      nitEmpresa: value,
+      adminEmail: buildDefaultAdminEmail(value),
+      adminPassword: buildDefaultAdminPassword(value),
+    }))
   }
 
   const toggleModule = (moduleKey) => {
@@ -543,11 +554,11 @@ function PlanCreationPage() {
       return
     }
     if (!generatedEmail) {
-      openStatusModal('El nit empresa no genera un correo valido.')
+      openStatusModal('Debes ingresar el usuario administrador.')
       return
     }
     if (generatedPassword.length < 6) {
-      openStatusModal('La clave (nit empresa) debe tener al menos 6 caracteres.')
+      openStatusModal('La clave generada debe tener al menos 6 caracteres.')
       return
     }
     if (new Date(fechaInicioOperacion) < new Date(fechaAdquisicion)) {
@@ -681,6 +692,7 @@ function PlanCreationPage() {
         estado,
         adminUid: createdUser.uid,
         adminEmail: generatedEmail,
+        adminPassword: generatedPassword,
         adminRole: 'administrador',
         createdAt: serverTimestamp(),
         createdByUid: user?.uid || '',
@@ -742,6 +754,8 @@ function PlanCreationPage() {
       razonSocial: plan.razonSocial || '',
       nombreComercial: plan.nombreComercial || '',
       nitEmpresa: plan.nitEmpresa || '',
+      adminEmail: plan.adminEmail || buildDefaultAdminEmail(plan.nitEmpresa),
+      adminPassword: plan.adminPassword || buildDefaultAdminPassword(plan.nitEmpresa),
       adminCelular: plan.adminCelular || '',
       valorPlan: String(plan.valorPlan ?? ''),
       cantidadUsuariosPermitidos: String(plan.cantidadUsuariosPermitidos ?? ''),
@@ -767,8 +781,9 @@ function PlanCreationPage() {
     try {
       setDeleting(true)
       const adminEmail = String(planToDelete.adminEmail || '').trim().toLowerCase()
-      const adminPassword = normalizeCredentialSeed(planToDelete.nitEmpresa)
+      const adminPassword = String(planToDelete.adminPassword || normalizeCredentialSeed(planToDelete.nitEmpresa)).trim()
 
+      let authDeleteWarning = ''
       if (adminEmail && adminPassword) {
         const appName = `delete-plan-auth-${Date.now()}-${Math.random().toString(16).slice(2)}`
         const secondaryApp = initializeApp(firebaseConfig, appName)
@@ -778,6 +793,9 @@ function PlanCreationPage() {
           if (secondaryAuth.currentUser) {
             await deleteUser(secondaryAuth.currentUser)
           }
+        } catch (authError) {
+          const code = authError?.code || ''
+          authDeleteWarning = getAuthErrorMessage(code) || 'No fue posible eliminar el usuario de autenticacion.'
         } finally {
           await signOut(secondaryAuth).catch(() => {})
           await deleteApp(secondaryApp).catch(() => {})
@@ -789,7 +807,9 @@ function PlanCreationPage() {
       }
 
       await deleteDoc(doc(db, 'planes', planToDelete.id))
-      openStatusModal('Plan eliminado correctamente.')
+      openStatusModal(authDeleteWarning
+        ? `Plan eliminado correctamente. Advertencia: ${authDeleteWarning}`
+        : 'Plan eliminado correctamente.')
       setPlanToDelete(null)
       if (editingPlan?.id === planToDelete.id) resetForm()
       await loadPlans()
@@ -854,7 +874,7 @@ function PlanCreationPage() {
                 id="plan-nit"
                 type="text"
                 value={form.nitEmpresa}
-                onChange={(event) => setForm((prev) => ({ ...prev, nitEmpresa: event.target.value }))}
+                onChange={(event) => handleNitEmpresaChange(event.target.value)}
                 placeholder="Ej: 901234567"
               />
             </label>
@@ -972,8 +992,8 @@ function PlanCreationPage() {
                 id="plan-email-preview"
                 type="text"
                 value={generatedEmail}
-                readOnly
-                placeholder="nitempresa@plataformaescolar.com"
+                onChange={(event) => setForm((prev) => ({ ...prev, adminEmail: event.target.value }))}
+                placeholder="nitempresa@edupleace.com"
               />
             </label>
 
@@ -983,7 +1003,7 @@ function PlanCreationPage() {
                 id="plan-password-preview"
                 type="text"
                 value={generatedPassword}
-                readOnly
+                onChange={(event) => setForm((prev) => ({ ...prev, adminPassword: event.target.value }))}
                 placeholder="nitempresa"
               />
             </label>

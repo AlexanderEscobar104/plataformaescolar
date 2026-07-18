@@ -16,6 +16,7 @@ import PlantelDataPage from '../pages/dashboard/PlantelDataPage'
 import SedesPage from '../pages/dashboard/SedesPage'
 import PermissionsPage from '../pages/dashboard/PermissionsPage'
 import RolesPage from '../pages/dashboard/RolesPage'
+import ReportGradesPage from '../pages/dashboard/ReportGradesPage'
 import ProfessorEditPage from '../pages/dashboard/ProfessorEditPage'
 import ProfessorsListPage from '../pages/dashboard/ProfessorsListPage'
 import RoleRegistrationPage from '../pages/dashboard/RoleRegistrationPage'
@@ -83,6 +84,7 @@ import ServiciosComplementariosPage from '../pages/dashboard/ServiciosComplement
 import StoragePage from '../pages/dashboard/StoragePage'
 import ReportesPage from '../pages/dashboard/ReportesPage'
 import ChatSettingsPage from '../pages/dashboard/ChatSettingsPage'
+import AiAssistantSettingsPage from '../pages/dashboard/AiAssistantSettingsPage'
 import MessageSettingsPage from '../pages/dashboard/MessageSettingsPage'
 import NotificationSettingsPage from '../pages/dashboard/NotificationSettingsPage'
 import AttendanceSettingsPage from '../pages/dashboard/AttendanceSettingsPage'
@@ -182,6 +184,7 @@ function DashboardRoutes() {
         <Route path="auditoria-sistema" element={<AuditSystemPage />} />
         <Route path="reconocimientos" element={<CertificadosPage />} />
         <Route path="boletines" element={<BoletinesPage />} />
+        <Route path="reportar-notas" element={<ReportGradesPage />} />
         <Route path="tareas" element={<TasksPage />} />
         <Route path="tareas/seguimiento/:taskId" element={<TaskFollowUpPage />} />
         <Route path="evaluaciones" element={<EvaluationsPage />} />
@@ -214,6 +217,7 @@ function DashboardRoutes() {
         <Route path="tipo-inasistencias" element={<TipoInasistenciasPage />} />
         <Route path="tipo-permisos" element={<TipoPermisosPage />} />
         <Route path="configuracion-chat" element={<ChatSettingsPage />} />
+          <Route path="configuracion-asistente-ai" element={<AiAssistantSettingsPage />} />
         <Route path="datos-servidor-correo" element={<MailServerSettingsPage />} />
         <Route path="configuracion-mensajes" element={<MessageSettingsPage />} />
         <Route path="configuracion-notificaciones" element={<NotificationSettingsPage />} />

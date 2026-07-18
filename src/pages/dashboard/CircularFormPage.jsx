@@ -8,8 +8,9 @@ import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storag
 import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
-import { PERMISSION_KEYS } from '../../utils/permissions'
+import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 import { buildStudentAudienceOptions } from '../../utils/studentAudience'
+import { normalizeTargetRoles } from '../../utils/audience'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
@@ -32,6 +33,8 @@ function CircularFormPage() {
   const [errorModalMessage, setErrorModalMessage] = useState('')
   const [targetGrades, setTargetGrades] = useState([])
   const [targetStudentSubgroups, setTargetStudentSubgroups] = useState([])
+  const [targetRoles, setTargetRoles] = useState([])
+  const [targetRoleOptions, setTargetRoleOptions] = useState([])
   const [gradeOptions, setGradeOptions] = useState([])
   const [studentSubgroupOptions, setStudentSubgroupOptions] = useState([])
 
@@ -40,13 +43,18 @@ function CircularFormPage() {
 
     const loadAudienceOptions = async () => {
       try {
-        const usersSnapshot = await getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut)))
+        const [usersSnapshot, rolesSnapshot] = await Promise.all([
+          getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut))),
+          getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut))),
+        ])
         const options = buildStudentAudienceOptions(usersSnapshot.docs.map((docSnapshot) => docSnapshot.data() || {}))
         setGradeOptions(options.grades)
         setStudentSubgroupOptions(options.subgroups)
+        setTargetRoleOptions(buildAllRoleOptions(rolesSnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))))
       } catch {
         setGradeOptions([])
         setStudentSubgroupOptions([])
+        setTargetRoleOptions([])
       }
     }
 
@@ -73,6 +81,7 @@ function CircularFormPage() {
         setFechaVencimiento(data.fechaVencimiento || '')
         setTargetGrades(Array.isArray(data.targetGrades) ? data.targetGrades : [])
         setTargetStudentSubgroups(Array.isArray(data.targetStudentSubgroups) ? data.targetStudentSubgroups : [])
+        setTargetRoles(normalizeTargetRoles(data.targetRoles))
       } catch {
         setErrorModalMessage('No fue posible cargar la circular.')
         setShowErrorModal(true)
@@ -123,6 +132,15 @@ function CircularFormPage() {
     ))
   }
 
+  const toggleTargetRole = (roleValue) => {
+    const normalized = String(roleValue || '').trim().toLowerCase()
+    setTargetRoles((prev) => (
+      prev.includes(normalized)
+        ? prev.filter((item) => item !== normalized)
+        : [...prev, normalized]
+    ))
+  }
+
   const uploadPdf = async () => {
     if (!pdfFile) return null
     const filePath = `circulares/${Date.now()}-${pdfFile.name}`
@@ -162,6 +180,7 @@ function CircularFormPage() {
         await updateDocTracked(doc(db, 'circulares', circularId), {
           subject: subject.trim(),
           fechaVencimiento: String(fechaVencimiento || '').trim(),
+          targetRoles: normalizeTargetRoles(targetRoles),
           targetGrades: targetGrades.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           targetStudentSubgroups: targetStudentSubgroups.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           pdf: uploadedPdf || existingCircular?.pdf || null,
@@ -172,6 +191,7 @@ function CircularFormPage() {
         await addDocTracked(collection(db, 'circulares'), {
           subject: subject.trim(),
           fechaVencimiento: String(fechaVencimiento || '').trim(),
+          targetRoles: normalizeTargetRoles(targetRoles),
           targetGrades: targetGrades.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           targetStudentSubgroups: targetStudentSubgroups.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           pdf: uploadedPdf,
@@ -248,6 +268,23 @@ function CircularFormPage() {
                   onChange={(event) => setFechaVencimiento(event.target.value)}
                 />
               </label>
+            </div>
+
+            <div className="settings-module-card chat-settings-card" style={{ marginTop: '1rem' }}>
+              <h3>Aplica para roles</h3>
+              <p>Si no seleccionas ningun rol, la circular se mostrara para todos los roles.</p>
+              <div className="form-grid-2 circular-form-fields">
+                {targetRoleOptions.map((option) => (
+                  <label key={option.value} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={targetRoles.includes(String(option.value || '').trim().toLowerCase())}
+                      onChange={() => toggleTargetRole(option.value)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
             </div>
 
             <div className="settings-module-card chat-settings-card" style={{ marginTop: '1rem' }}>

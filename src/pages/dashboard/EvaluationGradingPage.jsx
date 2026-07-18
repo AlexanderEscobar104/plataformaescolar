@@ -444,7 +444,7 @@ function EvaluationGradingPage() {
     try {
       const [evaluationsSnapshot, studentsSnapshot] = await Promise.all([
         getDocs(query(collection(db, 'evaluaciones'), where('nitRut', '==', userNitRut))),
-        getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante', where('nitRut', '==', userNitRut)))),
+        getDocs(query(collection(db, 'users'), where('role', '==', 'estudiante'), where('nitRut', '==', userNitRut))),
       ])
 
       const mappedEvaluations = evaluationsSnapshot.docs
@@ -504,7 +504,7 @@ function EvaluationGradingPage() {
     } finally {
       setLoading(false)
     }
-  }, [canManageEvaluations, requestedEvaluationId])
+  }, [canManageEvaluations, requestedEvaluationId, userNitRut])
 
   useEffect(() => {
     loadBaseData()

@@ -13,24 +13,6 @@ function formatDateTime(value) {
   return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleString('es-CO')
 }
 
-function resolveHistorySummary(entry) {
-  const before = entry?.datoAnterior && typeof entry.datoAnterior === 'object' ? entry.datoAnterior : null
-  const next = entry?.datoNuevo && typeof entry.datoNuevo === 'object' ? entry.datoNuevo : null
-
-  if (entry?.operacion === 'crear') {
-    const keys = Object.keys(next || {})
-    return keys.length ? `Campos iniciales: ${keys.slice(0, 5).join(', ')}` : 'Documento creado.'
-  }
-
-  if (entry?.operacion === 'eliminar') {
-    const keys = Object.keys(before || {})
-    return keys.length ? `Campos eliminados: ${keys.slice(0, 5).join(', ')}` : 'Documento eliminado.'
-  }
-
-  const keys = Object.keys(next || {})
-  return keys.length ? `Campos modificados: ${keys.slice(0, 5).join(', ')}` : 'Actualizacion registrada.'
-}
-
 function resolveAccessSummary(entry) {
   const evento = String(entry?.evento || '').trim().toLowerCase()
   if (evento === 'ingreso') return 'Ingreso manual al sistema.'
@@ -50,7 +32,6 @@ function AuditSystemPage() {
   const [loading, setLoading] = useState(true)
   const [feedback, setFeedback] = useState('')
   const [entries, setEntries] = useState([])
-  const [typeFilter, setTypeFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [dateFilter, setDateFilter] = useState('30')
 
@@ -65,49 +46,23 @@ function AuditSystemPage() {
       try {
         setLoading(true)
         setFeedback('')
-        const [historySnap, accessSnap] = await Promise.all([
-          getDocs(query(collection(db, 'historial_modificaciones'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] })),
-          getDocs(query(collection(db, 'auditoria_accesos'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] })),
-        ])
-
-        const historyRows = historySnap.docs.map((docSnapshot) => {
-          const data = docSnapshot.data() || {}
-          return {
-            id: `hist_${docSnapshot.id}`,
-            source: 'modificacion',
-            createdAt: data.fechaModificacion || null,
-            actorName: data.usuarioNombre || 'Usuario',
-            actorDocument: data.usuarioNumeroDocumento || '',
-            actorUid: data.usuarioUid || '',
-            title: `${data.operacion || 'actualizar'} ${data.coleccion || 'documento'}`,
-            collectionName: data.coleccion || '',
-            documentId: data.documentoId || '',
-            operation: data.operacion || '',
-            summary: resolveHistorySummary(data),
-            raw: data,
-          }
-        })
+        const accessSnap = await getDocs(query(collection(db, 'auditoria_accesos'), where('nitRut', '==', userNitRut))).catch(() => ({ docs: [] }))
 
         const accessRows = accessSnap.docs.map((docSnapshot) => {
           const data = docSnapshot.data() || {}
           return {
             id: `acc_${docSnapshot.id}`,
-            source: 'acceso',
             createdAt: data.fechaHora || data.fechaHoraISO || null,
             actorName: data.nombre || data.email || 'Usuario',
             actorDocument: '',
-            actorUid: data.uid || '',
             title: data.evento || 'Evento de acceso',
-            collectionName: 'auditoria_accesos',
-            documentId: docSnapshot.id,
             operation: data.evento || '',
             summary: resolveAccessSummary(data),
-            raw: data,
           }
         })
 
         setEntries(
-          [...historyRows, ...accessRows].sort((a, b) => {
+          accessRows.sort((a, b) => {
             const left = a.createdAt?.toMillis?.() || new Date(a.createdAt || 0).getTime() || 0
             const right = b.createdAt?.toMillis?.() || new Date(b.createdAt || 0).getTime() || 0
             return right - left
@@ -129,8 +84,6 @@ function AuditSystemPage() {
     const now = new Date()
 
     return entries.filter((entry) => {
-      if (typeFilter !== 'all' && entry.source !== typeFilter) return false
-
       if (dateFilter !== 'all') {
         const createdAt = entry.createdAt?.toDate?.() || new Date(entry.createdAt || 0)
         if (!Number.isNaN(createdAt.getTime())) {
@@ -141,33 +94,14 @@ function AuditSystemPage() {
 
       if (!normalized) return true
 
-      const haystack = [
-        entry.title,
-        entry.actorName,
-        entry.actorDocument,
-        entry.collectionName,
-        entry.documentId,
-        entry.operation,
-        entry.summary,
-      ]
-        .join(' ')
-        .toLowerCase()
-
+      const haystack = [entry.title, entry.actorName, entry.operation, entry.summary].join(' ').toLowerCase()
       return haystack.includes(normalized)
     })
-  }, [dateFilter, entries, search, typeFilter])
+  }, [dateFilter, entries, search])
 
   const stats = useMemo(() => {
-    const modifications = visibleEntries.filter((entry) => entry.source === 'modificacion')
-    const access = visibleEntries.filter((entry) => entry.source === 'acceso')
-    return {
-      total: visibleEntries.length,
-      modifications: modifications.length,
-      access: access.length,
-      creates: modifications.filter((entry) => entry.operation === 'crear').length,
-      deletes: modifications.filter((entry) => entry.operation === 'eliminar').length,
-      logins: access.filter((entry) => String(entry.operation || '').includes('ingreso')).length,
-    }
+    const logins = visibleEntries.filter((entry) => String(entry.operation || '').includes('ingreso')).length
+    return { total: visibleEntries.length, logins }
   }, [visibleEntries])
 
   if (!canViewAudit) {
@@ -187,31 +121,25 @@ function AuditSystemPage() {
         <div className="dashboard-module-hero-copy">
           <span className="dashboard-module-eyebrow">Control y trazabilidad</span>
           <h2>Auditoria del sistema</h2>
-          <p>Consulta accesos y modificaciones relevantes del plantel con filtros rapidos por tipo, fecha y usuario.</p>
+          <p>Consulta de accesos al sistema con filtros por fecha y usuario.</p>
           {feedback && <p className="feedback">{feedback}</p>}
         </div>
         <div className="dashboard-module-hero-note">
           <strong>{stats.total}</strong>
-          <span>Eventos visibles</span>
+          <span>Eventos de acceso</span>
           <small>{userNitRut || 'Sin plantel'}</small>
         </div>
       </div>
 
       <div className="guardian-portal-stats">
         <article className="settings-module-card guardian-portal-stat-card">
-          <h3>Modificaciones</h3>
-          <p>{stats.modifications}</p>
-          <small>{stats.creates} creaciones y {stats.deletes} eliminaciones</small>
-        </article>
-        <article className="settings-module-card guardian-portal-stat-card">
           <h3>Accesos</h3>
-          <p>{stats.access}</p>
+          <p>{stats.total}</p>
           <small>{stats.logins} ingresos registrados</small>
         </article>
         <article className="settings-module-card guardian-portal-stat-card">
           <h3>Filtro actual</h3>
-          <p>{typeFilter === 'all' ? 'Todo' : typeFilter === 'modificacion' ? 'Cambios' : 'Accesos'}</p>
-          <small>{dateFilter === 'all' ? 'Sin limite de fecha' : `Ultimos ${dateFilter} dias`}</small>
+          <p>{dateFilter === 'all' ? 'Sin limite' : `Ultimos ${dateFilter} dias`}</p>
         </article>
       </div>
 
@@ -223,16 +151,8 @@ function AuditSystemPage() {
               className="guardian-filter-input"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Usuario, coleccion, documento o accion"
+              placeholder="Usuario o evento"
             />
-          </label>
-          <label className="guardian-filter-field">
-            <span>Tipo</span>
-            <select className="guardian-filter-input" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-              <option value="all">Todo</option>
-              <option value="modificacion">Modificaciones</option>
-              <option value="acceso">Accesos</option>
-            </select>
           </label>
           <label className="guardian-filter-field">
             <span>Fecha</span>
@@ -262,18 +182,7 @@ function AuditSystemPage() {
                 <p>{entry.summary}</p>
                 <div className="audit-entry-meta">
                   <span className="audit-entry-chip">Usuario: {entry.actorName || 'Sin usuario'}</span>
-                  {entry.actorDocument ? <span className="audit-entry-chip">Documento: {entry.actorDocument}</span> : null}
-                  <span className="audit-entry-chip">
-                    Origen: {entry.source === 'modificacion' ? 'Historial de modificaciones' : 'Auditoria de accesos'}
-                  </span>
-                  {entry.source === 'modificacion' ? (
-                    <>
-                      <span className="audit-entry-chip">Coleccion: {entry.collectionName || '-'}</span>
-                      <span className="audit-entry-chip">Documento: {entry.documentId || '-'}</span>
-                    </>
-                  ) : (
-                    <span className="audit-entry-chip">Evento: {entry.operation || '-'}</span>
-                  )}
+                  <span className="audit-entry-chip">Evento: {entry.operation || '-'}</span>
                 </div>
               </article>
             ))}

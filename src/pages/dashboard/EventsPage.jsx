@@ -7,10 +7,11 @@ import { uploadBytesTracked, getTrackedDownloadURL } from '../../services/storag
 import { useAuth } from '../../hooks/useAuth'
 import DragDropFileInput from '../../components/DragDropFileInput'
 import OperationStatusModal from '../../components/OperationStatusModal'
-import { PERMISSION_KEYS } from '../../utils/permissions'
+import { buildAllRoleOptions, PERMISSION_KEYS } from '../../utils/permissions'
 import ExportExcelButton from '../../components/ExportExcelButton'
 import PaginationControls from '../../components/PaginationControls'
 import { buildStudentAudienceOptions, summarizeStudentAudience } from '../../utils/studentAudience'
+import { normalizeTargetRoles, summarizeRoleAudience } from '../../utils/audience'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom']
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
@@ -92,18 +93,21 @@ function EventsPage() {
   const [eventDate, setEventDate] = useState(toIsoDate(new Date()))
   const [existingImages, setExistingImages] = useState([])
   const [newImages, setNewImages] = useState([])
+  const [targetRoles, setTargetRoles] = useState([])
   const [targetGrades, setTargetGrades] = useState([])
   const [targetStudentSubgroups, setTargetStudentSubgroups] = useState([])
+  const [targetRoleOptions, setTargetRoleOptions] = useState([])
   const [gradeOptions, setGradeOptions] = useState([])
   const [studentSubgroupOptions, setStudentSubgroupOptions] = useState([])
 
   const loadEvents = useCallback(async () => {
     setLoading(true)
     try {
-      const [eventsSnapshot, responsesSnapshot, usersSnapshot] = await Promise.all([
+      const [eventsSnapshot, responsesSnapshot, usersSnapshot, rolesSnapshot] = await Promise.all([
         getDocs(query(collection(db, 'eventos'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'event_respuestas'), where('nitRut', '==', userNitRut))),
         getDocs(query(collection(db, 'users'), where('nitRut', '==', userNitRut))),
+        getDocs(query(collection(db, 'roles'), where('nitRut', '==', userNitRut))),
       ])
       const mappedEvents = eventsSnapshot.docs
         .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
@@ -126,6 +130,7 @@ function EventsPage() {
       const audienceOptions = buildStudentAudienceOptions(usersRaw)
       setGradeOptions(audienceOptions.grades)
       setStudentSubgroupOptions(audienceOptions.subgroups)
+      setTargetRoleOptions(buildAllRoleOptions(rolesSnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))))
     } finally {
       setLoading(false)
     }
@@ -211,6 +216,7 @@ function EventsPage() {
     setEventDate(toIsoDate(new Date()))
     setExistingImages([])
     setNewImages([])
+    setTargetRoles([])
     setTargetGrades([])
     setTargetStudentSubgroups([])
   }
@@ -238,6 +244,15 @@ function EventsPage() {
   const toggleTargetSubgroup = (subgroupKey) => {
     const normalized = String(subgroupKey || '').trim().toUpperCase()
     setTargetStudentSubgroups((prev) => (
+      prev.includes(normalized)
+        ? prev.filter((item) => item !== normalized)
+        : [...prev, normalized]
+    ))
+  }
+
+  const toggleTargetRole = (roleValue) => {
+    const normalized = String(roleValue || '').trim().toLowerCase()
+    setTargetRoles((prev) => (
       prev.includes(normalized)
         ? prev.filter((item) => item !== normalized)
         : [...prev, normalized]
@@ -290,6 +305,7 @@ function EventsPage() {
           title: title.trim(),
           description: description.trim(),
           eventDate,
+          targetRoles: normalizeTargetRoles(targetRoles),
           targetGrades: targetGrades.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           targetStudentSubgroups: targetStudentSubgroups.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           images: [...existingImages, ...uploadedImages],
@@ -302,6 +318,7 @@ function EventsPage() {
           title: title.trim(),
           description: description.trim(),
           eventDate,
+          targetRoles: normalizeTargetRoles(targetRoles),
           targetGrades: targetGrades.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           targetStudentSubgroups: targetStudentSubgroups.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean),
           images: uploadedImages,
@@ -330,6 +347,7 @@ function EventsPage() {
     setEventDate(eventItem.eventDate || toIsoDate(new Date()))
     setExistingImages(Array.isArray(eventItem.images) ? eventItem.images : [])
     setNewImages([])
+    setTargetRoles(normalizeTargetRoles(eventItem.targetRoles))
     setTargetGrades(Array.isArray(eventItem.targetGrades) ? eventItem.targetGrades : [])
     setTargetStudentSubgroups(Array.isArray(eventItem.targetStudentSubgroups) ? eventItem.targetStudentSubgroups : [])
     setSelectedDay('')
@@ -438,6 +456,22 @@ function EventsPage() {
                 rows={5}
               />
             </label>
+            <div className="settings-module-card chat-settings-card">
+              <h3>Aplica para roles</h3>
+              <p>Si no seleccionas roles, el evento aplica para todos.</p>
+              <div className="form-grid-2 circular-form-fields">
+                {targetRoleOptions.map((option) => (
+                  <label key={option.value} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={targetRoles.includes(String(option.value || '').trim().toLowerCase())}
+                      onChange={() => toggleTargetRole(option.value)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
             <div className="settings-module-card chat-settings-card">
               <h3>Aplica para estudiantes</h3>
               <p>Si no seleccionas grupos o subgrupos, el evento aplica para todos.</p>
@@ -666,7 +700,7 @@ function EventsPage() {
                   <div key={eventItem.id} className="events-day-item">
                     <strong>{eventItem.title || 'Evento'}</strong>
                     <p>{eventItem.description || 'Sin descripcion.'}</p>
-                    <small>Aplica para: {summarizeStudentAudience(eventItem)}</small>
+                    <small>Aplica para: {summarizeRoleAudience(eventItem)} | {summarizeStudentAudience(eventItem)}</small>
                     {Array.isArray(eventItem.images) && eventItem.images.length > 0 && (
                       <div className="event-image-grid">
                         {eventItem.images.map((image) => (

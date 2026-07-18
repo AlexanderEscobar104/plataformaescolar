@@ -60,6 +60,7 @@ function TasksPage() {
   const [errorModalMessage, setErrorModalMessage] = useState('')
   const [search, setSearch] = useState('')
   const [tasks, setTasks] = useState([])
+  const [subjects, setSubjects] = useState([])
   const [taskToDelete, setTaskToDelete] = useState(null)
   const [editingTask, setEditingTask] = useState(null)
   const [taskFiles, setTaskFiles] = useState([])
@@ -88,6 +89,13 @@ function TasksPage() {
     setLoading(true)
     try {
       const snapshot = await getDocs(query(collection(db, 'tareas'), where('nitRut', '==', userNitRut)))
+      const subjectsSnapshot = await getDocs(query(collection(db, 'asignaturas'), where('nitRut', '==', userNitRut)))
+      setSubjects(
+        subjectsSnapshot.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+          .filter((item) => String(item.status || 'activo').trim().toLowerCase() !== 'inactivo')
+          .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+      )
       const pendingExpired = []
       const mapped = snapshot.docs
         .filter((docSnapshot) => {
@@ -348,9 +356,11 @@ function TasksPage() {
           : []
 
         await updateDocTracked(doc(db, 'tareas', editingTask.id), {
+          nitRut: userNitRut,
           grade,
           group,
           subject,
+          subjectId: subjects.find((item) => item.name === subject)?.id || '',
           observation,
           dueDate: form.dueDate,
           status: editingTask.status || 'pendiente',
@@ -362,9 +372,11 @@ function TasksPage() {
         setFeedbackType('success')
       } else {
         const taskRef = await addDocTracked(collection(db, 'tareas'), {
+          nitRut: userNitRut,
           grade,
           group,
           subject,
+          subjectId: subjects.find((item) => item.name === subject)?.id || '',
           observation,
           dueDate: form.dueDate,
           status: 'pendiente',
@@ -502,14 +514,18 @@ function TasksPage() {
               </select>
             </label>
             <label htmlFor="task-subject" className="evaluation-field-full">
-              Asunto
-              <input
+              Asignatura
+              <select
                 ref={subjectInputRef}
                 id="task-subject"
-                type="text"
                 value={form.subject}
                 onChange={(event) => setForm((prev) => ({ ...prev, subject: event.target.value }))}
-              />
+              >
+                <option value="">Selecciona asignatura</option>
+                {subjects.map((item) => (
+                  <option key={item.id} value={item.name || ''}>{item.name}</option>
+                ))}
+              </select>
             </label>
             <label htmlFor="task-due-date">
               Fecha vencimiento
@@ -691,7 +707,25 @@ function TasksPage() {
                       </td>
                       <td data-label="Nota">{item.note === '' ? '-' : item.note}</td>
                       <td data-label="Estado">{item.status || 'pendiente'}</td>
-                      <td data-label="Archivos">{item.attachments.length}</td>
+                      <td data-label="Archivos">
+                        {item.attachments.length === 0 ? (
+                          '0'
+                        ) : (
+                          <ul className="tasks-table-attachment-list" aria-label="Archivos de la tarea">
+                            {item.attachments.map((file, index) => (
+                              <li key={file.url || `${file.name || 'archivo'}-${index}`}>
+                                {file.url ? (
+                                  <a href={file.url} target="_blank" rel="noreferrer" download={file.name || undefined}>
+                                    {file.name || `Archivo ${index + 1}`}
+                                  </a>
+                                ) : (
+                                  <span>{file.name || `Archivo ${index + 1}`}</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
                       <td data-label="Acciones" className="student-actions">
                         <button
                           type="button"

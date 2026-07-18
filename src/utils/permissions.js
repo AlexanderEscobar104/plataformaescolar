@@ -123,8 +123,12 @@ const PERMISSION_KEYS = {
   BOLETINES_VIEW: 'boletines_view',
   BOLETINES_EDIT: 'boletines_edit',
   BOLETINES_GENERATE: 'boletines_generate',
+  REPORT_GRADES_VIEW: 'report_grades_view',
+  REPORT_GRADES_EDIT: 'report_grades_edit',
   SCHEDULE_VIEW: 'schedule_view',
   CONFIG_CHAT_MANAGE: 'config_chat_manage',
+  CONFIG_AI_MANAGE: 'config_ai_manage',
+  CHATBOT_USE: 'chatbot_use',
   CONFIG_MAIL_SERVER_MANAGE: 'config_mail_server_manage',
   CONFIG_MESSAGES_MANAGE: 'config_messages_manage',
   CONFIG_NOTIFICATIONS_MANAGE: 'config_notifications_manage',
@@ -918,6 +922,18 @@ const PERMISSIONS_CATALOG = [
     description: 'Permite generar y descargar boletines parciales o finales en PDF.',
   },
   {
+    group: 'Boletines',
+    key: PERMISSION_KEYS.REPORT_GRADES_VIEW,
+    label: 'Ver reportar notas',
+    description: 'Permite visualizar el modulo Reportar notas.',
+  },
+  {
+    group: 'Boletines',
+    key: PERMISSION_KEYS.REPORT_GRADES_EDIT,
+    label: 'Reportar notas',
+    description: 'Permite ingresar y actualizar notas desde el modulo Reportar notas.',
+  },
+  {
     group: 'Configuracion',
     key: PERMISSION_KEYS.CONFIG_CERTIFICADOS_TEMPLATES_MANAGE,
     label: 'Gestionar plantillas de certificados',
@@ -982,6 +998,12 @@ const PERMISSIONS_CATALOG = [
     key: PERMISSION_KEYS.CHAT_ONLINE_VIEW,
     label: 'Chat en linea',
     description: 'Permite acceder al chat en linea dentro de la plataforma.',
+  },
+  {
+    group: 'Mensajes',
+    key: PERMISSION_KEYS.CHATBOT_USE,
+    label: 'Asistente IA',
+    description: 'Permite usar el asistente de inteligencia artificial.',
   },
   {
     group: 'Academico',
@@ -1078,6 +1100,12 @@ const PERMISSIONS_CATALOG = [
     key: PERMISSION_KEYS.CONFIG_CHAT_MANAGE,
     label: 'Configuracion de chat',
     description: 'Permite configurar reglas de chat por rol/grupo.',
+  },
+  {
+    group: 'Configuración',
+    key: PERMISSION_KEYS.CONFIG_AI_MANAGE,
+    label: 'Configuracion de asistente IA',
+    description: 'Permite configurar que roles o grupos pueden usar el asistente de IA.',
   },
   {
     group: 'Configuración',

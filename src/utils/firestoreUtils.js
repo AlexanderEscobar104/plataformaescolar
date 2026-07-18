@@ -4,7 +4,6 @@
  * 
  * Proporciona funciones helper para operaciones seguras en Firestore:
  * - Consultas con validación de tenant
- * - Logging automático de auditoría
  * - Manejo mejorado de errores
  */
 
@@ -59,7 +58,6 @@ export async function getWithTenant(collectionName, userNitRut, additionalWhere 
  * @param {string} docId - ID del documento
  * @param {string} userNitRut - NIT del tenant
  * @param {Object} data - Datos a actualizar
- * @param {boolean} shouldLog - Si debería registrarse en auditoría
  * @returns {Promise<void>}
  */
 export async function updateWithTenant(
@@ -67,7 +65,6 @@ export async function updateWithTenant(
   docId,
   userNitRut,
   data,
-  shouldLog = true,
 ) {
   if (!userNitRut) {
     throw new Error('userNitRut is required for tenant isolation')
@@ -82,23 +79,6 @@ export async function updateWithTenant(
 
     await updateDoc(docRef, updateData)
 
-    // Registrar en auditoría si es necesario
-    if (shouldLog) {
-      await logHistory({
-        collectionName,
-        documentoId: docId,
-        operacion: 'actualizar',
-        datoNuevo: data,
-        userNitRut,
-      }).catch((err) => {
-        console.warn('Failed to log history:', {
-          error: err.message,
-          operation: 'update',
-          collection: collectionName,
-        })
-        // No interrumpir la operación principal si falla el logging
-      })
-    }
   } catch (error) {
     console.error(`Error updating ${collectionName} document:`, {
       error: error.message,
@@ -115,36 +95,18 @@ export async function updateWithTenant(
  * @param {string} collectionName - Nombre de la colección
  * @param {string} docId - ID del documento
  * @param {string} userNitRut - NIT del tenant
- * @param {boolean} shouldLog - Si debería registrarse en auditoría
  * @returns {Promise<void>}
  */
 export async function deleteWithTenant(
   collectionName,
   docId,
   userNitRut,
-  shouldLog = true,
 ) {
   if (!userNitRut) {
     throw new Error('userNitRut is required for tenant isolation')
   }
 
   try {
-    // Registrar en auditoría antes de eliminar
-    if (shouldLog) {
-      await logHistory({
-        collectionName,
-        documentoId: docId,
-        operacion: 'eliminar',
-        userNitRut,
-      }).catch((err) => {
-        console.warn('Failed to log deletion:', {
-          error: err.message,
-          operation: 'delete',
-          collection: collectionName,
-        })
-      })
-    }
-
     const docRef = doc(db, collectionName, docId)
     await deleteDoc(docRef)
   } catch (error) {
@@ -164,7 +126,6 @@ export async function deleteWithTenant(
  * @param {string} docId - ID del documento (o undefined para auto)
  * @param {Object} data - Datos a guardar
  * @param {string} userNitRut - NIT del tenant
- * @param {boolean} shouldLog - Si debería registrarse en auditoría
  * @returns {Promise<string>} - ID del documento creado
  */
 export async function createWithTenant(
@@ -172,7 +133,6 @@ export async function createWithTenant(
   docId,
   data,
   userNitRut,
-  shouldLog = true,
 ) {
   if (!userNitRut) {
     throw new Error('userNitRut is required for tenant isolation')
@@ -192,22 +152,6 @@ export async function createWithTenant(
 
     await setDoc(docRef, createData)
 
-    if (shouldLog) {
-      await logHistory({
-        collectionName,
-        documentoId: docRef.id,
-        operacion: 'crear',
-        datoNuevo: data,
-        userNitRut,
-      }).catch((err) => {
-        console.warn('Failed to log creation:', {
-          error: err.message,
-          operation: 'create',
-          collection: collectionName,
-        })
-      })
-    }
-
     return docRef.id
   } catch (error) {
     console.error(`Error creating ${collectionName} document:`, {
@@ -216,41 +160,6 @@ export async function createWithTenant(
       timestamp: new Date().toISOString(),
     })
     throw error
-  }
-}
-
-/**
- * Registrar cambios en colección de auditoría
- * @param {Object} params - Parámetros de auditoría
- * @returns {Promise<void>}
- */
-export async function logHistory({
-  collectionName,
-  documentoId,
-  operacion,
-  datoAnterior = null,
-  datoNuevo = null,
-  userNitRut,
-}) {
-  try {
-    const historyEntry = {
-      coleccion: collectionName,
-      documentoId,
-      operacion,
-      datoAnterior: datoAnterior ? JSON.stringify(datoAnterior) : null,
-      datoNuevo: datoNuevo ? JSON.stringify(datoNuevo) : null,
-      nitRut: userNitRut,
-      timestamp: serverTimestamp(),
-    }
-
-    await addDoc(collection(db, 'historial_cambios'), historyEntry)
-  } catch (error) {
-    // No interrumpir operación principal
-    console.warn('History logging failed:', {
-      error: error.message,
-      collection: collectionName,
-      timestamp: new Date().toISOString(),
-    })
   }
 }
 
@@ -282,5 +191,3 @@ export async function validateOwnership(collectionName, docId, userNitRut) {
   }
 }
 
-// Importar addDoc si no está
-import { addDoc } from 'firebase/firestore'

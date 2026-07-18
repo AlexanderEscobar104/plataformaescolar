@@ -1,63 +1,32 @@
-import { auth, firebaseConfig } from '../firebase'
+import { httpsCallable } from 'firebase/functions'
+import { auth, functions } from '../firebase'
 
 const QR_PREFIX = 'plataformaescolar-qr-login'
 const CALLABLE_TIMEOUT_MS = 15000
-const FUNCTIONS_REGION = 'us-central1'
 const QR_PAYLOAD_PATTERN = new RegExp(`(${QR_PREFIX}:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+)`, 'i')
 
-function buildFunctionUrl(name) {
-  const projectId = String(firebaseConfig.projectId || '').trim()
-  if (!projectId) {
-    throw new Error('No fue posible resolver el proyecto de Firebase para el login QR.')
+async function invokeQrFunction(name, data, { requireAuth = false } = {}) {
+  if (requireAuth && !auth.currentUser) {
+    throw new Error('Debes iniciar sesion para aprobar este codigo QR.')
   }
 
-  return `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net/${name}`
-}
-
-async function invokeQrFunction(name, data, { requireAuth = false } = {}) {
-  const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), CALLABLE_TIMEOUT_MS)
+  const fn = httpsCallable(functions, name)
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('La solicitud QR tardo demasiado. Intenta de nuevo.')), CALLABLE_TIMEOUT_MS)
+  })
 
   try {
-    const headers = {
-      'Content-Type': 'application/json',
-    }
-
-    if (auth.currentUser) {
-      const idToken = await auth.currentUser.getIdToken()
-      if (idToken) {
-        headers.Authorization = `Bearer ${idToken}`
-      }
-    } else if (requireAuth) {
-      throw new Error('Debes iniciar sesion para aprobar este codigo QR.')
-    }
-
-    const response = await fetch(buildFunctionUrl(name), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ data }),
-      signal: controller.signal,
-    })
-
-    const payload = await response.json().catch(() => ({}))
-    const errorPayload = payload?.error || null
-
-    if (!response.ok || errorPayload) {
-      const message =
-        String(errorPayload?.message || '').trim() ||
-        `No fue posible completar la operacion QR (${response.status}).`
-      throw new Error(message)
-    }
-
-    return payload?.result || {}
+    const result = await Promise.race([fn(data), timeoutPromise])
+    return result.data || {}
   } catch (error) {
-    if (error?.name === 'AbortError') {
-      throw new Error('La solicitud QR tardo demasiado. Intenta de nuevo.')
+    console.error(`[qrAuth] Error en invokeQrFunction (${name}):`, error)
+
+    if (error?.message === 'La solicitud QR tardo demasiado. Intenta de nuevo.') {
+      throw error
     }
 
-    throw error
-  } finally {
-    window.clearTimeout(timeoutId)
+    const message = String(error?.message || '').trim() || 'No fue posible completar la operacion QR.'
+    throw new Error(message)
   }
 }
 

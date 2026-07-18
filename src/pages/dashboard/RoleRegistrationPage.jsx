@@ -99,6 +99,8 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
   const [error, setError] = useState('')
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorModalMessage, setErrorModalMessage] = useState('')
+  const [statusModalType, setStatusModalType] = useState('error')
+  const [statusModalTitle, setStatusModalTitle] = useState('Operacion fallida')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const fotoEstudiantePreview = useMemo(
@@ -112,6 +114,15 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
 
   const gradeOptions = useMemo(() => GRADE_OPTIONS, [])
   const groupOptions = useMemo(() => GROUP_OPTIONS, [])
+
+  const openStatusModal = (type, message) => {
+    setError('')
+    setSuccess('')
+    setStatusModalType(type)
+    setStatusModalTitle(type === 'success' ? 'Operacion exitosa' : 'Operacion fallida')
+    setErrorModalMessage(message)
+    setShowErrorModal(true)
+  }
 
   useEffect(() => {
     if (!isStudentForm) return
@@ -229,7 +240,7 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
     }
 
     if (pickedFile.size > MAX_FILE_SIZE_BYTES) {
-      setError(`La foto "${pickedFile.name}" supera el limite de 25MB.`)
+      openStatusModal('error', `La foto "${pickedFile.name}" supera el limite de 25MB.`)
       event.target.value = ''
       return
     }
@@ -242,7 +253,7 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
     const invalidFile = pickedFiles.find((file) => file.size > MAX_FILE_SIZE_BYTES)
 
     if (invalidFile) {
-      setError(`El archivo "${invalidFile.name}" supera el limite de 25MB.`)
+      openStatusModal('error', `El archivo "${invalidFile.name}" supera el limite de 25MB.`)
       event.target.value = ''
       return
     }
@@ -258,7 +269,7 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
     }
 
     if (pickedFile.size > MAX_FILE_SIZE_BYTES) {
-      setError(`La foto "${pickedFile.name}" supera el limite de 25MB.`)
+      openStatusModal('error', `La foto "${pickedFile.name}" supera el limite de 25MB.`)
       event.target.value = ''
       return
     }
@@ -271,7 +282,7 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
     const invalidFile = pickedFiles.find((file) => file.size > MAX_FILE_SIZE_BYTES)
 
     if (invalidFile) {
-      setError(`El archivo "${invalidFile.name}" supera el limite de 25MB.`)
+      openStatusModal('error', `El archivo "${invalidFile.name}" supera el limite de 25MB.`)
       event.target.value = ''
       return
     }
@@ -397,29 +408,29 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
     setSuccess('')
 
     if (isStudentForm && !canCreateStudents) {
-      setError('No tienes permisos para crear estudiantes.')
+      openStatusModal('error', 'No tienes permisos para crear estudiantes.')
       return
     }
     if (isTeacherForm && !canCreateTeacherRecords) {
-      setError('No tienes permisos para crear profesores.')
+      openStatusModal('error', 'No tienes permisos para crear profesores.')
       return
     }
     if (isDirectivoForm && !canCreateDirectivoRecords) {
-      setError('No tienes permisos para crear directivos.')
+      openStatusModal('error', 'No tienes permisos para crear directivos.')
       return
     }
 
     if ((!isStudentForm && !isTeacherForm && !isDirectivoForm && !name.trim()) || !email.trim() || !password.trim()) {
-      setError('Nombre, correo y contrasena son obligatorios.')
+      openStatusModal('error', 'Nombre, correo y contrasena son obligatorios.')
       return
     }
 
     if (isStudentForm && (!primerNombre.trim() || !primerApellido.trim() || !numeroDocumento.trim())) {
-      setError('En estudiantes debes completar primer nombre, primer apellido y numero de documento.')
+      openStatusModal('error', 'En estudiantes debes completar primer nombre, primer apellido y numero de documento.')
       return
     }
     if (isStudentForm && !fotoEstudiante) {
-      setError('Debes agregar la foto del estudiante.')
+      openStatusModal('error', 'Debes agregar la foto del estudiante.')
       return
     }
     if (isTeacherForm || isDirectivoForm) {
@@ -433,24 +444,25 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
         !emailProfesor.trim() ||
         (!isDirectivoForm && !especializacionProfesor.trim())
       ) {
-        setError(
+        openStatusModal(
+          'error',
           'En este formulario debes completar nombres, apellidos, tipo y numero de documento, direccion, celular y email.',
         )
         return
       }
       if (!isDirectivoForm && !fotoProfesor) {
-        setError('Debes agregar la foto del profesor.')
+        openStatusModal('error', 'Debes agregar la foto del profesor.')
         return
       }
     }
 
     if (password.length < 6) {
-      setError('La contrasena debe tener al menos 6 caracteres.')
+      openStatusModal('error', 'La contrasena debe tener al menos 6 caracteres.')
       return
     }
 
     if (password !== confirmPassword) {
-      setError('Las contrasenas no coinciden.')
+      openStatusModal('error', 'Las contrasenas no coinciden.')
       return
     }
 
@@ -549,7 +561,7 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
               }
             : {},
       })
-      setSuccess(`Registro creado para rol: ${role}.`)
+      openStatusModal('success', `Registro creado para rol: ${role}.`)
       setName('')
       setEmail('')
       setPassword('')
@@ -586,9 +598,7 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
       }
     } catch (firebaseError) {
       const message = getAuthErrorMessage(firebaseError.code)
-      setError(message)
-      setErrorModalMessage(message)
-      setShowErrorModal(true)
+      openStatusModal('error', message)
     } finally {
       setLoading(false)
     }
@@ -1519,8 +1529,6 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
             )}
           </>
         )}
-        {error && <p className="feedback error">{error}</p>}
-        {success && <p className="feedback success">{success}</p>}
         {canUseCurrentForm && (
           <button className="button" type="submit" disabled={loading}>
             {loading ? 'Guardando...' : 'Crear registro'}
@@ -1530,7 +1538,8 @@ function RoleRegistrationPage({ role, title, formTemplate, backTo }) {
       </form>
       <OperationStatusModal
         open={showErrorModal}
-        title="Operacion fallida"
+        type={statusModalType}
+        title={statusModalTitle}
         message={errorModalMessage}
         onClose={() => setShowErrorModal(false)}
       />

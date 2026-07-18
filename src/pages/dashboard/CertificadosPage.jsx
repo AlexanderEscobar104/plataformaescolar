@@ -178,6 +178,10 @@ function CertificadosPage() {
     () => (selectedTipoId ? templatesByTipoId[selectedTipoId] || null : null),
     [selectedTipoId, templatesByTipoId],
   )
+  const selectedIsStudyCertificate = useMemo(
+    () => isStudyCertificate(selectedTemplate, selectedTipo),
+    [selectedTemplate, selectedTipo],
+  )
   const effectiveYear = useMemo(
     () => (canEditAcademicYear ? String(anio || '').trim() : String(CURRENT_YEAR)),
     [anio, canEditAcademicYear, CURRENT_YEAR],
@@ -188,6 +192,11 @@ function CertificadosPage() {
 
     const loadGradeStatus = async () => {
       if (!userNitRut || !selectedStudentId || !effectiveYear) {
+        setStudentHasGrades(false)
+        setGradeStatusLoading(false)
+        return
+      }
+      if (selectedIsStudyCertificate) {
         setStudentHasGrades(false)
         setGradeStatusLoading(false)
         return
@@ -229,10 +238,10 @@ function CertificadosPage() {
     return () => {
       cancelled = true
     }
-  }, [effectiveYear, selectedStudentId, userNitRut])
+  }, [effectiveYear, selectedIsStudyCertificate, selectedStudentId, userNitRut])
 
-  const canIssueCertificate = Boolean(selectedStudentId && effectiveYear && studentHasGrades)
-  const certificateBlockedMessage = selectedStudentId && !gradeStatusLoading && !studentHasGrades
+  const canIssueCertificate = Boolean(selectedStudentId && effectiveYear && (selectedIsStudyCertificate || studentHasGrades))
+  const certificateBlockedMessage = selectedStudentId && !selectedIsStudyCertificate && !gradeStatusLoading && !studentHasGrades
     ? `El estudiante aun no tiene calificaciones registradas para el año ${effectiveYear}.`
     : ''
 
@@ -662,7 +671,7 @@ function CertificadosPage() {
             </p>
           )}
 
-          {gradeStatusLoading && selectedStudentId && (
+          {gradeStatusLoading && selectedStudentId && !selectedIsStudyCertificate && (
             <p className="feedback">Validando si el estudiante ya tiene calificaciones registradas...</p>
           )}
 

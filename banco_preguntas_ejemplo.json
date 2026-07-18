@@ -1,0 +1,4911 @@
+[
+  {
+    "pregunta": "¿Cuántos dedos tienes en una mano?",
+    "tipo": "single_choice",
+    "opcion_a": "3",
+    "opcion_b": "4",
+    "opcion_c": "5",
+    "opcion_d": "6",
+    "respuesta_correcta": "C",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Qué número viene después del 3?",
+    "tipo": "single_choice",
+    "opcion_a": "2",
+    "opcion_b": "4",
+    "opcion_c": "5",
+    "opcion_d": "6",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el número más grande? 2 o 7",
+    "tipo": "single_choice",
+    "opcion_a": "2",
+    "opcion_b": "7",
+    "opcion_c": "Son iguales",
+    "opcion_d": "Ninguno",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántos ojos tienes?",
+    "tipo": "single_choice",
+    "opcion_a": "1",
+    "opcion_b": "2",
+    "opcion_c": "3",
+    "opcion_d": "4",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "El triángulo tiene 3 lados",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Qué forma tiene una pelota?",
+    "tipo": "single_choice",
+    "opcion_a": "Cuadrado",
+    "opcion_b": "Triángulo",
+    "opcion_c": "Círculo",
+    "opcion_d": "Rectángulo",
+    "respuesta_correcta": "C",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántas patas tiene un perro?",
+    "tipo": "single_choice",
+    "opcion_a": "2",
+    "opcion_b": "3",
+    "opcion_c": "4",
+    "opcion_d": "5",
+    "respuesta_correcta": "C",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 1 + 1 = 3",
+    "tipo": "true_false",
+    "respuesta_correcta": "false",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el número que falta? 1, 2, _, 4",
+    "tipo": "single_choice",
+    "opcion_a": "1",
+    "opcion_b": "2",
+    "opcion_c": "3",
+    "opcion_d": "5",
+    "respuesta_correcta": "C",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántos lados tiene un cuadrado?",
+    "tipo": "single_choice",
+    "opcion_a": "2",
+    "opcion_b": "3",
+    "opcion_c": "4",
+    "opcion_d": "5",
+    "respuesta_correcta": "C",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "El círculo tiene esquinas",
+    "tipo": "true_false",
+    "respuesta_correcta": "false",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Qué es más pesado, 1 kg de plumas o 1 kg de piedras?",
+    "tipo": "single_choice",
+    "opcion_a": "Plumas",
+    "opcion_b": "Piedras",
+    "opcion_c": "Pesan igual",
+    "opcion_d": "No se puede saber",
+    "respuesta_correcta": "C",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 2 + 3?",
+    "tipo": "single_choice",
+    "opcion_a": "4",
+    "opcion_b": "5",
+    "opcion_c": "6",
+    "opcion_d": "7",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "Ordena de menor a mayor: 5, 2, 8",
+    "tipo": "single_choice",
+    "opcion_a": "2, 5, 8",
+    "opcion_b": "5, 2, 8",
+    "opcion_c": "8, 5, 2",
+    "opcion_d": "2, 8, 5",
+    "respuesta_correcta": "A",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 7 + 3?",
+    "tipo": "single_choice",
+    "opcion_a": "8",
+    "opcion_b": "9",
+    "opcion_c": "10",
+    "opcion_d": "11",
+    "respuesta_correcta": "C",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 10 - 4?",
+    "tipo": "single_choice",
+    "opcion_a": "5",
+    "opcion_b": "6",
+    "opcion_c": "7",
+    "opcion_d": "8",
+    "respuesta_correcta": "B",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 5 + 5 = 11",
+    "tipo": "true_false",
+    "respuesta_correcta": "false",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el doble de 4?",
+    "tipo": "single_choice",
+    "opcion_a": "6",
+    "opcion_b": "7",
+    "opcion_c": "8",
+    "opcion_d": "9",
+    "respuesta_correcta": "C",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Qué número es mayor, 15 o 9?",
+    "tipo": "single_choice",
+    "opcion_a": "15",
+    "opcion_b": "9",
+    "opcion_c": "Son iguales",
+    "opcion_d": "Ninguno",
+    "respuesta_correcta": "A",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 20 - 5 = 15",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántas decenas tiene el número 30?",
+    "tipo": "single_choice",
+    "opcion_a": "2",
+    "opcion_b": "3",
+    "opcion_c": "4",
+    "opcion_d": "5",
+    "respuesta_correcta": "B",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 12 + 5?",
+    "tipo": "single_choice",
+    "opcion_a": "15",
+    "opcion_b": "16",
+    "opcion_c": "17",
+    "opcion_d": "18",
+    "respuesta_correcta": "C",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 8 + 7 = 14",
+    "tipo": "true_false",
+    "respuesta_correcta": "false",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es la mitad de 10?",
+    "tipo": "single_choice",
+    "opcion_a": "3",
+    "opcion_b": "4",
+    "opcion_c": "5",
+    "opcion_d": "6",
+    "respuesta_correcta": "C",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "Si tienes 8 caramelos y te comes 3, ¿cuántos te quedan?",
+    "tipo": "single_choice",
+    "opcion_a": "4",
+    "opcion_b": "5",
+    "opcion_c": "6",
+    "opcion_d": "7",
+    "respuesta_correcta": "B",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 3 × 2?",
+    "tipo": "single_choice",
+    "opcion_a": "4",
+    "opcion_b": "5",
+    "opcion_c": "6",
+    "opcion_d": "7",
+    "respuesta_correcta": "C",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "El número 100 tiene 3 cifras",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántos minutos tiene una hora?",
+    "tipo": "single_choice",
+    "opcion_a": "30",
+    "opcion_b": "45",
+    "opcion_c": "60",
+    "opcion_d": "100",
+    "respuesta_correcta": "C",
+    "grado": "1",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 15 + 8?",
+    "tipo": "single_choice",
+    "opcion_a": "21",
+    "opcion_b": "22",
+    "opcion_c": "23",
+    "opcion_d": "24",
+    "respuesta_correcta": "C",
+    "grado": "2",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 7 × 3 = 21",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 25 - 7?",
+    "tipo": "single_choice",
+    "opcion_a": "16",
+    "opcion_b": "17",
+    "opcion_c": "18",
+    "opcion_d": "19",
+    "respuesta_correcta": "C",
+    "grado": "2",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el resultado de 4 × 4?",
+    "tipo": "single_choice",
+    "opcion_a": "12",
+    "opcion_b": "14",
+    "opcion_c": "16",
+    "opcion_d": "18",
+    "respuesta_correcta": "C",
+    "grado": "2",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 100 ÷ 2 = 50",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántos lados tiene un hexágono?",
+    "tipo": "single_choice",
+    "opcion_a": "4",
+    "opcion_b": "5",
+    "opcion_c": "6",
+    "opcion_d": "7",
+    "respuesta_correcta": "C",
+    "grado": "2",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 45 + 27?",
+    "tipo": "single_choice",
+    "opcion_a": "62",
+    "opcion_b": "72",
+    "opcion_c": "82",
+    "opcion_d": "92",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 9 × 2 = 20",
+    "tipo": "true_false",
+    "respuesta_correcta": "false",
+    "grado": "2",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántas horas tiene un día?",
+    "tipo": "single_choice",
+    "opcion_a": "12",
+    "opcion_b": "24",
+    "opcion_c": "36",
+    "opcion_d": "48",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es la tercera parte de 9?",
+    "tipo": "single_choice",
+    "opcion_a": "2",
+    "opcion_b": "3",
+    "opcion_c": "4",
+    "opcion_d": "5",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 123 + 45?",
+    "tipo": "single_choice",
+    "opcion_a": "158",
+    "opcion_b": "168",
+    "opcion_c": "178",
+    "opcion_d": "188",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 15 × 3 = 45",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 200 - 56?",
+    "tipo": "single_choice",
+    "opcion_a": "134",
+    "opcion_b": "144",
+    "opcion_c": "154",
+    "opcion_d": "164",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántos mililitros hay en un litro?",
+    "tipo": "single_choice",
+    "opcion_a": "100",
+    "opcion_b": "500",
+    "opcion_c": "1000",
+    "opcion_d": "2000",
+    "respuesta_correcta": "C",
+    "grado": "3",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 7 × 8 = 56",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el perímetro de un cuadrado de lado 5?",
+    "tipo": "single_choice",
+    "opcion_a": "15",
+    "opcion_b": "20",
+    "opcion_c": "25",
+    "opcion_d": "30",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 250 ÷ 5 = 50",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 36 ÷ 4?",
+    "tipo": "single_choice",
+    "opcion_a": "7",
+    "opcion_b": "8",
+    "opcion_c": "9",
+    "opcion_d": "10",
+    "respuesta_correcta": "C",
+    "grado": "3",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántos grados tiene un ángulo recto?",
+    "tipo": "single_choice",
+    "opcion_a": "45°",
+    "opcion_b": "60°",
+    "opcion_c": "90°",
+    "opcion_d": "180°",
+    "respuesta_correcta": "C",
+    "grado": "3",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 500 + 500 = 1000",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 234 × 2?",
+    "tipo": "single_choice",
+    "opcion_a": "434",
+    "opcion_b": "448",
+    "opcion_c": "468",
+    "opcion_d": "478",
+    "respuesta_correcta": "C",
+    "grado": "4",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el mínimo común múltiplo de 3 y 4?",
+    "tipo": "single_choice",
+    "opcion_a": "7",
+    "opcion_b": "10",
+    "opcion_c": "12",
+    "opcion_d": "14",
+    "respuesta_correcta": "C",
+    "grado": "4",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 144 ÷ 12 = 12",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 3/4 + 1/4?",
+    "tipo": "single_choice",
+    "opcion_a": "1/2",
+    "opcion_b": "1",
+    "opcion_c": "4/4",
+    "opcion_d": "3/8",
+    "respuesta_correcta": "B",
+    "grado": "4",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántos segundos tiene un minuto?",
+    "tipo": "single_choice",
+    "opcion_a": "30",
+    "opcion_b": "45",
+    "opcion_c": "60",
+    "opcion_d": "100",
+    "respuesta_correcta": "C",
+    "grado": "4",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el área de un rectángulo de 6×4?",
+    "tipo": "single_choice",
+    "opcion_a": "20",
+    "opcion_b": "24",
+    "opcion_c": "28",
+    "opcion_d": "30",
+    "respuesta_correcta": "B",
+    "grado": "4",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 25 × 4 = 100",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 10^2?",
+    "tipo": "single_choice",
+    "opcion_a": "10",
+    "opcion_b": "20",
+    "opcion_c": "100",
+    "opcion_d": "1000",
+    "respuesta_correcta": "C",
+    "grado": "4",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 15 × 4?",
+    "tipo": "single_choice",
+    "opcion_a": "45",
+    "opcion_b": "60",
+    "opcion_c": "75",
+    "opcion_d": "50",
+    "respuesta_correcta": "B",
+    "grado": "5",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el 20% de 200?",
+    "tipo": "single_choice",
+    "opcion_a": "20",
+    "opcion_b": "30",
+    "opcion_c": "40",
+    "opcion_d": "50",
+    "respuesta_correcta": "C",
+    "grado": "5",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 3^3 = 27",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 7/8 en decimal?",
+    "tipo": "single_choice",
+    "opcion_a": "0.75",
+    "opcion_b": "0.8",
+    "opcion_c": "0.875",
+    "opcion_d": "0.9",
+    "respuesta_correcta": "C",
+    "grado": "5",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el volumen de un cubo de arista 3?",
+    "tipo": "single_choice",
+    "opcion_a": "9",
+    "opcion_b": "18",
+    "opcion_c": "27",
+    "opcion_d": "36",
+    "respuesta_correcta": "C",
+    "grado": "5",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 0.5 × 0.5 = 0.25",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es -5 + 8?",
+    "tipo": "single_choice",
+    "opcion_a": "-3",
+    "opcion_b": "3",
+    "opcion_c": "13",
+    "opcion_d": "-13",
+    "respuesta_correcta": "B",
+    "grado": "5",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es la raíz cuadrada de 81?",
+    "tipo": "single_choice",
+    "opcion_a": "7",
+    "opcion_b": "8",
+    "opcion_c": "9",
+    "opcion_d": "10",
+    "respuesta_correcta": "C",
+    "grado": "5",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es (-3) × (-4)?",
+    "tipo": "single_choice",
+    "opcion_a": "-12",
+    "opcion_b": "12",
+    "opcion_c": "-7",
+    "opcion_d": "7",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "Resuelve: 2x + 3 = 7, ¿cuánto vale x?",
+    "tipo": "single_choice",
+    "opcion_a": "1",
+    "opcion_b": "2",
+    "opcion_c": "3",
+    "opcion_d": "4",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " ¿π ≈ 3.1416?",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el área de un círculo de radio 2? (π ≈ 3.14)",
+    "tipo": "single_choice",
+    "opcion_a": "6.28",
+    "opcion_b": "12.56",
+    "opcion_c": "25.12",
+    "opcion_d": "3.14",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 2^5?",
+    "tipo": "single_choice",
+    "opcion_a": "16",
+    "opcion_b": "24",
+    "opcion_c": "32",
+    "opcion_d": "64",
+    "respuesta_correcta": "C",
+    "grado": "6",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 1/2 > 1/3",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el MCD de 12 y 18?",
+    "tipo": "single_choice",
+    "opcion_a": "2",
+    "opcion_b": "3",
+    "opcion_c": "6",
+    "opcion_d": "9",
+    "respuesta_correcta": "C",
+    "grado": "6",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 5! (5 factorial)?",
+    "tipo": "single_choice",
+    "opcion_a": "60",
+    "opcion_b": "120",
+    "opcion_c": "240",
+    "opcion_d": "25",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "Resuelve: 3x - 5 = 10",
+    "tipo": "single_choice",
+    "opcion_a": "3",
+    "opcion_b": "5",
+    "opcion_c": "7",
+    "opcion_d": "8",
+    "respuesta_correcta": "B",
+    "grado": "7",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es (a+b)^2?",
+    "tipo": "single_choice",
+    "opcion_a": "a^2 + b^2",
+    "opcion_b": "a^2 + 2ab + b^2",
+    "opcion_c": "a^2 - 2ab + b^2",
+    "opcion_d": "2a + 2b",
+    "respuesta_correcta": "B",
+    "grado": "7",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " La hipotenusa es el lado más largo de un triángulo rectángulo",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es √144?",
+    "tipo": "single_choice",
+    "opcion_a": "10",
+    "opcion_b": "11",
+    "opcion_c": "12",
+    "opcion_d": "13",
+    "respuesta_correcta": "C",
+    "grado": "7",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es la pendiente de y = 2x + 3?",
+    "tipo": "single_choice",
+    "opcion_a": "2",
+    "opcion_b": "3",
+    "opcion_c": "-2",
+    "opcion_d": "-3",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " 0.333... = 1/3",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 15% de 80?",
+    "tipo": "single_choice",
+    "opcion_a": "10",
+    "opcion_b": "12",
+    "opcion_c": "15",
+    "opcion_d": "20",
+    "respuesta_correcta": "B",
+    "grado": "7",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 2/3 ÷ 4/5?",
+    "tipo": "single_choice",
+    "opcion_a": "5/6",
+    "opcion_b": "8/15",
+    "opcion_c": "10/12",
+    "opcion_d": "4/6",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es la solución de x^2 - 9 = 0?",
+    "tipo": "multiple_choice",
+    "opcion_a": "-3",
+    "opcion_b": "-4.5",
+    "opcion_c": "3",
+    "opcion_d": "4.5",
+    "respuestas_correctas": [
+      "A",
+      "C"
+    ],
+    "respuesta_correcta": "",
+    "grado": "8",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es log(100)?",
+    "tipo": "single_choice",
+    "opcion_a": "1",
+    "opcion_b": "2",
+    "opcion_c": "10",
+    "opcion_d": "100",
+    "respuesta_correcta": "B",
+    "grado": "8",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " Un número primo solo tiene dos divisores",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el valor de sen(0°)?",
+    "tipo": "single_choice",
+    "opcion_a": "-1",
+    "opcion_b": "0",
+    "opcion_c": "0.5",
+    "opcion_d": "1",
+    "respuesta_correcta": "B",
+    "grado": "8",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es (x^2)(x^3)?",
+    "tipo": "single_choice",
+    "opcion_a": "x^5",
+    "opcion_b": "x^6",
+    "opcion_c": "2x^5",
+    "opcion_d": "2x^6",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " El teorema de Pitágoras es a^2 + b^2 = c^2",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuántas caras tiene un cubo?",
+    "tipo": "single_choice",
+    "opcion_a": "4",
+    "opcion_b": "6",
+    "opcion_c": "8",
+    "opcion_d": "12",
+    "respuesta_correcta": "B",
+    "grado": "8",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es la probabilidad de obtener cara en una moneda?",
+    "tipo": "single_choice",
+    "opcion_a": "1/4",
+    "opcion_b": "1/3",
+    "opcion_c": "1/2",
+    "opcion_d": "2/3",
+    "respuesta_correcta": "C",
+    "grado": "8",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el límite de 1/x cuando x → ∞?",
+    "tipo": "single_choice",
+    "opcion_a": "0",
+    "opcion_b": "1",
+    "opcion_c": "∞",
+    "opcion_d": "-∞",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "La derivada de x^2 es 2x",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es el determinante de [[1,0],[0,1]]?",
+    "tipo": "single_choice",
+    "opcion_a": "-1",
+    "opcion_b": "0",
+    "opcion_c": "1",
+    "opcion_d": "2",
+    "respuesta_correcta": "C",
+    "grado": "9",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es ∫2x dx?",
+    "tipo": "single_choice",
+    "opcion_a": "x^2 + C",
+    "opcion_b": "2x^2 + C",
+    "opcion_c": "x + C",
+    "opcion_d": "2 + C",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el valor de cos(180°)?",
+    "tipo": "single_choice",
+    "opcion_a": "-1",
+    "opcion_b": "0",
+    "opcion_c": "0.5",
+    "opcion_d": "1",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " Un número irracional puede expresarse como fracción",
+    "tipo": "true_false",
+    "respuesta_correcta": "false",
+    "grado": "9",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el rango de una función constante?",
+    "tipo": "single_choice",
+    "opcion_a": "Todos los reales",
+    "opcion_b": "Un solo valor",
+    "opcion_c": "Los positivos",
+    "opcion_d": "Los enteros",
+    "respuesta_correcta": "B",
+    "grado": "9",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es la derivada de e^x?",
+    "tipo": "single_choice",
+    "opcion_a": "e^x",
+    "opcion_b": "x·e^x",
+    "opcion_c": "ln(x)·e^x",
+    "opcion_d": "1/x",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " ¿sen²θ + cos²θ = 1?",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "10",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el valor de ln(1)?",
+    "tipo": "single_choice",
+    "opcion_a": "-1",
+    "opcion_b": "0",
+    "opcion_c": "1",
+    "opcion_d": "e",
+    "respuesta_correcta": "B",
+    "grado": "10",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es el producto punto de (1,2) y (3,4)?",
+    "tipo": "single_choice",
+    "opcion_a": "7",
+    "opcion_b": "8",
+    "opcion_c": "9",
+    "opcion_d": "11",
+    "respuesta_correcta": "D",
+    "grado": "10",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el límite de (sen x)/x cuando x→0?",
+    "tipo": "single_choice",
+    "opcion_a": "-1",
+    "opcion_b": "0",
+    "opcion_c": "1",
+    "opcion_d": "∞",
+    "respuesta_correcta": "C",
+    "grado": "11",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": " La integral definida de una función positiva da el área bajo la curva",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "11",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es la derivada de ln(x)?",
+    "tipo": "single_choice",
+    "opcion_a": "1/x",
+    "opcion_b": "x",
+    "opcion_c": "e^x",
+    "opcion_d": "ln(x)",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es la transpuesta de [[1,2],[3,4]]?",
+    "tipo": "single_choice",
+    "opcion_a": "[[1,3],[2,4]]",
+    "opcion_b": "[[4,3],[2,1]]",
+    "opcion_c": "[[1,2],[3,4]]",
+    "opcion_d": "[[4,2],[3,1]]",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Con qué letra empieza \"sol\"?",
+    "tipo": "single_choice",
+    "opcion_a": "T",
+    "opcion_b": "S",
+    "opcion_c": "L",
+    "opcion_d": "M",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál de estas es una vocal?",
+    "tipo": "single_choice",
+    "opcion_a": "B",
+    "opcion_b": "C",
+    "opcion_c": "A",
+    "opcion_d": "D",
+    "respuesta_correcta": "C",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "La palabra \"casa\" tiene 4 letras",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál de estas palabras es un animal?",
+    "tipo": "single_choice",
+    "opcion_a": "Mesa",
+    "opcion_b": "Perro",
+    "opcion_c": "Silla",
+    "opcion_d": "Libro",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuántas sílabas tiene \"mesa\"?",
+    "tipo": "single_choice",
+    "opcion_a": "1",
+    "opcion_b": "2",
+    "opcion_c": "3",
+    "opcion_d": "4",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "La letra \"M\" es una consonante",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál de estas palabras empieza con la misma letra que \"gato\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Perro",
+    "opcion_b": "Casa",
+    "opcion_c": "Goma",
+    "opcion_d": "Luna",
+    "respuesta_correcta": "C",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cómo se escribe el número 5?",
+    "tipo": "single_choice",
+    "opcion_a": "Seis",
+    "opcion_b": "Cinco",
+    "opcion_c": "Siete",
+    "opcion_d": "Cuatro",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"El sol brilla\" es una oración",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué palabra rima con \"pan\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Sol",
+    "opcion_b": "Luna",
+    "opcion_c": "Casa",
+    "opcion_d": "Plan",
+    "respuesta_correcta": "D",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es la primera letra del abecedario?",
+    "tipo": "single_choice",
+    "opcion_a": "B",
+    "opcion_b": "A",
+    "opcion_c": "C",
+    "opcion_d": "D",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "Las oraciones terminan con punto",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál de estas es una fruta?",
+    "tipo": "single_choice",
+    "opcion_a": "Zapato",
+    "opcion_b": "Manzana",
+    "opcion_c": "Camisa",
+    "opcion_d": "Pantalón",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuántas letras tiene la palabra \"sol\"?",
+    "tipo": "single_choice",
+    "opcion_a": "2",
+    "opcion_b": "3",
+    "opcion_c": "4",
+    "opcion_d": "5",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el plural de \"casa\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Casas",
+    "opcion_b": "Cases",
+    "opcion_c": "Casaes",
+    "opcion_d": "Casos",
+    "respuesta_correcta": "A",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"El niño corre rápido.\" ¿Cuál es el verbo?",
+    "tipo": "single_choice",
+    "opcion_a": "Niño",
+    "opcion_b": "Corre",
+    "opcion_c": "Rápido",
+    "opcion_d": "El",
+    "respuesta_correcta": "B",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál de estas palabras es un adjetivo?",
+    "tipo": "single_choice",
+    "opcion_a": "Correr",
+    "opcion_b": "Grande",
+    "opcion_c": "Mesa",
+    "opcion_d": "Ellos",
+    "respuesta_correcta": "B",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " La palabra \"árbol\" lleva tilde",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué significa la palabra \"bondadoso\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Que tiene bondad",
+    "opcion_b": "Que es rápido",
+    "opcion_c": "Que es alto",
+    "opcion_d": "Que es fuerte",
+    "respuesta_correcta": "A",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el sinónimo de \"alegre\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Triste",
+    "opcion_b": "Feliz",
+    "opcion_c": "Enojado",
+    "opcion_d": "Cansado",
+    "respuesta_correcta": "B",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " Las mayúsculas se usan después de punto",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué tipo de palabra es \"rápidamente\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Sustantivo",
+    "opcion_b": "Adjetivo",
+    "opcion_c": "Adverbio",
+    "opcion_d": "Verbo",
+    "respuesta_correcta": "C",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el antónimo de \"grande\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Enorme",
+    "opcion_b": "Alto",
+    "opcion_c": "Pequeño",
+    "opcion_d": "Largo",
+    "respuesta_correcta": "C",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "Un cuento es una narración corta",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál de estas oraciones está en pasado?",
+    "tipo": "single_choice",
+    "opcion_a": "Yo corro",
+    "opcion_b": "Yo correré",
+    "opcion_c": "Yo corrí",
+    "opcion_d": "Yo corro ahora",
+    "respuesta_correcta": "C",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuántos párrafos tiene un texto de 10 líneas?",
+    "tipo": "single_choice",
+    "opcion_a": "Depende del autor",
+    "opcion_b": "Siempre 1",
+    "opcion_c": "Siempre 10",
+    "opcion_d": "Siempre 5",
+    "respuesta_correcta": "A",
+    "grado": "1",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el sujeto de \"El perro ladra fuerte\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Ladra",
+    "opcion_b": "Fuerte",
+    "opcion_c": "El perro",
+    "opcion_d": "El",
+    "respuesta_correcta": "C",
+    "grado": "2",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"Había una vez un dragón...\" es el inicio de un cuento",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué son los sustantivos?",
+    "tipo": "single_choice",
+    "opcion_a": "Acciones",
+    "opcion_b": "Personas, animales o cosas",
+    "opcion_c": "Cualidades",
+    "opcion_d": "Palabras que unen",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el femenino de \"doctor\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Doctora",
+    "opcion_b": "Doctor",
+    "opcion_c": "Doctoressa",
+    "opcion_d": "Doctorino",
+    "respuesta_correcta": "A",
+    "grado": "2",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "La coma se usa para hacer pausas breves",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el verbo en \"Los pájaros cantan al amanecer\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Pájaros",
+    "opcion_b": "Cantan",
+    "opcion_c": "Amanecer",
+    "opcion_d": "Los",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es una fábula?",
+    "tipo": "single_choice",
+    "opcion_a": "Un texto científico",
+    "opcion_b": "Una historia con moraleja",
+    "opcion_c": "Una noticia",
+    "opcion_d": "Una receta",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "El punto y seguido separa oraciones dentro de un párrafo",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el sinónimo de \"hermoso\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Feo",
+    "opcion_b": "Bello",
+    "opcion_c": "Alto",
+    "opcion_d": "Bajo",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál palabra está mal escrita?",
+    "tipo": "single_choice",
+    "opcion_a": "Casa",
+    "opcion_b": "Perro",
+    "opcion_c": "Vaso",
+    "opcion_d": "Cavallo",
+    "respuesta_correcta": "D",
+    "grado": "2",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un artículo?",
+    "tipo": "single_choice",
+    "opcion_a": "Una palabra que modifica al verbo",
+    "opcion_b": "Una palabra que acompaña al sustantivo",
+    "opcion_c": "Una palabra que expresa acción",
+    "opcion_d": "Una palabra que une oraciones",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"El, la, los, las\" son artículos determinados",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el prefijo de \"deshacer\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Hacer",
+    "opcion_b": "Des",
+    "opcion_c": "Desh",
+    "opcion_d": "Cer",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué tipo de texto es una noticia?",
+    "tipo": "single_choice",
+    "opcion_a": "Informativo",
+    "opcion_b": "Literario",
+    "opcion_c": "Poético",
+    "opcion_d": "Dramático",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "Los adjetivos calificativos expresan cualidades",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el aumentativo de \"casa\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Casita",
+    "opcion_b": "Casona",
+    "opcion_c": "Casaza",
+    "opcion_d": "Casaza",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué son los pronombres personales?",
+    "tipo": "single_choice",
+    "opcion_a": "Yo, tú, él, nosotros, etc.",
+    "opcion_b": "Grande, pequeño, alto",
+    "opcion_c": "Correr, saltar, nadar",
+    "opcion_d": "Y, e, o, pero",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "Un diario personal se escribe en primera persona",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el antónimo de \"claro\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Luminoso",
+    "opcion_b": "Oscuro",
+    "opcion_c": "Transparente",
+    "opcion_d": "Limpio",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"Blanco\" y \"negro\" son antónimos",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es una metáfora?",
+    "tipo": "single_choice",
+    "opcion_a": "Una comparación sin \"como\"",
+    "opcion_b": "Una exageración",
+    "opcion_c": "Una repetición de sonidos",
+    "opcion_d": "Una pregunta retórica",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"Tus ojos son dos luceros\" es una metáfora",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el género literario de \"La Odisea\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Lírico",
+    "opcion_b": "Épico",
+    "opcion_c": "Dramático",
+    "opcion_d": "Narrativo",
+    "respuesta_correcta": "B",
+    "grado": "4",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un diptongo?",
+    "tipo": "single_choice",
+    "opcion_a": "Dos vocales juntas en una sílaba",
+    "opcion_b": "Dos consonantes juntas",
+    "opcion_c": "Una vocal acentuada",
+    "opcion_d": "Tres vocales seguidas",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "Las palabras agudas llevan tilde en la última sílaba",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el verbo auxiliar en \"he comido\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Comido",
+    "opcion_b": "He",
+    "opcion_c": "He comido",
+    "opcion_d": "Ninguno",
+    "respuesta_correcta": "B",
+    "grado": "4",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un hiato?",
+    "tipo": "single_choice",
+    "opcion_a": "Dos vocales que se separan en sílabas distintas",
+    "opcion_b": "Dos consonantes iguales",
+    "opcion_c": "Una vocal fuerte y una débil",
+    "opcion_d": "Acentuación de palabras",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "La palabra \"caída\" tiene hiato",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es una oración bimembre?",
+    "tipo": "single_choice",
+    "opcion_a": "Tiene sujeto y predicado",
+    "opcion_b": "Tiene dos verbos",
+    "opcion_c": "Tiene dos sujetos",
+    "opcion_d": "No tiene verbo",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " El verbo \"haber\" es impersonal",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el núcleo del predicado en \"Ellos llegaron temprano\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Ellos",
+    "opcion_b": "Llegaron",
+    "opcion_c": "Temprano",
+    "opcion_d": "Ellos llegaron",
+    "respuesta_correcta": "B",
+    "grado": "5",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un complemento directo?",
+    "tipo": "single_choice",
+    "opcion_a": "Recibe la acción del verbo directamente",
+    "opcion_b": "Indica el lugar",
+    "opcion_c": "Indica el tiempo",
+    "opcion_d": "Modifica al sujeto",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " Las palabras esdrújulas siempre llevan tilde",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el pretérito perfecto de \"cantar\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Cantaba",
+    "opcion_b": "He cantado",
+    "opcion_c": "Cantaré",
+    "opcion_d": "Cantaría",
+    "respuesta_correcta": "B",
+    "grado": "5",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un adverbio de tiempo?",
+    "tipo": "single_choice",
+    "opcion_a": "Ahora, luego, después",
+    "opcion_b": "Aquí, allí, cerca",
+    "opcion_c": "Bien, mal, rápido",
+    "opcion_d": "Sí, no, también",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"Quizás\" es un adverbio de duda",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es una oración subordinada?",
+    "tipo": "single_choice",
+    "opcion_a": "Depende de otra oración",
+    "opcion_b": "Tiene sentido completo sola",
+    "opcion_c": "No tiene verbo",
+    "opcion_d": "Tiene dos sujetos",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "\"El que calla, otorga\" contiene una subordinada",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es el modernismo literario?",
+    "tipo": "single_choice",
+    "opcion_a": "Movimiento del siglo XIX con Rubén Darío",
+    "opcion_b": "Literatura actual",
+    "opcion_c": "Poesía medieval",
+    "opcion_d": "Teatro del siglo de oro",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Quién escribió \"Cien años de soledad\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Mario Vargas Llosa",
+    "opcion_b": "Gabriel García Márquez",
+    "opcion_c": "Julio Cortázar",
+    "opcion_d": "Pablo Neruda",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " El realismo mágico es característico de la literatura latinoamericana",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es una rima asonante?",
+    "tipo": "single_choice",
+    "opcion_a": "Solo coinciden las vocales",
+    "opcion_b": "Coinciden vocales y consonantes",
+    "opcion_c": "No hay rima",
+    "opcion_d": "Riman versos pares",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es el núcleo del sujeto en \"Los libros nuevos están sobre la mesa\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Los",
+    "opcion_b": "Libros",
+    "opcion_c": "Nuevos",
+    "opcion_d": "Mesa",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " La poesía lírica expresa sentimientos",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es una oración compuesta?",
+    "tipo": "single_choice",
+    "opcion_a": "Tiene más de un verbo",
+    "opcion_b": "Tiene un solo verbo",
+    "opcion_c": "No tiene sujeto",
+    "opcion_d": "Es muy larga",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"Don Quijote de la Mancha\" fue escrito por Miguel de Cervantes",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es el barroco literario?",
+    "tipo": "single_choice",
+    "opcion_a": "Un movimiento del siglo XVII",
+    "opcion_b": "Literatura infantil",
+    "opcion_c": "Poesía moderna",
+    "opcion_d": "Teatro griego",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué son los conectores textuales?",
+    "tipo": "single_choice",
+    "opcion_a": "Palabras que unen ideas",
+    "opcion_b": "Signos de puntuación",
+    "opcion_c": "Verbos auxiliares",
+    "opcion_d": "Adjetivos calificativos",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " Sor Juana Inés de la Cruz fue una poeta del barroco",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es la función del lenguaje referencial?",
+    "tipo": "single_choice",
+    "opcion_a": "Informar objetivamente",
+    "opcion_b": "Expresar emociones",
+    "opcion_c": "Convencer al receptor",
+    "opcion_d": "Mantener la comunicación",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es una oración impersonal?",
+    "tipo": "single_choice",
+    "opcion_a": "No tiene sujeto explícito",
+    "opcion_b": "No tiene verbo",
+    "opcion_c": "Tiene varios sujetos",
+    "opcion_d": "Está en pasado",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " Los textos argumentativos buscan convencer",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es el romanticismo literario?",
+    "tipo": "single_choice",
+    "opcion_a": "Exalta la emoción y la libertad",
+    "opcion_b": "Sigue reglas estrictas",
+    "opcion_c": "Se enfoca en la ciencia",
+    "opcion_d": "Solo habla de amor",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " Edgar Allan Poe escribió cuentos de terror",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un texto expositivo?",
+    "tipo": "single_choice",
+    "opcion_a": "Explica un tema de forma objetiva",
+    "opcion_b": "Narra una historia",
+    "opcion_c": "Describe un lugar",
+    "opcion_d": "Convence al lector",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuál es la diferencia entre denotación y connotación?",
+    "tipo": "single_choice",
+    "opcion_a": "Denotación es literal, connotación es figurada",
+    "opcion_b": "Denotación es poética",
+    "opcion_c": "Son lo mismo",
+    "opcion_d": "Denotación es subjetiva",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "Elipsis es la eliminación de palabras innecesarias",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un argumento inductivo?",
+    "tipo": "single_choice",
+    "opcion_a": "Va de casos particulares a una conclusión general",
+    "opcion_b": "Va de lo general a lo particular",
+    "opcion_c": "No tiene conclusión",
+    "opcion_d": "Usa ejemplos",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Quién escribió \"La Divina Comedia\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Petrarca",
+    "opcion_b": "Dante Alighieri",
+    "opcion_c": "Boccaccio",
+    "opcion_d": "Shakespeare",
+    "respuesta_correcta": "B",
+    "grado": "8",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " La literatura del siglo de oro español incluye a Quevedo y Góngora",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es el realismo literario?",
+    "tipo": "single_choice",
+    "opcion_a": "Representación objetiva de la realidad",
+    "opcion_b": "Idealización de la realidad",
+    "opcion_c": "Solo temas fantásticos",
+    "opcion_d": "Poesía pura",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"Fausto\" fue escrito por Goethe",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es una tesis en un texto argumentativo?",
+    "tipo": "single_choice",
+    "opcion_a": "La idea principal que se defiende",
+    "opcion_b": "La introducción",
+    "opcion_c": "La conclusión",
+    "opcion_d": "Un ejemplo",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es la anáfora?",
+    "tipo": "single_choice",
+    "opcion_a": "Repetición de una palabra al inicio de versos",
+    "opcion_b": "Omisión de palabras",
+    "opcion_c": "Comparación explícita",
+    "opcion_d": "Exageración poética",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " El vanguardismo rompió con las tradiciones artísticas",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un pleonasmo?",
+    "tipo": "single_choice",
+    "opcion_a": "Repetición innecesaria de palabras",
+    "opcion_b": "Figura literaria bella",
+    "opcion_c": "Error gramatical",
+    "opcion_d": "Palabra inventada",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"Subir arriba\" es un ejemplo de pleonasmo",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es el simbolismo en poesía?",
+    "tipo": "single_choice",
+    "opcion_a": "Usa símbolos para sugerir significados",
+    "opcion_b": "Describe la realidad exactamente",
+    "opcion_c": "Solo usa rimas consonantes",
+    "opcion_d": "No usa metáforas",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " La Generación del 27 incluye a García Lorca",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "10",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un texto multidisciplinario?",
+    "tipo": "single_choice",
+    "opcion_a": "Combina varias disciplinas",
+    "opcion_b": "Tiene muchos autores",
+    "opcion_c": "Es muy extenso",
+    "opcion_d": "Solo usa imágenes",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es el análisis sintáctico?",
+    "tipo": "single_choice",
+    "opcion_a": "Estudiar la función de las palabras en la oración",
+    "opcion_b": "Analizar el significado",
+    "opcion_c": "Contar las sílabas",
+    "opcion_d": "Identificar la rima",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es el postmodernismo literario?",
+    "tipo": "single_choice",
+    "opcion_a": "Cuestiona las certezas modernas",
+    "opcion_b": "Vuelve al clasicismo",
+    "opcion_c": "Solo poesía experimental",
+    "opcion_d": "Rechaza toda forma literaria",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": " \"Rayuela\" de Cortázar es una novela postmoderna",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "11",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es la intertextualidad?",
+    "tipo": "single_choice",
+    "opcion_a": "Relación entre diferentes textos",
+    "opcion_b": "Texto sin contexto",
+    "opcion_c": "Escritura automática",
+    "opcion_d": "Texto solo visual",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es la deconstrucción literaria?",
+    "tipo": "single_choice",
+    "opcion_a": "Analizar y desarmar significados",
+    "opcion_b": "Construir un nuevo idioma",
+    "opcion_c": "Escribir sin reglas",
+    "opcion_d": "Solo poesía concreta",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué necesitan las plantas para vivir?",
+    "tipo": "single_choice",
+    "opcion_a": "Solo agua",
+    "opcion_b": "Agua, sol y tierra",
+    "opcion_c": "Solo sol",
+    "opcion_d": "Solo tierra",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál de estos animales vive en el agua?",
+    "tipo": "single_choice",
+    "opcion_a": "Perro",
+    "opcion_b": "Pez",
+    "opcion_c": "Gato",
+    "opcion_d": "Pájaro",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "El sol sale por el día",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Con qué parte del cuerpo respiras?",
+    "tipo": "single_choice",
+    "opcion_a": "Ojos",
+    "opcion_b": "Nariz",
+    "opcion_c": "Boca",
+    "opcion_d": "Orejas",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál de estos es un ser vivo?",
+    "tipo": "single_choice",
+    "opcion_a": "Una piedra",
+    "opcion_b": "Un árbol",
+    "opcion_c": "Una silla",
+    "opcion_d": "Una mesa",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "Las plantas son verdes por la clorofila",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuántas patas tiene un insecto?",
+    "tipo": "single_choice",
+    "opcion_a": "4",
+    "opcion_b": "6",
+    "opcion_c": "8",
+    "opcion_d": "10",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué órgano usa el pez para nadar?",
+    "tipo": "single_choice",
+    "opcion_a": "Patas",
+    "opcion_b": "Alas",
+    "opcion_c": "Aletas",
+    "opcion_d": "Cola",
+    "respuesta_correcta": "C",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "El agua es un líquido",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué comen las vacas?",
+    "tipo": "single_choice",
+    "opcion_a": "Carne",
+    "opcion_b": "Pasto",
+    "opcion_c": "Pescado",
+    "opcion_d": "Fruta",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué parte de la planta está bajo tierra?",
+    "tipo": "single_choice",
+    "opcion_a": "Flor",
+    "opcion_b": "Hoja",
+    "opcion_c": "Raíz",
+    "opcion_d": "Tallo",
+    "respuesta_correcta": "C",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "Los peces viven en el agua",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué sentido usa para oler?",
+    "tipo": "single_choice",
+    "opcion_a": "La vista",
+    "opcion_b": "El olfato",
+    "opcion_c": "El gusto",
+    "opcion_d": "El tacto",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál de estos es un mamífero?",
+    "tipo": "single_choice",
+    "opcion_a": "Tiburón",
+    "opcion_b": "Ballena",
+    "opcion_c": "Pulpo",
+    "opcion_d": "Cangrejo",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuáles son los estados del agua?",
+    "tipo": "single_choice",
+    "opcion_a": "Sólido, líquido, gaseoso",
+    "opcion_b": "Grande, mediano, pequeño",
+    "opcion_c": "Caliente, frío, tibio",
+    "opcion_d": "Dulce, salada, potable",
+    "respuesta_correcta": "A",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " ¿El agua hierve a 100°C?",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué necesita una semilla para germinar?",
+    "tipo": "single_choice",
+    "opcion_a": "Agua y luz",
+    "opcion_b": "Solo tierra",
+    "opcion_c": "Solo aire",
+    "opcion_d": "Solo calor",
+    "respuesta_correcta": "A",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué órgano bombea la sangre?",
+    "tipo": "single_choice",
+    "opcion_a": "Pulmones",
+    "opcion_b": "Corazón",
+    "opcion_c": "Estómago",
+    "opcion_d": "Cerebro",
+    "respuesta_correcta": "B",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " Los herbívoros comen plantas",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es el ciclo del agua?",
+    "tipo": "single_choice",
+    "opcion_a": "Evaporación, condensación, precipitación",
+    "opcion_b": "Agua que se acaba",
+    "opcion_c": "Agua que se contamina",
+    "opcion_d": "Agua que se congela",
+    "respuesta_correcta": "A",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuántos huesos tiene aproximadamente el cuerpo humano?",
+    "tipo": "single_choice",
+    "opcion_a": "106",
+    "opcion_b": "206",
+    "opcion_c": "306",
+    "opcion_d": "406",
+    "respuesta_correcta": "B",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " La fotosíntesis produce oxígeno",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es un ecosistema?",
+    "tipo": "single_choice",
+    "opcion_a": "Comunidad de seres vivos y su entorno",
+    "opcion_b": "Solo los animales",
+    "opcion_c": "Solo las plantas",
+    "opcion_d": "El clima de un lugar",
+    "respuesta_correcta": "A",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué planeta es conocido como el planeta rojo?",
+    "tipo": "single_choice",
+    "opcion_a": "Venus",
+    "opcion_b": "Marte",
+    "opcion_c": "Júpiter",
+    "opcion_d": "Saturno",
+    "respuesta_correcta": "B",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " Los carnívoros comen carne",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál es el órgano más grande del cuerpo?",
+    "tipo": "single_choice",
+    "opcion_a": "Hígado",
+    "opcion_b": "Piel",
+    "opcion_c": "Pulmón",
+    "opcion_d": "Cerebro",
+    "respuesta_correcta": "B",
+    "grado": "1",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué función tienen los pulmones?",
+    "tipo": "single_choice",
+    "opcion_a": "Bombear sangre",
+    "opcion_b": "Intercambiar oxígeno y dióxido de carbono",
+    "opcion_c": "Digestión",
+    "opcion_d": "Filtrar la sangre",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " Las plantas producen su propio alimento",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la cadena alimenticia?",
+    "tipo": "single_choice",
+    "opcion_a": "Relación de quién se come a quién",
+    "opcion_b": "Una receta de cocina",
+    "opcion_c": "Tipos de alimentos",
+    "opcion_d": "Comida para animales",
+    "respuesta_correcta": "A",
+    "grado": "2",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál de estos materiales es reciclable?",
+    "tipo": "single_choice",
+    "opcion_a": "Papel",
+    "opcion_b": "Vidrio",
+    "opcion_c": "Plástico",
+    "opcion_d": "Todos los anteriores",
+    "respuesta_correcta": "D",
+    "grado": "2",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " La Luna es un satélite natural de la Tierra",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué causa el día y la noche?",
+    "tipo": "single_choice",
+    "opcion_a": "Rotación de la Tierra",
+    "opcion_b": "Traslación de la Tierra",
+    "opcion_c": "La Luna",
+    "opcion_d": "El Sol se mueve",
+    "respuesta_correcta": "A",
+    "grado": "2",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la combustión?",
+    "tipo": "single_choice",
+    "opcion_a": "Un material que arde",
+    "opcion_b": "Agua hirviendo",
+    "opcion_c": "Aire caliente",
+    "opcion_d": "Electricidad",
+    "respuesta_correcta": "A",
+    "grado": "2",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " Los imanes atraen el hierro",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuántos planetas hay en el sistema solar?",
+    "tipo": "single_choice",
+    "opcion_a": "7",
+    "opcion_b": "8",
+    "opcion_c": "9",
+    "opcion_d": "10",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué animal puede volar?",
+    "tipo": "single_choice",
+    "opcion_a": "Pingüino",
+    "opcion_b": "Águila",
+    "opcion_c": "Avestruz",
+    "opcion_d": "Canguro",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la digestión?",
+    "tipo": "single_choice",
+    "opcion_a": "Transformar los alimentos en nutrientes",
+    "opcion_b": "Respirar",
+    "opcion_c": "Bombear sangre",
+    "opcion_d": "Moverse",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "Las plantas necesitan dióxido de carbono para la fotosíntesis",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué son los animales vertebrados?",
+    "tipo": "single_choice",
+    "opcion_a": "Tienen columna vertebral",
+    "opcion_b": "No tienen huesos",
+    "opcion_c": "Solo viven en el agua",
+    "opcion_d": "Vuelan",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál es la función de los riñones?",
+    "tipo": "single_choice",
+    "opcion_a": "Filtrar la sangre",
+    "opcion_b": "Digestión",
+    "opcion_c": "Respiración",
+    "opcion_d": "Circulación",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "La energía no se crea ni se destruye, solo se transforma",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es un mineral?",
+    "tipo": "single_choice",
+    "opcion_a": "Sustancia natural sólida e inorgánica",
+    "opcion_b": "Un tipo de roca",
+    "opcion_c": "Un ser vivo",
+    "opcion_d": "Un líquido",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué causa las estaciones del año?",
+    "tipo": "single_choice",
+    "opcion_a": "Rotación de la Tierra",
+    "opcion_b": "Traslación e inclinación del eje terrestre",
+    "opcion_c": "La Luna",
+    "opcion_d": "Las nubes",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "Las baterías producen electricidad por reacciones químicas",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la atmósfera?",
+    "tipo": "single_choice",
+    "opcion_a": "Capa de gases que rodea la Tierra",
+    "opcion_b": "El núcleo terrestre",
+    "opcion_c": "Los océanos",
+    "opcion_d": "Las nubes",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál es el animal más rápido del mundo?",
+    "tipo": "single_choice",
+    "opcion_a": "León",
+    "opcion_b": "Guepardo",
+    "opcion_c": "Tigre",
+    "opcion_d": "Caballo",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la densidad?",
+    "tipo": "single_choice",
+    "opcion_a": "Masa por unidad de volumen",
+    "opcion_b": "Peso de un objeto",
+    "opcion_c": "Tamaño de un objeto",
+    "opcion_d": "Color de un material",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "Los metales son buenos conductores de electricidad",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué son los microorganismos?",
+    "tipo": "single_choice",
+    "opcion_a": "Seres vivos que solo se ven con microscopio",
+    "opcion_b": "Animales pequeños",
+    "opcion_c": "Insectos",
+    "opcion_d": "Plantas diminutas",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la evaporación?",
+    "tipo": "single_choice",
+    "opcion_a": "Cambio de líquido a gas",
+    "opcion_b": "Cambio de gas a líquido",
+    "opcion_c": "Cambio de sólido a líquido",
+    "opcion_d": "Cambio de líquido a sólido",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "El ADN contiene la información genética",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué son las placas tectónicas?",
+    "tipo": "single_choice",
+    "opcion_a": "Fragmentos de la corteza terrestre",
+    "opcion_b": "Capas de la atmósfera",
+    "opcion_c": "Tipos de rocas",
+    "opcion_d": "Fósiles marinos",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué produce el calentamiento global?",
+    "tipo": "single_choice",
+    "opcion_a": "Aumento de gases de efecto invernadero",
+    "opcion_b": "La rotación terrestre",
+    "opcion_c": "Las mareas",
+    "opcion_d": "Los terremotos",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "La clorofila da el color verde a las plantas",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la mitosis?",
+    "tipo": "single_choice",
+    "opcion_a": "División celular para crecimiento",
+    "opcion_b": "División celular para reproducción sexual",
+    "opcion_c": "Muerte celular",
+    "opcion_d": "Transporte celular",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " Los virus no son considerados seres vivos por algunos científicos",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es un ecosistema acuático?",
+    "tipo": "single_choice",
+    "opcion_a": "Ecosistema en agua",
+    "opcion_b": "Ecosistema en tierra",
+    "opcion_c": "Ecosistema aéreo",
+    "opcion_d": "Ecosistema subterráneo",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál es la función de las mitocondrias?",
+    "tipo": "single_choice",
+    "opcion_a": "Producir energía celular",
+    "opcion_b": "Almacenar agua",
+    "opcion_c": "Sintetizar proteínas",
+    "opcion_d": "Digestión celular",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "La energía solar es renovable",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la biodiversidad?",
+    "tipo": "single_choice",
+    "opcion_a": "Variedad de especies en un ecosistema",
+    "opcion_b": "Número de animales",
+    "opcion_c": "Cantidad de plantas",
+    "opcion_d": "Tipos de clima",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué son los fósiles?",
+    "tipo": "single_choice",
+    "opcion_a": "Restos de seres vivos antiguos",
+    "opcion_b": "Rocas comunes",
+    "opcion_c": "Minerales",
+    "opcion_d": "Cristales",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "El sistema nervioso transmite señales eléctricas",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es una reacción química?",
+    "tipo": "single_choice",
+    "opcion_a": "Proceso donde unas sustancias se transforman en otras",
+    "opcion_b": "Mezcla de sustancias",
+    "opcion_c": "Cambio físico",
+    "opcion_d": "Disolución",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " Los átomos son la unidad básica de la materia",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuántos elementos tiene la tabla periódica?",
+    "tipo": "single_choice",
+    "opcion_a": "92",
+    "opcion_b": "118",
+    "opcion_c": "150",
+    "opcion_d": "200",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la gravedad?",
+    "tipo": "single_choice",
+    "opcion_a": "Fuerza que atrae los objetos hacia el centro de la Tierra",
+    "opcion_b": "Fuerza que separa objetos",
+    "opcion_c": "Energía cinética",
+    "opcion_d": "Movimiento de rotación",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "Las hormonas son mensajeros químicos del cuerpo",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la evolución?",
+    "tipo": "single_choice",
+    "opcion_a": "Cambio de las especies a través del tiempo",
+    "opcion_b": "Creación de nuevas especies",
+    "opcion_c": "Extinción masiva",
+    "opcion_d": "Migración animal",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál es el pH del agua pura?",
+    "tipo": "single_choice",
+    "opcion_a": "5",
+    "opcion_b": "7",
+    "opcion_c": "9",
+    "opcion_d": "11",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "La fotosíntesis ocurre en los cloroplastos",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la ley de la conservación de la masa?",
+    "tipo": "single_choice",
+    "opcion_a": "La masa no se crea ni se destruye",
+    "opcion_b": "La masa aumenta en reacciones",
+    "opcion_c": "La masa disminuye",
+    "opcion_d": "La masa se convierte en energía",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " Las ondas sonoras necesitan un medio para propagarse",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la presión atmosférica?",
+    "tipo": "single_choice",
+    "opcion_a": "Peso del aire sobre la superficie terrestre",
+    "opcion_b": "Presión del agua",
+    "opcion_c": "Fuerza de gravedad",
+    "opcion_d": "Temperatura del aire",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál es la velocidad de la luz?",
+    "tipo": "single_choice",
+    "opcion_a": "300,000 km/s",
+    "opcion_b": "150,000 km/s",
+    "opcion_c": "500,000 km/s",
+    "opcion_d": "100,000 km/s",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " Los genes están compuestos de ADN",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es una reacción exotérmica?",
+    "tipo": "single_choice",
+    "opcion_a": "Libera calor",
+    "opcion_b": "Absorbe calor",
+    "opcion_c": "No produce cambio de temperatura",
+    "opcion_d": "Ocurre solo en el frío",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué son los neurotransmisores?",
+    "tipo": "single_choice",
+    "opcion_a": "Mensajeros químicos entre neuronas",
+    "opcion_b": "Células del sistema inmune",
+    "opcion_c": "Hormonas sexuales",
+    "opcion_d": "Enzimas digestivas",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " La teoría celular dice que toda célula proviene de otra célula",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la teoría de la relatividad?",
+    "tipo": "single_choice",
+    "opcion_a": "Teoría de Einstein sobre espacio y tiempo",
+    "opcion_b": "Teoría de Darwin sobre evolución",
+    "opcion_c": "Teoría de Newton sobre gravedad",
+    "opcion_d": "Teoría de Mendel sobre genética",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " Los electrones tienen carga negativa",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es una enzima?",
+    "tipo": "single_choice",
+    "opcion_a": "Catalizador biológico",
+    "opcion_b": "Tipo de célula",
+    "opcion_c": "Hormona",
+    "opcion_d": "Vitamina",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál es la unidad de la fuerza en el SI?",
+    "tipo": "single_choice",
+    "opcion_a": "Newton",
+    "opcion_b": "Joule",
+    "opcion_c": "Watt",
+    "opcion_d": "Pascal",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " El efecto invernadero es un fenómeno natural",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es el ciclo de Krebs?",
+    "tipo": "single_choice",
+    "opcion_a": "Parte de la respiración celular",
+    "opcion_b": "Ciclo del agua",
+    "opcion_c": "Ciclo del carbono",
+    "opcion_d": "Ciclo del nitrógeno",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la selección natural?",
+    "tipo": "single_choice",
+    "opcion_a": "Los organismos mejor adaptados sobreviven",
+    "opcion_b": "Selección artificial por humanos",
+    "opcion_c": "Mutación aleatoria",
+    "opcion_d": "Deriva genética",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " El núcleo atómico contiene protones y neutrones",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la termodinámica?",
+    "tipo": "single_choice",
+    "opcion_a": "Estudio del calor y su transformación",
+    "opcion_b": "Estudio del movimiento",
+    "opcion_c": "Estudio de la luz",
+    "opcion_d": "Estudio de la electricidad",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " La entropía del universo siempre aumenta",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la ingeniería genética?",
+    "tipo": "single_choice",
+    "opcion_a": "Manipulación del ADN de organismos",
+    "opcion_b": "Estudio de genes",
+    "opcion_c": "Clonación de animales",
+    "opcion_d": "Creación de nuevas especies",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cuál es el principio de Arquímedes?",
+    "tipo": "single_choice",
+    "opcion_a": "Un cuerpo sumergido recibe un empuje hacia arriba",
+    "opcion_b": "La presión se transmite en fluidos",
+    "opcion_c": "La energía se conserva",
+    "opcion_d": "La masa es constante",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " Los antibióticos no funcionan contra virus",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la fisión nuclear?",
+    "tipo": "single_choice",
+    "opcion_a": "División del núcleo atómico",
+    "opcion_b": "Fusión de núcleos",
+    "opcion_c": "Desintegración radiactiva",
+    "opcion_d": "Reacción química",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es un catalizador?",
+    "tipo": "single_choice",
+    "opcion_a": "Acelera una reacción sin consumirse",
+    "opcion_b": "Ralentiza una reacción",
+    "opcion_c": "Participa en la reacción",
+    "opcion_d": "Detiene la reacción",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la mecánica cuántica?",
+    "tipo": "single_choice",
+    "opcion_a": "Estudio del comportamiento de partículas subatómicas",
+    "opcion_b": "Estudio de planetas",
+    "opcion_c": "Estudio de fluidos",
+    "opcion_d": "Estudio de ondas sonoras",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " El principio de incertidumbre es de Heisenberg",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "10",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la bioquímica?",
+    "tipo": "single_choice",
+    "opcion_a": "Estudio de los procesos químicos en seres vivos",
+    "opcion_b": "Estudio de fósiles",
+    "opcion_c": "Estudio de minerales",
+    "opcion_d": "Estudio de la atmósfera",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la fusión nuclear?",
+    "tipo": "single_choice",
+    "opcion_a": "Unión de núcleos atómicos ligeros",
+    "opcion_b": "División del núcleo",
+    "opcion_c": "Emisión de partículas",
+    "opcion_d": "Reacción en cadena",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la teoría de cuerdas?",
+    "tipo": "single_choice",
+    "opcion_a": "Propone que las partículas son cuerdas vibrantes",
+    "opcion_b": "Teoría sobre cuerdas musicales",
+    "opcion_c": "Teoría de la relatividad",
+    "opcion_d": "Teoría del Big Bang",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": " El bosón de Higgs da masa a las partículas",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "11",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la epigenética?",
+    "tipo": "single_choice",
+    "opcion_a": "Estudio de cambios en expresión génica sin alterar ADN",
+    "opcion_b": "Estudio de genes",
+    "opcion_c": "Estudio de mutaciones",
+    "opcion_d": "Estudio de cromosomas",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la neurociencia?",
+    "tipo": "single_choice",
+    "opcion_a": "Estudio del sistema nervioso",
+    "opcion_b": "Estudio del corazón",
+    "opcion_c": "Estudio de los pulmones",
+    "opcion_d": "Estudio del hígado",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Cómo se llama la ciudad donde vives?",
+    "tipo": "single_choice",
+    "opcion_a": "País",
+    "opcion_b": "Ciudad",
+    "opcion_c": "Departamento",
+    "opcion_d": "Continente",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es un mapa?",
+    "tipo": "single_choice",
+    "opcion_a": "Representación gráfica de un lugar",
+    "opcion_b": "Una fotografía",
+    "opcion_c": "Un dibujo decorativo",
+    "opcion_d": "Un texto informativo",
+    "respuesta_correcta": "A",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " Colombia está en América del Sur",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Cuál es la capital de Colombia?",
+    "tipo": "single_choice",
+    "opcion_a": "Medellín",
+    "opcion_b": "Cali",
+    "opcion_c": "Bogotá",
+    "opcion_d": "Barranquilla",
+    "respuesta_correcta": "C",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Cuál es el océano más grande?",
+    "tipo": "single_choice",
+    "opcion_a": "Atlántico",
+    "opcion_b": "Pacífico",
+    "opcion_c": "Índico",
+    "opcion_d": "Ártico",
+    "respuesta_correcta": "B",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " Los puntos cardinales son Norte, Sur, Este y Oeste",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es un país?",
+    "tipo": "single_choice",
+    "opcion_a": "Territorio con gobierno propio",
+    "opcion_b": "Una ciudad",
+    "opcion_c": "Un continente",
+    "opcion_d": "Un océano",
+    "respuesta_correcta": "A",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Cuántos continentes hay?",
+    "tipo": "single_choice",
+    "opcion_a": "4",
+    "opcion_b": "5",
+    "opcion_c": "6",
+    "opcion_d": "7",
+    "respuesta_correcta": "C",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La bandera de Colombia tiene amarillo, azul y rojo",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es una comunidad?",
+    "tipo": "single_choice",
+    "opcion_a": "Grupo de personas que comparten algo",
+    "opcion_b": "Un edificio",
+    "opcion_c": "Una calle",
+    "opcion_d": "Un país",
+    "respuesta_correcta": "A",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué organza el gobierno municipal?",
+    "tipo": "single_choice",
+    "opcion_a": "La ciudad o pueblo",
+    "opcion_b": "Todo el país",
+    "opcion_c": "El departamento",
+    "opcion_d": "La vereda",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " ¿La democracia significa que el pueblo elige a sus gobernantes?",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué son los derechos humanos?",
+    "tipo": "single_choice",
+    "opcion_a": "Derechos que todas las personas tienen",
+    "opcion_b": "Derechos solo de adultos",
+    "opcion_c": "Leyes de tránsito",
+    "opcion_d": "Normas escolares",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Cuál es el río más largo de Colombia?",
+    "tipo": "single_choice",
+    "opcion_a": "Río Cauca",
+    "opcion_b": "Río Magdalena",
+    "opcion_c": "Río Amazonas",
+    "opcion_d": "Río Orinoco",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " Colombia limita al norte con el océano Atlántico",
+    "tipo": "true_false",
+    "respuesta_correcta": "false",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué significa \"colombiano\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Persona nacida en Colombia",
+    "opcion_b": "Persona que habla español",
+    "opcion_c": "Persona de América",
+    "opcion_d": "Persona de Bogotá",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es una frontera?",
+    "tipo": "single_choice",
+    "opcion_a": "Límite entre países",
+    "opcion_b": "Una ciudad grande",
+    "opcion_c": "Un río",
+    "opcion_d": "Una montaña",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La cordillera de los Andes atraviesa Colombia",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué son los símbolos patrios?",
+    "tipo": "single_choice",
+    "opcion_a": "Bandera, escudo e himno",
+    "opcion_b": "Monumentos",
+    "opcion_c": "Fiestas nacionales",
+    "opcion_d": "Personajes famosos",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Cuántos departamentos tiene Colombia?",
+    "tipo": "single_choice",
+    "opcion_a": "28",
+    "opcion_b": "32",
+    "opcion_c": "36",
+    "opcion_d": "40",
+    "respuesta_correcta": "B",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué fue el descubrimiento de América?",
+    "tipo": "single_choice",
+    "opcion_a": "Llegada de Colón en 1492",
+    "opcion_b": "Llegada de los vikingos",
+    "opcion_c": "Conquista española",
+    "opcion_d": "Independencia",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " Los indígenas americanos ya habitaban el continente antes de Colón",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué fue la colonización?",
+    "tipo": "single_choice",
+    "opcion_a": "Proceso de establecimiento europeo en América",
+    "opcion_b": "La independencia",
+    "opcion_c": "La abolición de la esclavitud",
+    "opcion_d": "La revolución industrial",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Cuál fue la principal civilización en Colombia precolombina?",
+    "tipo": "single_choice",
+    "opcion_a": "Aztecas",
+    "opcion_b": "Mayas",
+    "opcion_c": "Muiscas",
+    "opcion_d": "Incas",
+    "respuesta_correcta": "C",
+    "grado": "4",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La independencia de Colombia fue en 1810",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Quién fue Simón Bolívar?",
+    "tipo": "single_choice",
+    "opcion_a": "Libertador de varias naciones sudamericanas",
+    "opcion_b": "Presidente de EE.UU.",
+    "opcion_c": "Rey de España",
+    "opcion_d": "Explorador portugués",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la geografía?",
+    "tipo": "single_choice",
+    "opcion_a": "Estudio de la Tierra y sus características",
+    "opcion_b": "Estudio de la historia",
+    "opcion_c": "Estudio de la política",
+    "opcion_d": "Estudio de la economía",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " El Amazonas es el bosque tropical más grande del mundo",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la constitución?",
+    "tipo": "single_choice",
+    "opcion_a": "Ley fundamental de un país",
+    "opcion_b": "Un tratado internacional",
+    "opcion_c": "Un decreto presidencial",
+    "opcion_d": "Una ley municipal",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " Colombia tiene una constitución desde 1991",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Cuáles son las ramas del poder público en Colombia?",
+    "tipo": "single_choice",
+    "opcion_a": "Ejecutiva, Legislativa, Judicial",
+    "opcion_b": "Presidencial, Ministerial, Judicial",
+    "opcion_c": "Federal, Estatal, Municipal",
+    "opcion_d": "Central, Regional, Local",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la globalización?",
+    "tipo": "single_choice",
+    "opcion_a": "Integración económica y cultural mundial",
+    "opcion_b": "División del mundo en países",
+    "opcion_c": "Aislamiento de países",
+    "opcion_d": "Guerra mundial",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " Las Naciones Unidas (ONU) promueve la paz mundial",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Cuál es la función del presidente?",
+    "tipo": "single_choice",
+    "opcion_a": "Jefe de Estado y de Gobierno",
+    "opcion_b": "Crear leyes",
+    "opcion_c": "Juzgar delitos",
+    "opcion_d": "Administrar municipios",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el PIB?",
+    "tipo": "single_choice",
+    "opcion_a": "Producto Interno Bruto",
+    "opcion_b": "Producto Industrial Básico",
+    "opcion_c": "Presupuesto Interno del Banco",
+    "opcion_d": "Plan de Inversión Básica",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La Unión Europea es un bloque económico y político",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué fue la Revolución Francesa?",
+    "tipo": "single_choice",
+    "opcion_a": "Movimiento que derrocó la monarquía en 1789",
+    "opcion_b": "Guerra entre Francia e Inglaterra",
+    "opcion_c": "Descubrimiento de Francia",
+    "opcion_d": "Revolución industrial francesa",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La Revolución Industrial comenzó en Inglaterra",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el socialismo?",
+    "tipo": "single_choice",
+    "opcion_a": "Sistema donde los medios de producción son colectivos",
+    "opcion_b": "Sistema de libre mercado",
+    "opcion_c": "Monarquía absoluta",
+    "opcion_d": "Anarquía",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué fue la Guerra Fría?",
+    "tipo": "single_choice",
+    "opcion_a": "Conflicto entre EE.UU. y URSS (1947-1991)",
+    "opcion_b": "Guerra en Corea",
+    "opcion_c": "Guerra en Vietnam",
+    "opcion_d": "Conflicto en Europa",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " El capitalismo se basa en la propiedad privada",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la democracia representativa?",
+    "tipo": "single_choice",
+    "opcion_a": "El pueblo elige representantes para gobernar",
+    "opcion_b": "El pueblo gobierna directamente",
+    "opcion_c": "Un rey gobierna",
+    "opcion_d": "Los militares gobiernan",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué fue el colonialismo?",
+    "tipo": "single_choice",
+    "opcion_a": "Control de un territorio por una potencia extranjera",
+    "opcion_b": "Comercio entre países",
+    "opcion_c": "Migración voluntaria",
+    "opcion_d": "Turismo internacional",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La ONU fue fundada después de la Segunda Guerra Mundial",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la ilustración?",
+    "tipo": "single_choice",
+    "opcion_a": "Movimiento intelectual del siglo XVIII",
+    "opcion_b": "Movimiento artístico",
+    "opcion_c": "Revolución científica",
+    "opcion_d": "Descubrimiento de América",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " Montesquieu propuso la división de poderes",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el neoliberalismo?",
+    "tipo": "single_choice",
+    "opcion_a": "Sistema que promueve el libre mercado sin intervención estatal",
+    "opcion_b": "Nuevo sistema socialista",
+    "opcion_c": "Monarquía constitucional",
+    "opcion_d": "Democracia directa",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué fue el 9 de abril de 1948 en Colombia?",
+    "tipo": "single_choice",
+    "opcion_a": "Asesinato de Jorge Eliécer Gaitán",
+    "opcion_b": "Independencia de Colombia",
+    "opcion_c": "Fundación de Bogotá",
+    "opcion_d": "Batalla de Boyacá",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " El conflicto armado colombiano inició en los años 1960",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la inflación?",
+    "tipo": "single_choice",
+    "opcion_a": "Aumento sostenido de precios",
+    "opcion_b": "Disminución de precios",
+    "opcion_c": "Aumento de salarios",
+    "opcion_d": "Devaluación de moneda",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Cuál es la función del Congreso en Colombia?",
+    "tipo": "single_choice",
+    "opcion_a": "Crear y reformar leyes",
+    "opcion_b": "Administrar el país",
+    "opcion_c": "Juzgar delitos",
+    "opcion_d": "Declarar la guerra",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " El Mercosur es un bloque comercial sudamericano",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué fue el renacimiento?",
+    "tipo": "single_choice",
+    "opcion_a": "Movimiento cultural que renovó las artes y ciencias (siglos XIV-XVI)",
+    "opcion_b": "Descubrimiento de América",
+    "opcion_c": "Reforma protestante",
+    "opcion_d": "Revolución científica",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La Reforma Protestante fue iniciada por Martín Lutero",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la geopolítica?",
+    "tipo": "single_choice",
+    "opcion_a": "Estudio de la relación entre geografía y política",
+    "opcion_b": "Estudio de minerales",
+    "opcion_c": "Estudio de fronteras",
+    "opcion_d": "Estudio de recursos naturales",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué fue el imperialismo?",
+    "tipo": "single_choice",
+    "opcion_a": "Expansión de potencias sobre otros territorios",
+    "opcion_b": "Comercio internacional",
+    "opcion_c": "Turismo global",
+    "opcion_d": "Migración masiva",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La Primera Guerra Mundial fue 1914-1918",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué causó la Segunda Guerra Mundial?",
+    "tipo": "single_choice",
+    "opcion_a": "Expansión de la Alemania nazi",
+    "opcion_b": "Asesinato de un archiduque",
+    "opcion_c": "Crisis del petróleo",
+    "opcion_d": "Revolución rusa",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el multiculturalismo?",
+    "tipo": "single_choice",
+    "opcion_a": "Convivencia de varias culturas",
+    "opcion_b": "Una sola cultura dominante",
+    "opcion_c": "Aislamiento cultural",
+    "opcion_d": "Globalización cultural",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La corté Internacional de Justicia está en La Haya",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el fascismo?",
+    "tipo": "single_choice",
+    "opcion_a": "Régimen autoritario nacionalista",
+    "opcion_b": "Sistema democrático",
+    "opcion_c": "Monarquía parlamentaria",
+    "opcion_d": "Anarquismo",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La caída del Muro de Berlín fue en 1989",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el desarrollo sostenible?",
+    "tipo": "single_choice",
+    "opcion_a": "Desarrollo que satisface el presente sin comprometer el futuro",
+    "opcion_b": "Desarrollo industrial acelerado",
+    "opcion_c": "Crecimiento económico sin límites",
+    "opcion_d": "Desarrollo solo ambiental",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el Fondo Monetario Internacional (FMI)?",
+    "tipo": "single_choice",
+    "opcion_a": "Organismo que promueve la cooperación monetaria",
+    "opcion_b": "Banco mundial",
+    "opcion_c": "ONG de derechos humanos",
+    "opcion_d": "Agencia ambiental",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La descolonización de África ocurrió principalmente en el siglo XX",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el populismo?",
+    "tipo": "single_choice",
+    "opcion_a": "Estilo político que apela al pueblo contra las élites",
+    "opcion_b": "Democracia participativa",
+    "opcion_c": "Socialismo democrático",
+    "opcion_d": "Conservadurismo",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la trata de personas?",
+    "tipo": "single_choice",
+    "opcion_a": "Comercio ilegal de personas para explotación",
+    "opcion_b": "Migración regular",
+    "opcion_c": "Turismo internacional",
+    "opcion_d": "Intercambio cultural",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la globalización económica?",
+    "tipo": "single_choice",
+    "opcion_a": "Integración de economías a nivel mundial",
+    "opcion_b": "Proteccionismo económico",
+    "opcion_c": "Aislamiento comercial",
+    "opcion_d": "Autarquía",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " El Brexit fue la salida del Reino Unido de la Unión Europea",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "10",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué son los derechos de segunda generación?",
+    "tipo": "single_choice",
+    "opcion_a": "Derechos económicos, sociales y culturales",
+    "opcion_b": "Derechos civiles y políticos",
+    "opcion_c": "Derechos ambientales",
+    "opcion_d": "Derechos digitales",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la OCDE?",
+    "tipo": "single_choice",
+    "opcion_a": "Organización para la Cooperación y el Desarrollo Económico",
+    "opcion_b": "Organización mundial del comercio",
+    "opcion_c": "Organización de estados americanos",
+    "opcion_d": "Organización de naciones unidas",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la posmodernidad política?",
+    "tipo": "single_choice",
+    "opcion_a": "Cuestionamiento de las grandes ideologías",
+    "opcion_b": "Nuevo orden mundial",
+    "opcion_c": "Vuelta al clasicismo",
+    "opcion_d": "Monarquía absoluta",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": " La inteligencia artificial plantea desafíos éticos globales",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "11",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el cambio climático?",
+    "tipo": "single_choice",
+    "opcion_a": "Alteración del clima por actividades humanas",
+    "opcion_b": "Cambio natural de estaciones",
+    "opcion_c": "Fenómeno atmosférico",
+    "opcion_d": "Calentamiento del océano",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué son los ODS?",
+    "tipo": "single_choice",
+    "opcion_a": "Objetivos de Desarrollo Sostenible de la ONU",
+    "opcion_b": "Organización de Desarrollo Social",
+    "opcion_c": "Plan de desarrollo nacional",
+    "opcion_d": "Acuerdos de paz",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "How do you say \"hola\" in English?",
+    "tipo": "single_choice",
+    "opcion_a": "Goodbye",
+    "opcion_b": "Hello",
+    "opcion_c": "Thank you",
+    "opcion_d": "Please",
+    "respuesta_correcta": "B",
+    "grado": "4",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is \"gato\" in English?",
+    "tipo": "single_choice",
+    "opcion_a": "Dog",
+    "opcion_b": "Cat",
+    "opcion_c": "Bird",
+    "opcion_d": "Fish",
+    "respuesta_correcta": "B",
+    "grado": "4",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"Red\" means \"rojo\"",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "How do you say \"gracias\" in English?",
+    "tipo": "single_choice",
+    "opcion_a": "Please",
+    "opcion_b": "Sorry",
+    "opcion_c": "Thank you",
+    "opcion_d": "Hello",
+    "respuesta_correcta": "C",
+    "grado": "4",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What color is the sky?",
+    "tipo": "single_choice",
+    "opcion_a": "Red",
+    "opcion_b": "Green",
+    "opcion_c": "Blue",
+    "opcion_d": "Yellow",
+    "respuesta_correcta": "C",
+    "grado": "4",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"One\" is the number 1",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "How do you say \"adiós\" in English?",
+    "tipo": "single_choice",
+    "opcion_a": "Hello",
+    "opcion_b": "Goodbye",
+    "opcion_c": "Good morning",
+    "opcion_d": "Good night",
+    "respuesta_correcta": "B",
+    "grado": "4",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the plural of \"book\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Bookes",
+    "opcion_b": "Books",
+    "opcion_c": "Booken",
+    "opcion_d": "Bookies",
+    "respuesta_correcta": "B",
+    "grado": "4",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is your name? - My ___ is John",
+    "tipo": "single_choice",
+    "opcion_a": "Name",
+    "opcion_b": "Age",
+    "opcion_c": "Address",
+    "opcion_d": "Phone",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"She\" is a personal pronoun",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "How do you say \"yo tengo 10 años\" in English?",
+    "tipo": "single_choice",
+    "opcion_a": "I am 10 years",
+    "opcion_b": "I have 10 years",
+    "opcion_c": "I am 10 years old",
+    "opcion_d": "I have 10 years old",
+    "respuesta_correcta": "C",
+    "grado": "5",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the opposite of \"big\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Tall",
+    "opcion_b": "Small",
+    "opcion_c": "Fast",
+    "opcion_d": "Heavy",
+    "respuesta_correcta": "B",
+    "grado": "5",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"Cats\" is the plural of \"cat\"",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What day comes after Monday?",
+    "tipo": "single_choice",
+    "opcion_a": "Sunday",
+    "opcion_b": "Tuesday",
+    "opcion_c": "Wednesday",
+    "opcion_d": "Friday",
+    "respuesta_correcta": "B",
+    "grado": "5",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "How do you say \"perro\" in English?",
+    "tipo": "single_choice",
+    "opcion_a": "Cat",
+    "opcion_b": "Dog",
+    "opcion_c": "Bird",
+    "opcion_d": "Fish",
+    "respuesta_correcta": "B",
+    "grado": "5",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"They\" is used for one person",
+    "tipo": "true_false",
+    "respuesta_correcta": "false",
+    "grado": "5",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "___ you like pizza? (Do/Does)",
+    "tipo": "single_choice",
+    "opcion_a": "Do",
+    "opcion_b": "Does",
+    "opcion_c": "Is",
+    "opcion_d": "Are",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"He goes to school\" is present simple",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the past of \"go\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Goed",
+    "opcion_b": "Went",
+    "opcion_c": "Gone",
+    "opcion_d": "Going",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "She ___ a teacher. (is/are/am)",
+    "tipo": "single_choice",
+    "opcion_a": "Am",
+    "opcion_b": "Are",
+    "opcion_c": "Is",
+    "opcion_d": "Be",
+    "respuesta_correcta": "C",
+    "grado": "6",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"I have a book\" is correct",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the comparative of \"good\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Gooder",
+    "opcion_b": "Better",
+    "opcion_c": "Best",
+    "opcion_d": "More good",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "How do you say \"ayer\" in English?",
+    "tipo": "single_choice",
+    "opcion_a": "Today",
+    "opcion_b": "Tomorrow",
+    "opcion_c": "Yesterday",
+    "opcion_d": "Now",
+    "respuesta_correcta": "C",
+    "grado": "6",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"We are playing\" is present continuous",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "She ___ to school every day (go)",
+    "tipo": "single_choice",
+    "opcion_a": "Go",
+    "opcion_b": "Goes",
+    "opcion_c": "Going",
+    "opcion_d": "Went",
+    "respuesta_correcta": "B",
+    "grado": "7",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"I have eaten\" is present perfect",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the superlative of \"big\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Bigger",
+    "opcion_b": "Biggest",
+    "opcion_c": "Most big",
+    "opcion_d": "More big",
+    "respuesta_correcta": "B",
+    "grado": "7",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "If I ___ rich, I would travel the world. (was/were)",
+    "tipo": "single_choice",
+    "opcion_a": "Was",
+    "opcion_b": "Were",
+    "opcion_c": "Am",
+    "opcion_d": "Be",
+    "respuesta_correcta": "B",
+    "grado": "7",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"I am going to study\" expresses future",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the passive voice of \"The cat ate the fish\"?",
+    "tipo": "single_choice",
+    "opcion_a": "The fish was eaten by the cat",
+    "opcion_b": "The fish ate the cat",
+    "opcion_c": "The cat was eaten by the fish",
+    "opcion_d": "The fish is eating the cat",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"However\" is a conjunction",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What does \"unfortunately\" mean?",
+    "tipo": "single_choice",
+    "opcion_a": "Afortunadamente",
+    "opcion_b": "Desafortunadamente",
+    "opcion_c": "Generalmente",
+    "opcion_d": "Finalmente",
+    "respuesta_correcta": "B",
+    "grado": "7",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "I wish I ___ taller. (was/were)",
+    "tipo": "single_choice",
+    "opcion_a": "Was",
+    "opcion_b": "Were",
+    "opcion_c": "Am",
+    "opcion_d": "Be",
+    "respuesta_correcta": "B",
+    "grado": "8",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"By the time he arrived, she had left\" uses past perfect",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is a phrasal verb?",
+    "tipo": "single_choice",
+    "opcion_a": "Verb + preposition with new meaning",
+    "opcion_b": "Verb in past tense",
+    "opcion_c": "Auxiliary verb",
+    "opcion_d": "Modal verb",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"Give up\" means to continue",
+    "tipo": "true_false",
+    "respuesta_correcta": "false",
+    "grado": "8",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the reported speech of \"I am tired\"?",
+    "tipo": "single_choice",
+    "opcion_a": "He said he was tired",
+    "opcion_b": "He said he is tired",
+    "opcion_c": "He said I am tired",
+    "opcion_d": "He says he was tired",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"He has been working\" is present perfect continuous",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What does \"break down\" mean?",
+    "tipo": "single_choice",
+    "opcion_a": "Stop functioning",
+    "opcion_b": "Start running",
+    "opcion_c": "Build something",
+    "opcion_d": "Open a door",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " Zero conditional uses present simple + present simple",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the third conditional?",
+    "tipo": "single_choice",
+    "opcion_a": "If + past perfect, would have + past participle",
+    "opcion_b": "If + present, will + infinitive",
+    "opcion_c": "If + past, would + infinitive",
+    "opcion_d": "If + present, present",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"I wish I had studied\" expresses regret about the past",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the difference between \"affect\" and \"effect\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Affect is verb, Effect is noun",
+    "opcion_b": "Affect is noun, Effect is verb",
+    "opcion_c": "They mean the same",
+    "opcion_d": "Affect is adjective",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"Nevertheless\" is a formal transition",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is a relative clause?",
+    "tipo": "single_choice",
+    "opcion_a": "Clause that gives more info about a noun",
+    "opcion_b": "Main clause of a sentence",
+    "opcion_c": "Conditional clause",
+    "opcion_d": "Time clause",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"The book which I read\" uses defining relative clause",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "9",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What does \"come up with\" mean?",
+    "tipo": "single_choice",
+    "opcion_a": "Find a solution or idea",
+    "opcion_b": "Arrive late",
+    "opcion_c": "Go upstairs",
+    "opcion_d": "Stop trying",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the subjunctive mood?",
+    "tipo": "single_choice",
+    "opcion_a": "Used for wishes, suggestions, and hypotheticals",
+    "opcion_b": "Past tense of verbs",
+    "opcion_c": "Future tense",
+    "opcion_d": "Imperative form",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"I suggest that he study more\" uses correct subjunctive",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "10",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the difference between \"principal\" and \"principle\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Principal is main/head, principle is a rule",
+    "opcion_b": "They are interchangeable",
+    "opcion_c": "Principle is the head of a school",
+    "opcion_d": "Principal is a moral rule",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"Not only... but also\" is a correlative conjunction",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "10",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the future perfect tense?",
+    "tipo": "single_choice",
+    "opcion_a": "Will have + past participle",
+    "opcion_b": "Will + infinitive",
+    "opcion_c": "Going to + infinitive",
+    "opcion_d": "Present continuous for future",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"By next year, I will have graduated\" uses future perfect",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "11",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the difference between \"comprise\" and \"compose\"?",
+    "tipo": "single_choice",
+    "opcion_a": "The whole comprises parts; parts compose the whole",
+    "opcion_b": "They are synonyms",
+    "opcion_c": "Compose means write music only",
+    "opcion_d": "Comprise means to include",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"Had I known, I would have come\" is inverted conditional",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "11",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "¿Cuánto es 1/2 + 1/3?",
+    "tipo": "single_choice",
+    "opcion_a": "2/5",
+    "opcion_b": "3/5",
+    "opcion_c": "5/6",
+    "opcion_d": "2/3",
+    "respuesta_correcta": "C",
+    "grado": "4",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 0.75 en fracción?",
+    "tipo": "single_choice",
+    "opcion_a": "1/2",
+    "opcion_b": "3/4",
+    "opcion_c": "2/3",
+    "opcion_d": "1/4",
+    "respuesta_correcta": "B",
+    "grado": "4",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "Un número primo solo es divisible por 1 y por sí mismo",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 1/5 en decimal?",
+    "tipo": "single_choice",
+    "opcion_a": "0.15",
+    "opcion_b": "0.2",
+    "opcion_c": "0.25",
+    "opcion_d": "0.5",
+    "respuesta_correcta": "B",
+    "grado": "5",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es 2^3?",
+    "tipo": "single_choice",
+    "opcion_a": "6",
+    "opcion_b": "8",
+    "opcion_c": "9",
+    "opcion_d": "10",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "Un ángulo obtuso mide más de 90°",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es la raíz cuadrada de 49?",
+    "tipo": "single_choice",
+    "opcion_a": "6",
+    "opcion_b": "7",
+    "opcion_c": "8",
+    "opcion_d": "9",
+    "respuesta_correcta": "B",
+    "grado": "7",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Qué es un número entero?",
+    "tipo": "single_choice",
+    "opcion_a": "Número sin decimales",
+    "opcion_b": "Número con decimales",
+    "opcion_c": "Fracción",
+    "opcion_d": "Porcentaje",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuál es el discriminante de x^2 - 5x + 6 = 0?",
+    "tipo": "single_choice",
+    "opcion_a": "1",
+    "opcion_b": "2",
+    "opcion_c": "3",
+    "opcion_d": "4",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Qué son los números irracionales?",
+    "tipo": "single_choice",
+    "opcion_a": "No pueden expresarse como fracción",
+    "opcion_b": "Siempre son enteros",
+    "opcion_c": "Son decimales exactos",
+    "opcion_d": "Son fracciones",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuánto es la derivada de 5x^3?",
+    "tipo": "single_choice",
+    "opcion_a": "15x^2",
+    "opcion_b": "5x^2",
+    "opcion_c": "15x^3",
+    "opcion_d": "5x^4",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "La integral de 1/x dx es ln|x| + C",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "11",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Cuáles son los tiempos verbales?",
+    "tipo": "multiple_choice",
+    "opcion_a": "Pasado",
+    "opcion_b": "Presente",
+    "opcion_c": "Futuro",
+    "opcion_d": "Largo",
+    "respuestas_correctas": [
+      "A",
+      "B",
+      "C"
+    ],
+    "respuesta_correcta": "",
+    "grado": "4",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "La novela es un género narrativo extenso",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es la moraleja?",
+    "tipo": "single_choice",
+    "opcion_a": "Enseñanza de una fábula",
+    "opcion_b": "Personaje principal",
+    "opcion_c": "Lugar donde ocurre",
+    "opcion_d": "Tiempo de la historia",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "Las palabras graves llevan tilde en la penúltima sílaba",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un sustantivo abstracto?",
+    "tipo": "single_choice",
+    "opcion_a": "Sentimiento o idea",
+    "opcion_b": "Objeto físico",
+    "opcion_c": "Nombre propio",
+    "opcion_d": "Animal",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Quién escribió \"El principito\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Antoine de Saint-Exupéry",
+    "opcion_b": "Victor Hugo",
+    "opcion_c": "Jules Verne",
+    "opcion_d": "Molière",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es la hipérbole?",
+    "tipo": "single_choice",
+    "opcion_a": "Exageración poética",
+    "opcion_b": "Comparación",
+    "opcion_c": "Repetición",
+    "opcion_d": "Pregunta retórica",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "El narrador en primera persona participa en la historia",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "7",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es la sinécdoque?",
+    "tipo": "single_choice",
+    "opcion_a": "Parte por el todo",
+    "opcion_b": "Todo por la parte",
+    "opcion_c": "Comparación",
+    "opcion_d": "Exageración",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es un texto discontinuo?",
+    "tipo": "single_choice",
+    "opcion_a": "No se lee de forma lineal (tablas, gráficos)",
+    "opcion_b": "Texto sin párrafos",
+    "opcion_c": "Poema sin rima",
+    "opcion_d": "Diálogo teatral",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "El Boom Latinoamericano incluye a García Márquez, Cortázar y Vargas Llosa",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "10",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué es el monólogo interior?",
+    "tipo": "single_choice",
+    "opcion_a": "Expresión de pensamientos del personaje",
+    "opcion_b": "Diálogo entre dos",
+    "opcion_c": "Narración en tercera persona",
+    "opcion_d": "Descripción del paisaje",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué son las células procariotas?",
+    "tipo": "single_choice",
+    "opcion_a": "No tienen núcleo definido",
+    "opcion_b": "Tienen núcleo",
+    "opcion_c": "Solo existen en plantas",
+    "opcion_d": "Son unicelulares",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es un hábitat?",
+    "tipo": "single_choice",
+    "opcion_a": "Lugar donde vive un organismo",
+    "opcion_b": "Comida de un animal",
+    "opcion_c": "Grupo de animales",
+    "opcion_d": "Clima de una región",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la reflexión de la luz?",
+    "tipo": "single_choice",
+    "opcion_a": "Cuando la luz rebota en una superficie",
+    "opcion_b": "Cuando la luz pasa a través",
+    "opcion_c": "Cuando la luz se absorbe",
+    "opcion_d": "Cuando la luz cambia de color",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "La electricidad estática es una acumulación de carga",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué son los hongos?",
+    "tipo": "single_choice",
+    "opcion_a": "Reino aparte de plantas y animales",
+    "opcion_b": "Tipo de planta",
+    "opcion_c": "Tipo de animal",
+    "opcion_d": "Mineral",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué son las placas tectónicas?",
+    "tipo": "single_choice",
+    "opcion_a": "Fragmentos de la litosfera",
+    "opcion_b": "Capas del núcleo",
+    "opcion_c": "Corrientes oceánicas",
+    "opcion_d": "Vientos",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la meiosis?",
+    "tipo": "single_choice",
+    "opcion_a": "División celular para gametos",
+    "opcion_b": "División celular para crecimiento",
+    "opcion_c": "Muerte celular",
+    "opcion_d": "Reparación celular",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es el efecto invernadero?",
+    "tipo": "single_choice",
+    "opcion_a": "Retención de calor por gases atmosféricos",
+    "opcion_b": "Calentamiento natural de la tierra",
+    "opcion_c": "Refrigeración global",
+    "opcion_d": "Agujero de ozono",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la biotecnología?",
+    "tipo": "single_choice",
+    "opcion_a": "Uso de organismos para crear productos útiles",
+    "opcion_b": "Estudio de la tecnología",
+    "opcion_c": "Robótica aplicada",
+    "opcion_d": "Informática biológica",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es la teoría del Big Bang?",
+    "tipo": "single_choice",
+    "opcion_a": "Origen del universo hace 13.800 millones de años",
+    "opcion_b": "Explosión de una estrella",
+    "opcion_c": "Formación de la Tierra",
+    "opcion_d": "Creación de galaxias",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "La física cuántica estudia partículas subatómicas",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "11",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "¿Qué es un municipio?",
+    "tipo": "single_choice",
+    "opcion_a": "División territorial administrada por un alcalde",
+    "opcion_b": "Un país",
+    "opcion_c": "Un continente",
+    "opcion_d": "Un océano",
+    "respuesta_correcta": "A",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "La cordillera de los Andes atraviesa Sudamérica",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "2",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es un departamento en Colombia?",
+    "tipo": "single_choice",
+    "opcion_a": "División política regional",
+    "opcion_b": "Un municipio",
+    "opcion_c": "Un país",
+    "opcion_d": "Una ciudad",
+    "respuesta_correcta": "A",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "El clima de Colombia es tropical",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "3",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué fue la Reconquista española?",
+    "tipo": "single_choice",
+    "opcion_a": "Período de recuperación del territorio español",
+    "opcion_b": "Descubrimiento de América",
+    "opcion_c": "Independencia de España",
+    "opcion_d": "Guerra civil",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "Los incas se ubicaron en la región andina de Sudamérica",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "4",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el Producto Interno Bruto?",
+    "tipo": "single_choice",
+    "opcion_a": "Valor total de bienes y servicios de un país",
+    "opcion_b": "Ingreso de cada persona",
+    "opcion_c": "Deuda nacional",
+    "opcion_d": "Exportaciones totales",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la inflación?",
+    "tipo": "single_choice",
+    "opcion_a": "Aumento generalizado de precios",
+    "opcion_b": "Baja de precios",
+    "opcion_c": "Aumento de salarios",
+    "opcion_d": "Reducción de impuestos",
+    "respuesta_correcta": "A",
+    "grado": "6",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué fue la Guerra de los Mil Días en Colombia?",
+    "tipo": "single_choice",
+    "opcion_a": "Conflicto civil entre 1899-1902",
+    "opcion_b": "Guerra de independencia",
+    "opcion_c": "Conflicto con Perú",
+    "opcion_d": "Guerra contra España",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "La Revolución Rusa fue en 1917",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es la deuda externa?",
+    "tipo": "single_choice",
+    "opcion_a": "Dinero que un país debe a otros países o instituciones",
+    "opcion_b": "Préstamos internos",
+    "opcion_c": "Ahorro nacional",
+    "opcion_d": "Inversión extranjera",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué son las migraciones?",
+    "tipo": "single_choice",
+    "opcion_a": "Desplazamiento de personas entre regiones",
+    "opcion_b": "Viajes turísticos",
+    "opcion_c": "Comercio internacional",
+    "opcion_d": "Intercambio cultural",
+    "respuesta_correcta": "A",
+    "grado": "10",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "¿Qué es el derecho internacional humanitario?",
+    "tipo": "single_choice",
+    "opcion_a": "Normas que protegen a personas en conflictos armados",
+    "opcion_b": "Leyes de inmigración",
+    "opcion_c": "Tratados comerciales",
+    "opcion_d": "Normas ambientales",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Ciencias Sociales"
+  },
+  {
+    "pregunta": "What does \"beautiful\" mean?",
+    "tipo": "single_choice",
+    "opcion_a": "Hermoso",
+    "opcion_b": "Feo",
+    "opcion_c": "Alto",
+    "opcion_d": "Bajo",
+    "respuesta_correcta": "A",
+    "grado": "4",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the opposite of \"hot\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Warm",
+    "opcion_b": "Cold",
+    "opcion_c": "Cool",
+    "opcion_d": "Mild",
+    "respuesta_correcta": "B",
+    "grado": "4",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"I am reading a book\" is present continuous",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "5",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "How do you say \"estoy cansado\" in English?",
+    "tipo": "single_choice",
+    "opcion_a": "I am tired",
+    "opcion_b": "I am hungry",
+    "opcion_c": "I am sleepy",
+    "opcion_d": "I am angry",
+    "respuesta_correcta": "A",
+    "grado": "5",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the past of \"eat\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Eated",
+    "opcion_b": "Ate",
+    "opcion_c": "Eaten",
+    "opcion_d": "Eating",
+    "respuesta_correcta": "B",
+    "grado": "6",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"I have never been to London\" uses present perfect",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "6",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What does \"look after\" mean?",
+    "tipo": "single_choice",
+    "opcion_a": "Cuidar",
+    "opcion_b": "Mirar después",
+    "opcion_c": "Buscar",
+    "opcion_d": "Esperar",
+    "respuesta_correcta": "A",
+    "grado": "7",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the third person singular of \"go\" in present simple?",
+    "tipo": "single_choice",
+    "opcion_a": "Go",
+    "opcion_b": "Gos",
+    "opcion_c": "Goes",
+    "opcion_d": "Going",
+    "respuesta_correcta": "C",
+    "grado": "7",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"He said that he was coming\" is reported speech",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "8",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the difference between \"much\" and \"many\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Much con incontables, many con contables",
+    "opcion_b": "Much con contables, many con incontables",
+    "opcion_c": "Son iguales",
+    "opcion_d": "Much es para preguntas",
+    "respuesta_correcta": "A",
+    "grado": "8",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What does \"put off\" mean?",
+    "tipo": "single_choice",
+    "opcion_a": "Posponer",
+    "opcion_b": "Poner fuera",
+    "opcion_c": "Quitar",
+    "opcion_d": "Apagar",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is a collocation?",
+    "tipo": "single_choice",
+    "opcion_a": "Combinación natural de palabras",
+    "opcion_b": "Palabra compuesta",
+    "opcion_c": "Verbo frasal",
+    "opcion_d": "Expresión idiomática",
+    "respuesta_correcta": "A",
+    "grado": "9",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": " \"It is recommended that he see a doctor\" uses subjunctive",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "10",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "What is the difference between \"compliment\" and \"complement\"?",
+    "tipo": "single_choice",
+    "opcion_a": "Compliment is praise, complement completes",
+    "opcion_b": "They are synonyms",
+    "opcion_c": "Complement is a compliment",
+    "opcion_d": "Compliment is a complement",
+    "respuesta_correcta": "A",
+    "grado": "11",
+    "asignatura": "Inglés"
+  },
+  {
+    "pregunta": "¿Cuál es la vocal que falta? \"M_sa\"",
+    "tipo": "single_choice",
+    "opcion_a": "a",
+    "opcion_b": "e",
+    "opcion_c": "o",
+    "opcion_d": "u",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Qué letra sigue después de la \"P\"?",
+    "tipo": "single_choice",
+    "opcion_a": "O",
+    "opcion_b": "Q",
+    "opcion_c": "R",
+    "opcion_d": "S",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "La palabra \"oso\" empieza con la letra \"O\"",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Lenguaje"
+  },
+  {
+    "pregunta": "¿Cuántos lados tiene un triángulo?",
+    "tipo": "single_choice",
+    "opcion_a": "2",
+    "opcion_b": "3",
+    "opcion_c": "4",
+    "opcion_d": "5",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Qué número es mayor, 8 o 3?",
+    "tipo": "single_choice",
+    "opcion_a": "8",
+    "opcion_b": "3",
+    "opcion_c": "Son iguales",
+    "opcion_d": "Ninguno",
+    "respuesta_correcta": "A",
+    "grado": "0",
+    "asignatura": "Matemáticas"
+  },
+  {
+    "pregunta": "¿Qué animal da leche?",
+    "tipo": "single_choice",
+    "opcion_a": "Gallo",
+    "opcion_b": "Vaca",
+    "opcion_c": "Pez",
+    "opcion_d": "Pájaro",
+    "respuesta_correcta": "B",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  },
+  {
+    "pregunta": "Las estrellas se ven de noche",
+    "tipo": "true_false",
+    "respuesta_correcta": "true",
+    "grado": "0",
+    "asignatura": "Ciencias Naturales"
+  }
+]

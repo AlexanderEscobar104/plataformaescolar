@@ -158,6 +158,18 @@ function SearchIcon() {
   )
 }
 
+function BrainIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 4a4 4 0 0 1 3.5 2.1 4 4 0 0 1 1.5 7.4 3 3 0 0 1-1 5.5" />
+      <path d="M12 4a4 4 0 0 0-3.5 2.1 4 4 0 0 0-1.5 7.4 3 3 0 0 0 1 5.5" />
+      <path d="M12 20v-4" />
+      <path d="M12 12V8" />
+      <circle cx="12" cy="12" r="2" />
+    </svg>
+  )
+}
+
 function filterSidebarItems(items, searchQuery, groupLabel = '') {
   if (!searchQuery) return items
   return items.filter((item) => {
@@ -273,6 +285,31 @@ function DashboardLayout({ children = null }) {
     setConfigMenuOpen(group === 'config' ? (prev) => !prev : false)
   }
   const [brandLogo, setBrandLogo] = useState('/logo_plataforma_digital.png')
+  useEffect(() => {
+    let cancelled = false
+    const loadPlantelLogo = async () => {
+      if (!userNitRut) {
+        setBrandLogo('/logo_plataforma_digital.png')
+        return
+      }
+      try {
+        const tenantId = `datosPlantel_${String(userNitRut).trim()}`
+        let snapshot = await getDoc(doc(db, 'configuracion', tenantId))
+        if (!snapshot.exists()) {
+          snapshot = await getDoc(doc(db, 'configuracion', 'datosPlantel'))
+        }
+        const logo = snapshot.exists() ? snapshot.data()?.logo : null
+        const logoUrl = logo?.dataUrl || logo?.url || ''
+        if (!cancelled) setBrandLogo(logoUrl || '/logo_plataforma_digital.png')
+      } catch {
+        if (!cancelled) setBrandLogo('/logo_plataforma_digital.png')
+      }
+    }
+    loadPlantelLogo()
+    return () => {
+      cancelled = true
+    }
+  }, [userNitRut])
   const canViewUsersMenu = hasPermission(PERMISSION_KEYS.USERS_VIEW)
   const canViewStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_VIEW)
   const canCreateStudents = hasPermission(PERMISSION_KEYS.MEMBERS_STUDENTS_CREATE)
@@ -393,6 +430,7 @@ function DashboardLayout({ children = null }) {
     hasPermission(PERMISSION_KEYS.SEDES_MANAGE) ||
     canManagePermissions
   const canManageChatSettings = hasPermission(PERMISSION_KEYS.CONFIG_CHAT_MANAGE) || canManagePermissions
+  const canManageAiAssistant = hasPermission(PERMISSION_KEYS.CONFIG_AI_MANAGE) || canManagePermissions
   const canManageMailServerSettings =
     hasPermission(PERMISSION_KEYS.CONFIG_MAIL_SERVER_MANAGE) || canManagePermissions
   const canManageMessageSettings = hasPermission(PERMISSION_KEYS.CONFIG_MESSAGES_MANAGE) || canManagePermissions
@@ -513,6 +551,7 @@ function DashboardLayout({ children = null }) {
   const canViewTipoPermisosModule = hasPlanModule('tipo-permisos')
   const canViewPermissionsModule = hasPlanModule('permisos')
   const canViewChatSettingsModule = hasPlanModule('configuracion-chat')
+  const canViewAiAssistantModule = hasPlanModule('configuracion-asistente-ai')
   const canViewMailServerSettingsModule = hasPlanModule('datos-servidor-correo')
   const canViewMessageSettingsModule = hasPlanModule('configuracion-mensajes')
   const canViewNotificationSettingsModule = hasPlanModule('configuracion-notificaciones')
@@ -528,6 +567,11 @@ function DashboardLayout({ children = null }) {
     hasPermission(PERMISSION_KEYS.BOLETINES_GENERATE) ||
     hasPermission(PERMISSION_KEYS.BOLETINES_EDIT)) &&
     hasPlanModule('boletines')
+  const canViewReportGrades =
+    (hasPermission(PERMISSION_KEYS.REPORT_GRADES_VIEW) ||
+      hasPermission(PERMISSION_KEYS.REPORT_GRADES_EDIT) ||
+      hasPermission(PERMISSION_KEYS.BOLETINES_EDIT)) &&
+    hasPlanModule('reportar-notas')
   const canManageCertificadosTemplates =
     hasPermission(PERMISSION_KEYS.CONFIG_CERTIFICADOS_TEMPLATES_MANAGE) || canManagePermissions
   const canManageBoletinesStructure =
@@ -617,6 +661,9 @@ function DashboardLayout({ children = null }) {
     if (canViewBoletines) {
       items.push({ label: 'Boletines', to: '/dashboard/boletines', Icon: ReportsIcon })
     }
+    if (canViewReportGrades) {
+      items.push({ label: 'Reportar notas', to: '/dashboard/reportar-notas', Icon: ReportsIcon })
+    }
     if (canManageEvents && hasPlanModule('eventos')) {
       items.push({ label: 'Eventos', to: '/dashboard/eventos', Icon: EvaluationsIcon })
     }
@@ -624,7 +671,7 @@ function DashboardLayout({ children = null }) {
       items.push({ label: 'Circulares', to: '/dashboard/circulares', Icon: ReportsIcon })
     }
     return items
-  }, [canViewTasks, canViewEvaluations, canViewPermisos, canViewInasistencias, canViewAsistencia, canViewSchedule, canViewCertificados, canViewBoletines, canManageEvents, canManageCirculars])
+  }, [canViewTasks, canViewEvaluations, canViewPermisos, canViewInasistencias, canViewAsistencia, canViewSchedule, canViewCertificados, canViewBoletines, canViewReportGrades, canManageEvents, canManageCirculars])
 
   const paymentsItems = useMemo(() => {
     if (!canViewPayments) return []
@@ -947,6 +994,9 @@ function DashboardLayout({ children = null }) {
     if (canManageChatSettings && canViewChatSettingsModule) {
       items.push({ label: 'Configuracion de chat', to: '/dashboard/configuracion-chat', Icon: MessageIcon })
     }
+    if (canManageAiAssistant && canViewAiAssistantModule) {
+      items.push({ label: 'Configuracion de asistente AI', to: '/dashboard/configuracion-asistente-ai', Icon: BrainIcon })
+    }
     if (canManageMailServerSettings && canViewMailServerSettingsModule) {
       items.push({ label: 'Datos del servidor de correo', to: '/dashboard/datos-servidor-correo', Icon: MessageIcon })
     }
@@ -992,6 +1042,7 @@ function DashboardLayout({ children = null }) {
     canViewSedesModule,
     canViewBoletinesStructureModule,
     canViewChatSettingsModule,
+    canViewAiAssistantModule,
     canViewLinkedDevicesModule,
     canViewMailServerSettingsModule,
     canViewMessageSettingsModule,
@@ -1005,6 +1056,7 @@ function DashboardLayout({ children = null }) {
     canManageAcademicSetup,
     canManageCirculars,
     canManageChatSettings,
+    canManageAiAssistant,
     canManageMailServerSettings,
     canManageEvents,
     canManageMessageSettings,
